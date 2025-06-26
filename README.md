@@ -4,7 +4,7 @@ CAUTION : THIS IS A WORK IN PROGRESS ! THIS REPOSITORY IS NOT YET STABLE. AT THI
 
 A comprehensive toolkit for continued pre-training and fine-tuning of language models with MLX-LM.
 
-ForgeLLM builds upon the capabilities of MLX and MLX-LM, providing convenient features, monitoring tools, and simplified workflows for language model training and inference. See our [Acknowledgments](ACKNOWLEDGMENT.md) for more details.
+ForgeLLM builds upon the capabilities of MLX and MLX-LM, providing convenient features, monitoring tools, and simplified workflows for language model training and inference. See our [Acknowledgments](ACKNOWLEDGEMENTS.md) for more details.
 
 ## Features
 
@@ -103,7 +103,7 @@ print(response)
 
 ## Acknowledgments
 
-This project builds upon the exceptional work of the MLX and MLX-LM teams. See [ACKNOWLEDGMENT.md](ACKNOWLEDGMENT.md) for full details.
+This project builds upon the exceptional work of the MLX and MLX-LM teams. See [ACKNOWLEDGEMENTS.md](ACKNOWLEDGEMENTS.md) for full details.
 
 ## License
 
