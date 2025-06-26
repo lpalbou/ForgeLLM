@@ -1,6 +1,10 @@
 # ForgeLLM
 
+CAUTION : THIS IS A WORK IN PROGRESS ! THIS REPOSITORY IS NOT YET STABLE. AT THIS TIME, ONLY USE IT FOR EXPLORATORY RESEARCH / LEARNING.
+
 A comprehensive toolkit for continued pre-training and fine-tuning of language models with MLX-LM.
+
+ForgeLLM builds upon the capabilities of MLX and MLX-LM, providing convenient features, monitoring tools, and simplified workflows for language model training and inference. See our [Acknowledgments](ACKNOWLEDGMENT.md) for more details.
 
 ## Features
 
@@ -69,11 +73,11 @@ from forgellm.models.model_manager import ModelManager
 # Create configuration
 config = TrainingConfig(
     model_name="mlx-community/gemma-3-4b-it-bf16",
-    input_dir="mnemosyne",
-    output_dir="models",
+    input_dir="my_preprocessed_dataset",
+    output_dir="my_output_folder",
     batch_size=4,
     learning_rate=5e-6,
-    max_iterations=10000
+    max_iterations=1000
 )
 
 # Initialize trainer
@@ -96,6 +100,10 @@ print(response)
 - MLX-LM 0.0.3+
 - Flask 2.0.0+
 - Flask-SocketIO 5.0.0+
+
+## Acknowledgments
+
+This project builds upon the exceptional work of the MLX and MLX-LM teams. See [ACKNOWLEDGMENT.md](ACKNOWLEDGMENT.md) for full details.
 
 ## License
 

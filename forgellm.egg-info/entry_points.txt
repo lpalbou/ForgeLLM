@@ -1,3 +1,0 @@
-[console_scripts]
-forgellm = forgellm.__main__:main
-forgellm-web = forgellm.web.run:main
