@@ -1,8 +1,8 @@
 """
-ForgeLLM - A comprehensive toolkit for continued pre-training and fine-tuning of language models
+ForgeLLM - A toolkit for continued pre-training and fine-tuning language models with MLX-LM
 """
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 __author__ = "Laurent-Philippe Albou"
 __email__ = "lpalbou@gmail.com"
 __license__ = "MIT"

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "forgellm"
-version = "0.1.0"
+version = "0.1.1"
 description = "A comprehensive toolkit for end-to-end continued pre-training, fine-tuning, monitoring, testing and publishing of language models with MLX-LM"
 readme = "README.md"
 authors = [
