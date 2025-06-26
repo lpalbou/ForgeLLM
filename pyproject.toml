@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "forgellm"
 version = "0.1.0"
-description = "API for LLM training, fine-tuning, monitoring, and testing with MLX-LM"
+description = "A comprehensive toolkit for end-to-end continued pre-training, fine-tuning, monitoring, testing and publishing of language models with MLX-LM"
 readme = "README.md"
 authors = [
     {name = "Mnemosyne Team"}
@@ -14,9 +14,18 @@ license = {text = "MIT"}
 requires-python = ">=3.8"
 classifiers = [
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
+keywords = ["llm", "language-models", "machine-learning", "mlx", "mlx-lm", "fine-tuning", "pre-training"]
 dependencies = [
     "mlx-lm>=0.0.3",
     "mlx>=0.0.7",
@@ -36,18 +45,30 @@ dev = [
     "black>=22.0.0",
     "isort>=5.0.0",
     "mypy>=0.900",
+    "build>=0.10.0",
+    "twine>=4.0.0",
 ]
 
 [project.urls]
 "Homepage" = "https://github.com/lpalbou/forgellm"
 "Bug Tracker" = "https://github.com/lpalbou/forgellm/issues"
+"Documentation" = "https://github.com/lpalbou/forgellm/tree/main/docs"
+"Source Code" = "https://github.com/lpalbou/forgellm"
 
 [project.scripts]
 forgellm = "forgellm.__main__:main"
 forgellm-web = "forgellm.web.run:main"
 
 [tool.setuptools]
-packages = ["forgellm"]
+include-package-data = true
+package-dir = {"" = "."}
+
+[tool.setuptools.packages.find]
+include = ["forgellm*"]
+namespaces = true
+
+[tool.setuptools.package-data]
+"forgellm.web" = ["templates/*", "static/**/*"]
 
 [tool.black]
 line-length = 88

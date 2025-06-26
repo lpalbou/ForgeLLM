@@ -3,6 +3,7 @@ Run the web interface.
 """
 
 import os
+import sys
 import logging
 from .app import create_app
 
@@ -23,4 +24,12 @@ def run_web_interface(host='0.0.0.0', port=5001, debug=False, static_folder=None
     
     # Run app
     logger.info(f"Starting web interface on {host}:{port}")
-    app.socketio.run(app, host=host, port=port, debug=debug, allow_unsafe_werkzeug=True) 
+    app.socketio.run(app, host=host, port=port, debug=debug, allow_unsafe_werkzeug=True)
+
+def main():
+    """Main entry point for the web interface."""
+    run_web_interface()
+    return 0
+
+if __name__ == "__main__":
+    sys.exit(main()) 

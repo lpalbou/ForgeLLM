@@ -1,4 +1,4 @@
-# Acknowledgments
+# Acknowledgements
 
 ## MLX and MLX-LM
 
