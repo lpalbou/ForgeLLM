@@ -1,0 +1,11 @@
+LICENSE
+README.md
+pyproject.toml
+forgellm/__init__.py
+forgellm/__main__.py
+forgellm.egg-info/PKG-INFO
+forgellm.egg-info/SOURCES.txt
+forgellm.egg-info/dependency_links.txt
+forgellm.egg-info/entry_points.txt
+forgellm.egg-info/requires.txt
+forgellm.egg-info/top_level.txt

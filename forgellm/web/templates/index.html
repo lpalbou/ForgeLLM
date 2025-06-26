@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ForgeLLM - Training Interface</title>
+    <link rel="icon" href="/favicon.ico" type="image/x-icon">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/plotly.js@2.20.0/dist/plotly.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/socket.io@4.6.1/client-dist/socket.io.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked@4.0.0/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@2.3.1/dist/purify.min.js"></script>
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="row">
+            <!-- Sidebar Navigation -->
+            <div class="col-md-2 bg-dark text-white sidebar">
+                <h2 class="py-3">ForgeLLM</h2>
+                <ul class="nav flex-column">
+                    <li class="nav-item">
+                        <a class="nav-link active" href="#" data-target="dashboard">
+                            <i class="bi bi-speedometer2"></i> Dashboard
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" data-target="training">
+                            <i class="bi bi-gear"></i> Training
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" data-target="models">
+                            <i class="bi bi-box"></i> Models
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" data-target="generate">
+                            <i class="bi bi-chat"></i> Generate
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" data-target="settings">
+                            <i class="bi bi-sliders"></i> Settings
+                        </a>
+                    </li>
+                </ul>
+                <div class="mt-auto text-center py-3">
+                    <span id="connection-status" class="badge bg-secondary">Disconnected</span>
+                    <div class="mt-2">
+                        <span>Memory: <span id="memory-usage">0.0 GB</span></span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Main Content Area -->
+            <div class="col-md-10 main-content">
+                <!-- Dashboard View -->
+                <div id="dashboard-view" class="view">
+                    <h1>Dashboard</h1>
+                    <div class="row">
+                        <div class="col-md-12">
+                            <div class="card mb-4">
+                                <div class="card-header">
+                                    <h5>Training Progress</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div id="training-progress"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Training View -->
+                <div id="training-view" class="view d-none">
+                    <h1>Training Configuration</h1>
+                    <div class="row">
+                        <div class="col-md-12">
+                            <form id="training-config-form">
+                                <div class="card mb-4">
+                                    <div class="card-header">
+                                        <h5>Model Configuration</h5>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="row mb-3">
+                                            <div class="col-md-6">
+                                                <label for="model_name" class="form-label">Model Name</label>
+                                                <input type="text" class="form-control" id="model_name" name="model_name" 
+                                                       placeholder="Base model to train (e.g., mistralai/Mistral-7B-v0.1)" required>
+                                                <small class="text-muted">Base model to train (e.g., mistralai/Mistral-7B-v0.1)</small>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label for="dataset" class="form-label">Dataset Directory</label>
+                                                <input type="text" class="form-control" id="dataset" name="dataset" 
+                                                       placeholder="Path to training data" required>
+                                                <small class="text-muted">Path to training data directory</small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="card mb-4">
+                                    <div class="card-header">
+                                        <h5>Training Parameters</h5>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="row mb-3">
+                                            <div class="col-md-4">
+                                                <label for="batch_size" class="form-label">Batch Size</label>
+                                                <input type="number" class="form-control" id="batch_size" name="batch_size" 
+                                                       value="4" min="1" required>
+                                            </div>
+                                            <div class="col-md-4">
+                                                <label for="learning_rate" class="form-label">Learning Rate</label>
+                                                <input type="number" class="form-control" id="learning_rate" name="learning_rate" 
+                                                       value="5e-6" step="1e-6" required>
+                                            </div>
+                                            <div class="col-md-4">
+                                                <label for="epochs" class="form-label">Max Iterations</label>
+                                                <input type="number" class="form-control" id="epochs" name="epochs" 
+                                                       value="1000" min="1" required>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="row mb-3">
+                                            <div class="col-md-4">
+                                                <label for="validation_split" class="form-label">Validation Split</label>
+                                                <input type="number" class="form-control" id="validation_split" name="validation_split" 
+                                                       value="0.1" min="0" max="0.5" step="0.01" required>
+                                            </div>
+                                            <div class="col-md-4">
+                                                <label for="sequence_length" class="form-label">Sequence Length</label>
+                                                <input type="number" class="form-control" id="sequence_length" name="sequence_length" 
+                                                       value="2048" min="128" required>
+                                            </div>
+                                            <div class="col-md-4">
+                                                <label for="warmup_steps" class="form-label">Warmup Steps</label>
+                                                <input type="number" class="form-control" id="warmup_steps" name="warmup_steps" 
+                                                       value="150" min="0" required>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="row mb-3">
+                                            <div class="col-md-4">
+                                                <label for="eval_interval" class="form-label">Eval Interval</label>
+                                                <input type="number" class="form-control" id="eval_interval" name="eval_interval" 
+                                                       value="25" min="1" required>
+                                            </div>
+                                            <div class="col-md-4">
+                                                <label for="save_interval" class="form-label">Save Interval</label>
+                                                <input type="number" class="form-control" id="save_interval" name="save_interval" 
+                                                       value="500" min="1" required>
+                                            </div>
+                                            <div class="col-md-4">
+                                                <label for="gradient_accumulation_steps" class="form-label">Gradient Accumulation</label>
+                                                <input type="number" class="form-control" id="gradient_accumulation_steps" name="gradient_accumulation_steps" 
+                                                       value="1" min="1" required>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="form-check form-switch mb-3">
+                                            <input class="form-check-input" type="checkbox" id="use_lora" name="use_lora">
+                                            <label class="form-check-label" for="use_lora">Use LoRA</label>
+                                        </div>
+                                        
+                                        <div id="lora-options" class="row mb-3">
+                                            <div class="col-md-4">
+                                                <label for="lora_r" class="form-label">LoRA Rank</label>
+                                                <input type="number" class="form-control" id="lora_r" name="lora_r" 
+                                                       value="8" min="1">
+                                            </div>
+                                            <div class="col-md-4">
+                                                <label for="lora_alpha" class="form-label">LoRA Alpha</label>
+                                                <input type="number" class="form-control" id="lora_alpha" name="lora_alpha" 
+                                                       value="16" min="1">
+                                            </div>
+                                            <div class="col-md-4">
+                                                <label for="lora_dropout" class="form-label">LoRA Dropout</label>
+                                                <input type="number" class="form-control" id="lora_dropout" name="lora_dropout" 
+                                                       value="0.05" min="0" max="1" step="0.01">
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="d-grid gap-2">
+                                    <button type="submit" class="btn btn-primary" id="start-training-btn">Start Training</button>
+                                </div>
+                            </form>
+                            
+                            <div id="training-monitoring" class="mt-4 d-none">
+                                <div class="card mb-4">
+                                    <div class="card-header d-flex justify-content-between align-items-center">
+                                        <h5 class="mb-0">Training Progress</h5>
+                                        <button class="btn btn-danger btn-sm" id="stop-training-btn">Stop Training</button>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="progress mb-3">
+                                            <div id="training-progress" class="progress-bar" role="progressbar" style="width: 0%;" 
+                                                 aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">0%</div>
+                                        </div>
+                                        
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <div class="mb-2">
+                                                    <strong>Status:</strong> <span id="training-status">Initializing...</span>
+                                                </div>
+                                                <div class="mb-2">
+                                                    <strong>Iteration:</strong> <span id="training-iteration">0/0</span>
+                                                </div>
+                                                <div class="mb-2">
+                                                    <strong>Loss:</strong> <span id="training-loss">—</span>
+                                                </div>
+                                                <div class="mb-2">
+                                                    <strong>Validation Loss:</strong> <span id="training-val-loss">—</span>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <div class="mb-2">
+                                                    <strong>Elapsed:</strong> <span id="training-elapsed">00:00:00</span>
+                                                </div>
+                                                <div class="mb-2">
+                                                    <strong>ETA:</strong> <span id="training-eta">00:00:00</span>
+                                                </div>
+                                                <div class="mb-2">
+                                                    <strong>Speed:</strong> <span id="training-speed">0 tokens/sec</span>
+                                                </div>
+                                                <div class="mb-2">
+                                                    <strong>Memory:</strong> <span id="training-memory">0.0 GB</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="card mb-4">
+                                            <div class="card-header">
+                                                <h5>Loss</h5>
+                                            </div>
+                                            <div class="card-body">
+                                                <canvas id="loss-chart" height="250"></canvas>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="card mb-4">
+                                            <div class="card-header">
+                                                <h5>Perplexity</h5>
+                                            </div>
+                                            <div class="card-body">
+                                                <canvas id="perplexity-chart" height="250"></canvas>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="card mb-4">
+                                            <div class="card-header">
+                                                <h5>Learning Rate</h5>
+                                            </div>
+                                            <div class="card-body">
+                                                <canvas id="learning-rate-chart" height="250"></canvas>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="card mb-4">
+                                            <div class="card-header">
+                                                <h5>Performance</h5>
+                                            </div>
+                                            <div class="card-body">
+                                                <canvas id="performance-chart" height="250"></canvas>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Models View -->
+                <div id="models-view" class="view d-none">
+                    <h1>Models</h1>
+                    <div class="row">
+                        <div class="col-md-12">
+                            <div class="card mb-4">
+                                <div class="card-header">
+                                    <h5>CPT Models</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div id="cpt-models-list"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Generate View -->
+                <div id="generate-view" class="view d-none">
+                    <h1>Generate</h1>
+                    <div class="row">
+                        <div class="col-md-12">
+                            <div class="card mb-4">
+                                <div class="card-header">
+                                    <h5>Model Selection</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <label for="base-model-select">Base Model</label>
+                                            <select class="form-select" id="base-model-select"></select>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label for="adapter-select">Adapter</label>
+                                            <select class="form-select" id="adapter-select">
+                                                <option value="">None</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="mt-3">
+                                        <button id="load-model-btn" class="btn btn-primary">Load Model</button>
+                                        <button id="unload-model-btn" class="btn btn-secondary" disabled>Unload Model</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Settings View -->
+                <div id="settings-view" class="view d-none">
+                    <h1>Settings</h1>
+                    <div class="row">
+                        <div class="col-md-12">
+                            <div class="card mb-4">
+                                <div class="card-header">
+                                    <h5>General Settings</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" id="dark-mode-toggle">
+                                        <label class="form-check-label" for="dark-mode-toggle">Dark Mode</label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="position-fixed top-0 start-0 w-100 h-100 bg-dark bg-opacity-50 d-flex justify-content-center align-items-center d-none" style="z-index: 1050;">
+        <div class="card p-4">
+            <div class="d-flex align-items-center">
+                <div class="spinner-border text-primary me-3" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <div id="loading-message">Loading...</div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Confirm Modal -->
+    <div class="modal fade" id="confirm-modal" tabindex="-1" aria-labelledby="confirm-modal-title" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="confirm-modal-title">Confirm</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="confirm-modal-body">
+                    Are you sure you want to proceed?
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="confirm-modal-confirm">Confirm</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- JavaScript -->
+    <script src="/static/js/services/api.js"></script>
+    <script src="/static/js/services/socket.js"></script>
+    <script src="/static/js/components/dashboard.js"></script>
+    <script src="/static/js/components/training.js"></script>
+    <script src="/static/js/components/models.js"></script>
+    <script src="/static/js/components/generation.js"></script>
+    <script src="/static/js/app.js"></script>
+</body>
+</html> 
