@@ -137,3 +137,7 @@ Thumbs.db
 # Local development files
 local_config.yaml
 local_settings.py
+
+models
+published
+dataset
