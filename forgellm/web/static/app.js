@@ -359,39 +359,49 @@ class TrainingInterface {
             
             // Determine if this is a base model using same logic as isCurrentModelBase
             const modelName = model.name.toLowerCase();
-            const instructPatterns = [
-                'instruct', 'chat', 'sft', 'dpo', 'rlhf', 
-                'assistant', 'alpaca', 'vicuna', 'wizard', 'orca',
-                'dolphin', 'openhermes', 'airoboros', 'nous',
-                'claude', 'gpt', 'turbo', 'dialogue', 'conversation'
-            ];
-            const specialPatterns = ['it']; // 'it' needs word boundary checking
-            const basePatterns = [
-                'base', 'pt', 'pretrain', 'foundation'
-            ];
             
-            const hasBasePattern = basePatterns.some(pattern => 
-                modelName.includes(`-${pattern}`) || 
-                modelName.includes(`_${pattern}`) ||
-                modelName.includes(`-${pattern}-`) ||
-                modelName.includes(`_${pattern}_`) ||
-                modelName.endsWith(`-${pattern}`) ||
-                modelName.endsWith(`_${pattern}`) ||
-                modelName.endsWith(pattern)
-            );
-            
-            let hasInstructPattern = instructPatterns.some(pattern => 
-                modelName.includes(pattern)
-            );
-            
-            if (!hasInstructPattern) {
-                hasInstructPattern = specialPatterns.some(pattern => {
-                    const regex = new RegExp(`\\b${pattern}\\b`, 'i');
-                    return regex.test(modelName);
-                });
+            // Special handling for Qwen models: they are instruct by default EXCEPT if "base" is in the name
+            let isBaseModel;
+            if (modelName.includes('qwen')) {
+                // For Qwen models, check if it's explicitly marked as base
+                isBaseModel = modelName.includes('base');
+                console.log(`🔍 Qwen model '${model.name}' detected as ${isBaseModel ? 'BASE' : 'INSTRUCT'}`);
+            } else {
+                // Regular detection logic for non-Qwen models
+                const instructPatterns = [
+                    'instruct', 'chat', 'sft', 'dpo', 'rlhf', 
+                    'assistant', 'alpaca', 'vicuna', 'wizard', 'orca',
+                    'dolphin', 'openhermes', 'airoboros', 'nous',
+                    'claude', 'gpt', 'turbo', 'dialogue', 'conversation'
+                ];
+                const specialPatterns = ['it']; // 'it' needs word boundary checking
+                const basePatterns = [
+                    'base', 'pt', 'pretrain', 'foundation'
+                ];
+                
+                const hasBasePattern = basePatterns.some(pattern => 
+                    modelName.includes(`-${pattern}`) || 
+                    modelName.includes(`_${pattern}`) ||
+                    modelName.includes(`-${pattern}-`) ||
+                    modelName.includes(`_${pattern}_`) ||
+                    modelName.endsWith(`-${pattern}`) ||
+                    modelName.endsWith(`_${pattern}`) ||
+                    modelName.endsWith(pattern)
+                );
+                
+                let hasInstructPattern = instructPatterns.some(pattern => 
+                    modelName.includes(pattern)
+                );
+                
+                if (!hasInstructPattern) {
+                    hasInstructPattern = specialPatterns.some(pattern => {
+                        const regex = new RegExp(`\\b${pattern}\\b`, 'i');
+                        return regex.test(modelName);
+                    });
+                }
+                
+                isBaseModel = hasBasePattern || !hasInstructPattern;
             }
-            
-            const isBaseModel = hasBasePattern || !hasInstructPattern;
             
             // Simplified icons: only 2 types
             let icon = '';
@@ -3086,6 +3096,15 @@ class TrainingInterface {
                 const modelName = data.model_name.toLowerCase();
                 console.log('📋 Model name (lowercase):', modelName);
                 
+                // Special handling for Qwen models: they are instruct by default EXCEPT if "base" is in the name
+                if (modelName.includes('qwen')) {
+                    // For Qwen models, check if it's explicitly marked as base
+                    const isBase = modelName.includes('base');
+                    console.log(`🔍 Qwen model '${data.model_name}' detected as ${isBase ? 'BASE' : 'INSTRUCT'}`);
+                    return isBase;
+                }
+                
+                // Regular detection logic for non-Qwen models
                 // Instruction-tuned model patterns with more precise matching
                 const instructPatterns = [
                     'instruct', 'chat', 'sft', 'dpo', 'rlhf', 

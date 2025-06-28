@@ -157,6 +157,14 @@ def format_gemma_chat(messages):
 - ✅ **Test with strong prompts**: Use personality-based prompts for best results
 - ✅ **Leverage conversation history**: Gemma maintains context well with proper formatting
 
+### 🎯 **For Qwen Models**
+- ✅ **Special Detection Logic**: Qwen models are INSTRUCT by default, except when "base" is in the name
+- ✅ **Examples**:
+  - `Qwen/Qwen2.5-7B-Instruct` → INSTRUCT ✅
+  - `Qwen/Qwen2.5-7B` → INSTRUCT ✅ (default for Qwen)
+  - `Qwen/Qwen2.5-7B-Base` → BASE ✅ (explicit base)
+- ✅ **Chat Template**: Uses `<|im_start|>` and `<|im_end|>` tokens
+
 ### 🎯 **For Other INSTRUCT Models**
 - ✅ **Use chat templates**: Let the tokenizer handle formatting when available
 - ✅ **Fallback formatting**: Manual formatting when chat templates aren't available

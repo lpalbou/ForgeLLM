@@ -14,12 +14,29 @@ from urllib.parse import parse_qs
 import threading
 import traceback
 
+# Add the forgellm package to the path for imports
+current_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = current_dir  # model_server.py is in the root, so current_dir IS the project root
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+# Try to import the ModelArchitectureManager
+try:
+    from forgellm.utils.model_architectures import get_model_architecture_manager
+    ARCHITECTURE_MANAGER = get_model_architecture_manager()
+    logger.info("Successfully loaded ModelArchitectureManager")
+except ImportError as e:
+    logger.warning(f"Could not import ModelArchitectureManager: {e}")
+    logger.warning(f"Current working directory: {os.getcwd()}")
+    logger.warning(f"Python path: {sys.path[:3]}")
+    ARCHITECTURE_MANAGER = None
 
 # Global variables
 MODEL = None
@@ -166,27 +183,62 @@ class ModelHandler(BaseHTTPRequestHandler):
             if is_base_model_hint is not None:
                 is_instruct = not is_base_model_hint
                 logger.info(f"Using frontend hint: Model {MODEL_NAME} is {'BASE' if is_base_model_hint else 'INSTRUCT'}")
+            elif ARCHITECTURE_MANAGER:
+                is_instruct = ARCHITECTURE_MANAGER.is_instruct_model(MODEL_NAME)
+                logger.info(f"Model {MODEL_NAME} detected as instruct model: {is_instruct} (via ArchitectureManager)")
             else:
                 is_instruct = is_instruct_model(MODEL_NAME)
-                logger.info(f"Model {MODEL_NAME} detected as instruct model: {is_instruct}")
+                logger.info(f"Model {MODEL_NAME} detected as instruct model: {is_instruct} (fallback detection)")
             
-            # NEW: Intelligent prompt formatting based on model type and history
+            # NEW: Intelligent prompt formatting using ModelArchitectureManager
             final_prompt = prompt
-            is_gemma = is_gemma_model(MODEL_NAME)
             
             if history and is_instruct:
-                # INSTRUCT MODEL with history: Use appropriate formatting
+                # INSTRUCT MODEL with history: Use architecture-specific formatting
                 try:
-                    # Add current user message to history
-                    messages = history + [{"role": "user", "content": prompt}]
+                    # CRITICAL FIX: Transform system messages for models that don't support them
+                    transformed_history = history
+                    logger.info(f"🔍 DEBUG: Starting transformation logic for {len(history)} messages")
+                    logger.info(f"🔍 DEBUG: ARCHITECTURE_MANAGER available: {ARCHITECTURE_MANAGER is not None}")
                     
-                    if is_gemma:
-                        # GEMMA-SPECIFIC: Use proper Gemma chat format
-                        logger.info("Using Gemma-specific chat formatting")
-                        final_prompt = format_gemma_chat(messages)
-                        logger.info(f"Gemma chat format result: {final_prompt[:200]}...")
+                    if ARCHITECTURE_MANAGER:
+                        architecture = ARCHITECTURE_MANAGER.detect_architecture(MODEL_NAME)
+                        arch_config = ARCHITECTURE_MANAGER.get_architecture_config(architecture)
+                        system_as_assistant = arch_config.get("system_as_assistant", False)
+                        
+                        logger.info(f"🔍 DEBUG: Architecture: {architecture}, system_as_assistant: {system_as_assistant}")
+                        
+                        # If this architecture treats system messages as assistant turns (e.g., Gemma)
+                        if system_as_assistant:
+                            logger.info(f"🔄 TRANSFORMING system messages to assistant messages for {architecture}")
+                            transformed_history = []
+                            for msg in history:
+                                if msg.get("role") == "system":
+                                    # Convert system message to assistant message (Gemma speaks as itself)
+                                    transformed_msg = {
+                                        "role": "assistant", 
+                                        "content": msg.get('content', '')
+                                    }
+                                    transformed_history.append(transformed_msg)
+                                    logger.info(f"✅ Transformed: {msg} -> {transformed_msg}")
+                                else:
+                                    transformed_history.append(msg)
+                                    logger.info(f"➡️  Kept as-is: {msg}")
+                        else:
+                            logger.info(f"❌ No transformation applied (system_as_assistant = {system_as_assistant})")
+                    else:
+                        logger.warning("❌ ARCHITECTURE_MANAGER not available for transformation")
+                    
+                    # Add current user message to transformed history
+                    messages = transformed_history + [{"role": "user", "content": prompt}]
+                    
+                    if ARCHITECTURE_MANAGER:
+                        # Use the architecture manager for proper formatting
+                        logger.info(f"Using ModelArchitectureManager for formatting {len(messages)} messages")
+                        final_prompt = ARCHITECTURE_MANAGER.format_messages(messages, MODEL_NAME)
+                        logger.info(f"Architecture-based format result: {final_prompt[:200]}...")
                     elif hasattr(TOKENIZER, 'apply_chat_template') and TOKENIZER.chat_template:
-                        # Try to use chat template for other models
+                        # Fallback: Try to use tokenizer chat template
                         logger.info("Using tokenizer chat template for INSTRUCT model")
                         final_prompt = TOKENIZER.apply_chat_template(
                             messages, 
@@ -195,8 +247,8 @@ class ModelHandler(BaseHTTPRequestHandler):
                         )
                         logger.info(f"Chat template result: {final_prompt[:200]}...")
                     else:
-                        # Fallback: Manual formatting for INSTRUCT models
-                        logger.info("No chat template available, using manual INSTRUCT formatting")
+                        # Last resort: Manual formatting for INSTRUCT models
+                        logger.info("No architecture manager or chat template available, using manual INSTRUCT formatting")
                         formatted_messages = []
                         for msg in messages:
                             if msg["role"] == "system":
@@ -208,7 +260,7 @@ class ModelHandler(BaseHTTPRequestHandler):
                         final_prompt = "\n".join(formatted_messages) + "\nAssistant:"
                         
                 except Exception as e:
-                    logger.warning(f"Error applying chat template: {e}, falling back to raw prompt")
+                    logger.warning(f"Error applying formatting: {e}, falling back to raw prompt")
                     final_prompt = prompt
                     
             elif history and not is_instruct:
@@ -220,12 +272,13 @@ class ModelHandler(BaseHTTPRequestHandler):
                 # LEGACY: Handle old system_prompt parameter for backward compatibility
                 logger.info(f"Using legacy system prompt: {legacy_system_prompt[:50]}...")
                 
-                if is_instruct:
-                    if is_gemma:
-                        # GEMMA-SPECIFIC: Use proper Gemma format for legacy system prompts
-                        logger.info("Using Gemma-specific formatting for legacy system prompt")
-                        final_prompt = f"<start_of_turn>model\nSystem: {legacy_system_prompt}<end_of_turn>\n<start_of_turn>user\n{prompt}<end_of_turn>\n<start_of_turn>model\n"
-                    elif "User:" in prompt and "Assistant:" in prompt:
+                if is_instruct and ARCHITECTURE_MANAGER:
+                    # Use architecture manager for legacy system prompts
+                    logger.info("Using ModelArchitectureManager for legacy system prompt formatting")
+                    final_prompt = ARCHITECTURE_MANAGER.format_single_turn(prompt, legacy_system_prompt, MODEL_NAME)
+                elif is_instruct:
+                    # Fallback formatting for instruct models
+                    if "User:" in prompt and "Assistant:" in prompt:
                         final_prompt = f"System: {legacy_system_prompt}\n\n{prompt}"
                     else:
                         final_prompt = f"System: {legacy_system_prompt}\n\nHuman: {prompt}\nAssistant:"
@@ -235,13 +288,12 @@ class ModelHandler(BaseHTTPRequestHandler):
                     
             elif is_instruct and not history:
                 # INSTRUCT MODEL without history: Add minimal formatting if needed
-                if is_gemma:
-                    # GEMMA-SPECIFIC: Use proper Gemma format
-                    if "<start_of_turn>" not in prompt:
-                        final_prompt = f"<start_of_turn>user\n{prompt}<end_of_turn>\n<start_of_turn>model\n"
-                    else:
-                        final_prompt = prompt
+                if ARCHITECTURE_MANAGER:
+                    # Use architecture manager for single-turn formatting
+                    logger.info("Using ModelArchitectureManager for single-turn INSTRUCT formatting")
+                    final_prompt = ARCHITECTURE_MANAGER.format_single_turn(prompt, "", MODEL_NAME)
                 elif "Human:" not in prompt and "User:" not in prompt and "Assistant:" not in prompt:
+                    # Fallback: Add basic instruct formatting
                     final_prompt = f"Human: {prompt}\nAssistant:"
                 else:
                     final_prompt = prompt
@@ -383,12 +435,23 @@ def is_instruct_model(model_name):
     if not model_name:
         return False
     
+    model_name_lower = model_name.lower()
+    
+    # Special handling for Qwen models: they are instruct by default EXCEPT if "base" is in the name
+    if "qwen" in model_name_lower:
+        # For Qwen models, check if it's explicitly marked as base
+        if "base" in model_name_lower:
+            logger.info(f"Qwen model '{model_name}' detected as BASE (contains 'base')")
+            return False
+        else:
+            logger.info(f"Qwen model '{model_name}' detected as INSTRUCT (default for Qwen)")
+            return True
+    
     # Common patterns for instruct model names
     instruct_patterns = [
         "-it-", "instruct", "-i-", "chat", "-c-", "assistant", "-sft"
     ]
     
-    model_name_lower = model_name.lower()
     return any(pattern in model_name_lower for pattern in instruct_patterns)
 
 def is_gemma_model(model_name):

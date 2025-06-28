@@ -63,7 +63,9 @@
       "assistant_prefix": "<start_of_turn>model\n",
       "assistant_suffix": "<end_of_turn>\n",
       "tool_format": "gemma_tool",
-      "patterns": ["gemma", "codegemma"]
+      "patterns": ["gemma", "codegemma"],
+      "system_as_assistant": true,
+      "system_note": "Gemma doesn't support explicit system messages. System prompts are formatted as model turns with 'System: ' prefix to trick the model into following instructions."
     },
     "granite": {
       "description": "IBM's Granite architecture family",
@@ -144,7 +146,7 @@
     "llama3": "Llama 3 instruction format with special header and EOT tokens.",
     "im_start_end": "ChatML format with <|im_start|> and <|im_end|> tokens.",
     "phi3_chat": "Phi-3 chat format with role and <|end|> tokens.",
-    "gemma_chat": "Gemma chat format with <start_of_turn>/<end_of_turn>. System instructions are prepended to the first user message.",
+    "gemma_chat": "Gemma chat format with <start_of_turn>/<end_of_turn>. System instructions are formatted as model turns with 'System: ' prefix since Gemma doesn't support explicit system messages.",
     "deepseek_chat": "DeepSeek format with role prefixes and <|end_of_turn|> suffix.",
     "special_tokens": "Uses role-specific special tokens like <|user|> and <|assistant|>.",
     "basic": "Simple role: content format (e.g., 'User:...').",
