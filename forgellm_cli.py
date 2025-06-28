@@ -8,6 +8,8 @@ import sys
 import argparse
 import logging
 import time
+import json
+from datetime import datetime
 from pathlib import Path
 
 # Configure logging
@@ -36,7 +38,7 @@ def main():
     test_parser.add_argument('--model', required=True, help='Model name or path')
     test_parser.add_argument('--adapter', help='Optional adapter path')
     test_parser.add_argument('--prompt', required=True, help='Prompt to test with')
-    test_parser.add_argument('--max-tokens', type=int, default=100, help='Maximum tokens to generate')
+    test_parser.add_argument('--max-tokens', type=int, default=1000, help='Maximum tokens to generate')
     test_parser.add_argument('--temperature', type=float, default=0.7, help='Temperature for sampling')
     
     # Dataset command
@@ -56,7 +58,7 @@ def main():
     generate_parser = subparsers.add_parser('generate', help='Generate text from a model')
     generate_parser.add_argument('--model', required=True, help='Model name or path')
     generate_parser.add_argument('--adapter-path', help='Optional adapter path')
-    generate_parser.add_argument('--prompt', required=True, help='Prompt to generate from')
+    generate_parser.add_argument('--prompt', help='Prompt to generate from (if not provided, starts REPL mode)')
     generate_parser.add_argument('--max-tokens', type=int, default=100, help='Maximum tokens to generate')
     generate_parser.add_argument('--temperature', type=float, default=0.7, help='Temperature for sampling')
     
@@ -82,13 +84,22 @@ def main():
             args.max_iterations
         )
     elif args.command == 'generate':
-        generate_text(
-            args.model,
-            args.adapter_path,
-            args.prompt,
-            args.max_tokens,
-            args.temperature
-        )
+        if args.prompt:
+            generate_text(
+                args.model,
+                args.adapter_path,
+                args.prompt,
+                args.max_tokens,
+                args.temperature
+            )
+        else:
+            # Start REPL mode
+            start_repl(
+                args.model,
+                args.adapter_path,
+                args.max_tokens,
+                args.temperature
+            )
     else:
         parser.print_help()
 
@@ -271,6 +282,244 @@ def generate_text(model_name, adapter_path, prompt, max_tokens, temperature):
         return True
     except Exception as e:
         logger.error(f"Error generating text: {e}")
+        return False
+
+def start_repl(model_name, adapter_path=None, max_tokens=100, temperature=0.7):
+    """Start REPL mode for interactive conversation."""
+    print(f"\n🤖 ForgeLLM REPL - Interactive Chat")
+    print(f"Model: {model_name}")
+    if adapter_path:
+        print(f"Adapter: {adapter_path}")
+    print(f"Max tokens: {max_tokens}, Temperature: {temperature}")
+    print("\nCommands:")
+    print("  /help - Show this help")
+    print("  /q, /exit, /quit - Exit REPL")
+    print("  /save <filename> - Save conversation history")
+    print("  /load <filename> - Load conversation history")
+    print("  /stats - Show session statistics")
+    print("  /system [prompt] - Show/set system prompt")
+    print("\nType your message and press Enter to chat!\n")
+    
+    try:
+        # Import here to avoid loading mlx until needed
+        from mlx_lm import load
+        from mlx_lm.generate import stream_generate
+        from mlx_lm.sample_utils import make_sampler
+        
+        # Load the model
+        print("Loading model...")
+        model, tokenizer = load(model_name, adapter_path=adapter_path)
+        print("✅ Model loaded successfully!\n")
+        
+        # Initialize session state
+        conversation_history = []
+        system_prompt = "You are a helpful AI assistant."
+        session_stats = {
+            'turns': 0,
+            'prompt_tokens': 0,
+            'response_tokens': 0,
+            'start_time': datetime.now()
+        }
+        
+        # Create sampler with proper parameters
+        sampler = make_sampler(temp=temperature)
+        
+        # REPL loop
+        while True:
+            try:
+                user_input = input("👤 You: ").strip()
+                
+                if not user_input:
+                    continue
+                
+                # Handle commands
+                if user_input.startswith('/'):
+                    command_parts = user_input.split(' ', 1)
+                    command = command_parts[0].lower()
+                    args = command_parts[1] if len(command_parts) > 1 else ""
+                    
+                    if command in ['/q', '/exit', '/quit']:
+                        print("\n👋 Goodbye!")
+                        break
+                    
+                    elif command == '/help':
+                        print("\n📖 Available Commands:")
+                        print("  /help - Show this help")
+                        print("  /q, /exit, /quit - Exit REPL")
+                        print("  /save <filename> - Save conversation history")
+                        print("  /load <filename> - Load conversation history")
+                        print("  /stats - Show session statistics")
+                        print("  /system [prompt] - Show/set system prompt")
+                        print()
+                        continue
+                    
+                    elif command == '/stats':
+                        duration = datetime.now() - session_stats['start_time']
+                        print(f"\n📊 Session Statistics:")
+                        print(f"  Duration: {duration}")
+                        print(f"  Conversation turns: {session_stats['turns']}")
+                        print(f"  Prompt tokens (est): {session_stats['prompt_tokens']}")
+                        print(f"  Response tokens (est): {session_stats['response_tokens']}")
+                        print(f"  Total tokens (est): {session_stats['prompt_tokens'] + session_stats['response_tokens']}")
+                        print()
+                        continue
+                    
+                    elif command == '/system':
+                        if args:
+                            system_prompt = args
+                            print(f"✅ System prompt updated: {system_prompt}\n")
+                        else:
+                            print(f"📝 Current system prompt: {system_prompt}\n")
+                        continue
+                    
+                    elif command == '/save':
+                        if not args:
+                            print("❌ Please provide a filename: /save <filename>\n")
+                            continue
+                        
+                        filename = args.strip()
+                        if not filename.endswith('.json'):
+                            filename += '.json'
+                        
+                        try:
+                            # Use same format as web UI (simplified)
+                            # Convert session_stats to JSON-serializable format
+                            serializable_stats = {
+                                'turns': session_stats['turns'],
+                                'prompt_tokens': session_stats['prompt_tokens'],
+                                'response_tokens': session_stats['response_tokens'],
+                                'start_time': session_stats['start_time'].isoformat(),
+                                'duration_seconds': (datetime.now() - session_stats['start_time']).total_seconds()
+                            }
+                            
+                            save_data = {
+                                'metadata': {
+                                    'model_name': model_name,
+                                    'adapter_path': adapter_path,
+                                    'system_prompt': system_prompt,
+                                    'max_tokens': max_tokens,
+                                    'temperature': temperature,
+                                    'saved_at': datetime.now().isoformat(),
+                                    'session_stats': serializable_stats
+                                },
+                                'messages': conversation_history
+                            }
+                            
+                            with open(filename, 'w') as f:
+                                json.dump(save_data, f, indent=2)
+                            
+                            print(f"✅ Conversation saved to {filename}\n")
+                        except Exception as e:
+                            print(f"❌ Error saving conversation: {e}\n")
+                        continue
+                    
+                    elif command == '/load':
+                        if not args:
+                            print("❌ Please provide a filename: /load <filename>\n")
+                            continue
+                        
+                        filename = args.strip()
+                        if not filename.endswith('.json'):
+                            filename += '.json'
+                        
+                        try:
+                            with open(filename, 'r') as f:
+                                save_data = json.load(f)
+                            
+                            # Load conversation history
+                            conversation_history = save_data.get('messages', [])
+                            
+                            # Load metadata if available
+                            metadata = save_data.get('metadata', {})
+                            if 'system_prompt' in metadata:
+                                system_prompt = metadata['system_prompt']
+                            if 'max_tokens' in metadata:
+                                max_tokens = metadata['max_tokens']
+                            if 'temperature' in metadata:
+                                temperature = metadata['temperature']
+                                sampler = make_sampler(temp=temperature)
+                            
+                            print(f"✅ Conversation loaded from {filename}")
+                            print(f"   Loaded {len(conversation_history)} messages")
+                            if metadata:
+                                print(f"   Model: {metadata.get('model_name', 'unknown')}")
+                                print(f"   System: {system_prompt}")
+                            print()
+                            
+                            # Show conversation history
+                            if conversation_history:
+                                print("📜 Conversation History:")
+                                for msg in conversation_history[-5:]:  # Show last 5 messages
+                                    role = "👤" if msg['role'] == 'user' else "🤖"
+                                    content = msg['content'][:100] + "..." if len(msg['content']) > 100 else msg['content']
+                                    print(f"   {role} {content}")
+                                if len(conversation_history) > 5:
+                                    print(f"   ... and {len(conversation_history) - 5} more messages")
+                                print()
+                        except Exception as e:
+                            print(f"❌ Error loading conversation: {e}\n")
+                        continue
+                    
+                    else:
+                        print(f"❌ Unknown command: {command}")
+                        print("   Type /help for available commands\n")
+                        continue
+                
+                # Regular chat message
+                print("🤖 Assistant: ", end='', flush=True)
+                
+                # Add user message to history
+                conversation_history.append({
+                    'role': 'user',
+                    'content': user_input
+                })
+                
+                # Build full prompt with system message and conversation history
+                full_prompt = f"System: {system_prompt}\n\n"
+                for msg in conversation_history:
+                    role_name = "Human" if msg['role'] == 'user' else "Assistant"
+                    full_prompt += f"{role_name}: {msg['content']}\n"
+                full_prompt += "Assistant:"
+                
+                # Generate response
+                start_time = time.time()
+                response_text = ""
+                
+                for chunk in stream_generate(
+                    model, 
+                    tokenizer, 
+                    prompt=full_prompt, 
+                    max_tokens=max_tokens,
+                    sampler=sampler
+                ):
+                    print(chunk.text, end='', flush=True)
+                    response_text += chunk.text
+                
+                print("\n")  # New line after response
+                
+                # Add assistant response to history
+                conversation_history.append({
+                    'role': 'assistant',
+                    'content': response_text.strip()
+                })
+                
+                # Update stats (rough token estimates)
+                session_stats['turns'] += 1
+                session_stats['prompt_tokens'] += len(full_prompt.split())
+                session_stats['response_tokens'] += len(response_text.split())
+                
+            except KeyboardInterrupt:
+                print("\n\n👋 Goodbye!")
+                break
+            except EOFError:
+                print("\n\n👋 Goodbye!")
+                break
+            except Exception as e:
+                print(f"\n❌ Error: {e}\n")
+                continue
+    
+    except Exception as e:
+        logger.error(f"Error in REPL mode: {e}")
         return False
 
 if __name__ == "__main__":
