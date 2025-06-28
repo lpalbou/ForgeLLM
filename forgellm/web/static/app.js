@@ -1277,54 +1277,9 @@ class TrainingInterface {
     }
     
     updateModelStatus(model = null, adapter = null) {
-        const container = document.getElementById('model-status');
-        
-        if (model) {
-            const systemPrompt = document.getElementById('system-prompt')?.value?.trim();
-            
-            // Get current generation parameters
-            const temperature = document.getElementById('temperature')?.value || '0.7';
-            const topP = document.getElementById('top-p')?.value || '0.9';
-            const repetitionPenalty = document.getElementById('repetition-penalty')?.value || '1.1';
-            
-            container.innerHTML = `
-                <div class="mb-3">
-                    <span class="status-indicator status-running"></span>
-                    <strong>MODEL LOADED</strong>
-                </div>
-                <div class="mb-2">
-                    <small class="text-muted">Base Model:</small><br>
-                    <strong>${model}</strong>
-                </div>
-                ${adapter ? `
-                <div class="mb-2">
-                    <small class="text-muted">Adapter:</small><br>
-                    <strong>${adapter.split('/').pop()}</strong>
-                </div>
-                ` : ''}
-                ${systemPrompt ? `
-                <div class="mb-2">
-                    <small class="text-muted">System Prompt:</small><br>
-                    <span class="text-success"><i class="fas fa-check-circle me-1"></i>Enabled</span>
-                </div>
-                ` : ''}
-                <div class="mb-2">
-                    <small class="text-muted">Generation Settings:</small><br>
-                    <div class="d-flex justify-content-between">
-                        <span title="Temperature"><i class="fas fa-thermometer-half me-1"></i>${temperature}</span>
-                        <span title="Top P"><i class="fas fa-filter me-1"></i>${topP}</span>
-                        <span title="Repetition Penalty"><i class="fas fa-clone me-1"></i>${repetitionPenalty}</span>
-                    </div>
-                </div>
-            `;
-        } else {
-            container.innerHTML = `
-                <div class="text-center text-muted">
-                    <i class="fas fa-cloud fa-2x mb-3"></i>
-                    <p>No model loaded</p>
-                </div>
-            `;
-        }
+        // Model status display has been removed from the UI
+        // This function is kept as a no-op to maintain compatibility
+        // with existing code that calls it
     }
     
     // Function to check and clean system prompt from prompt input

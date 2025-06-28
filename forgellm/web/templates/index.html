@@ -792,7 +792,7 @@
                                         <div class="row g-2 mb-2">
                                             <div class="col-md-6">
                                                 <label for="max-tokens" class="form-label small">Max Tokens</label>
-                                                <input type="number" class="form-control" id="max-tokens" value="2000" min="1" required>
+                                                <input type="number" class="form-control" id="max-tokens" value="1000" min="1" required>
                                             </div>
                                             <div class="col-md-6">
                                                 <label for="max-kv-size" class="form-label small">Context Window</label>
@@ -801,8 +801,8 @@
                                                     <option value="1024">1K (1,024)</option>
                                                     <option value="2048">2K (2,048)</option>
                                                     <option value="4096">4K (4,096)</option>
-                                                    <option value="8192" selected>8K (8,192)</option>
-                                                    <option value="16384">16K (16,384)</option>
+                                                    <option value="8192">8K (8,192)</option>
+                                                    <option value="16384" selected>16K (16,384)</option>
                                                     <option value="32768">32K (32,768)</option>
                                                     <option value="65536">64K (65,536)</option>
                                                     <option value="131072">128K (131,072)</option>
@@ -886,19 +886,7 @@
                             </div>
                         </div>
                         
-                        <div class="card mt-3">
-                            <div class="card-header">
-                                <i class="fas fa-info-circle me-2"></i>Model Status
-                            </div>
-                            <div class="card-body">
-                                <div id="model-status">
-                                    <div class="text-center text-muted">
-                                        <i class="fas fa-cloud fa-2x mb-3"></i>
-                                        <p>No model loaded</p>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+
                     </div>
                 </div>
             </div>
