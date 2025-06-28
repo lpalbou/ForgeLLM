@@ -224,6 +224,21 @@ def load_model(model_name, adapter_path=None):
     try:
         logger.info(f"Loading model {model_name} with adapter {adapter_path}")
         
+        # Unload previous model first to free memory
+        if MODEL is not None:
+            logger.info("Unloading previous model to free memory")
+            MODEL = None
+            TOKENIZER = None
+            # Force garbage collection to free GPU memory
+            import gc
+            gc.collect()
+            try:
+                import mlx.core as mx
+                mx.metal.clear_cache()
+                logger.info("Cleared MLX metal cache")
+            except:
+                pass
+        
         # Import here to avoid loading mlx until needed
         from mlx_lm import load
         

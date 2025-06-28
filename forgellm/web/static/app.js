@@ -1157,8 +1157,8 @@ class TrainingInterface {
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
-                    model: model,
-                    adapter: adapter,
+                    model_name: model,
+                    adapter_path: adapter,
                     system_prompt: prompt
                 })
             });
