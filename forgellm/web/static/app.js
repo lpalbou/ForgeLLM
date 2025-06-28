@@ -2472,24 +2472,16 @@ class TrainingInterface {
             token_count: this.currentTokenCount || 0
         };
         
-        // Create training-ready formats
-        const trainingData = {
+        // Create simplified chat history format
+        const historyData = {
             // Metadata about the model and parameters
             metadata: metadata,
-            // Format for instruction fine-tuning
-            instruction_format: {
-                messages: messages
-            },
-            // Format for continued pre-training
-            cpt_format: {
-                text: this.formatConversationForCPT(messages)
-            },
-            // Raw conversation
-            raw_messages: messages
+            // The conversation messages
+            messages: messages
         };
         
         // Convert to JSON and create download link
-        const jsonData = JSON.stringify(trainingData, null, 2);
+        const jsonData = JSON.stringify(historyData, null, 2);
         const blob = new Blob([jsonData], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         
@@ -2509,27 +2501,7 @@ class TrainingInterface {
         this.showAlert('Chat history saved successfully with model metadata', 'success');
     }
     
-    // Format conversation for continued pre-training
-    formatConversationForCPT(messages) {
-        // Format conversation for continued pre-training
-        let formattedText = '';
-        
-        for (let i = 0; i < messages.length; i++) {
-            const message = messages[i];
-            
-            if (message.role === 'system') {
-                formattedText += `System: ${message.content}\n\n`;
-            } else if (message.role === 'user') {
-                formattedText += `User: ${message.content}\n\n`;
-            } else if (message.role === 'assistant') {
-                // Use raw text if available (for markdown responses)
-                const content = message.rawText || message.content;
-                formattedText += `Assistant: ${content}\n\n`;
-            }
-        }
-        
-        return formattedText;
-    }
+
 
     // Helper method to show a temporary tooltip
     showTooltip(elementId, message) {
