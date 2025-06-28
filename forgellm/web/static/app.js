@@ -1564,6 +1564,7 @@ class TrainingInterface {
         const repetitionPenalty = parseFloat(document.getElementById('repetition-penalty').value);
         const maxKvSize = parseInt(document.getElementById('max-kv-size').value);
         const systemPrompt = document.getElementById('system-prompt').value.trim();
+        const streaming = document.getElementById('streaming-toggle').checked;
         
         document.getElementById('stop-generation-btn').disabled = false;
         // Disable chat input during generation
@@ -1646,52 +1647,28 @@ class TrainingInterface {
                 temperature: temperature || undefined,
                 top_p: topP || undefined,
                 repetition_penalty: repetitionPenalty || undefined,
-                max_kv_size: maxKvSize || undefined
+                max_kv_size: maxKvSize || undefined,
+                streaming: streaming
             };
             
             console.log('🚀 Sending request:', requestBody);
             
-            const response = await fetch('/api/model/generate', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(requestBody)
-            });
-            
-            const data = await response.json();
-            
-            if (data.success) {
-                // Remove any model-specific end tokens (</q>, </s>, etc.)
-                let completion = data.completion;
-                completion = completion
-                    .replace(/<\/q>/g, '')
-                    .replace(/<\/s>/g, '')
-                    .replace(/<\/S>/g, '')
-                    .replace(/<end_of_turn>/g, '');
-                
-                // Check if the response appears to be markdown
-                if (this.isMarkdown(completion)) {
-                    // Format as markdown
-                    botBubble.innerHTML = this.formatMarkdown(completion);
-                    // Store raw text as a data attribute for history
-                    botBubble.setAttribute('data-raw-text', completion);
-                } else {
-                    // Plain text
-                    botBubble.innerText = completion;
-                }
-                
-                // Enable save button as soon as we have at least one answer
-                document.getElementById('save-chat-btn').disabled = false;
-                
-                // Update token counts with detailed information
-                this.currentTokenCount = data.token_count || 0;
-                this.promptTokens = data.prompt_tokens || 0;
-                this.completionTokens = data.completion_tokens || 0;
+            if (streaming) {
+                // Handle streaming response
+                await this.handleStreamingGeneration(requestBody, botBubble);
             } else {
-                botBubble.classList.remove('chat-assistant');
-                botBubble.classList.add('list-group-item-danger');
-                botBubble.innerText = `Error: ${data.error}`;
+                // Handle non-streaming response (original behavior)
+                const response = await fetch('/api/model/generate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(requestBody)
+                });
+                
+                const data = await response.json();
+                this.handleNonStreamingResponse(data, botBubble);
             }
-            chatHistory.scrollTop = chatHistory.scrollHeight;
+            
+            // Response handling moved to separate methods
         } catch (error) {
             console.error('Error generating text:', error);
             botBubble.classList.remove('chat-assistant');
@@ -1741,6 +1718,133 @@ class TrainingInterface {
                 }
             }
         }
+    }
+    
+    async handleStreamingGeneration(requestBody, botBubble) {
+        try {
+            // Connect directly to model server for streaming
+            const response = await fetch('http://localhost:5001/api/model/generate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(requestBody)
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let completion = '';
+            
+            // Clear the loading message
+            botBubble.innerHTML = '';
+            
+            while (true) {
+                const { done, value } = await reader.read();
+                
+                if (done) break;
+                
+                const chunk = decoder.decode(value);
+                const lines = chunk.split('\n');
+                
+                for (const line of lines) {
+                    if (line.trim()) {
+                        try {
+                            const data = JSON.parse(line);
+                            
+                            if (data.type === 'chunk') {
+                                completion += data.text;
+                                // Update the bubble with streaming text
+                                if (this.isMarkdown(completion)) {
+                                    botBubble.innerHTML = this.formatMarkdown(completion);
+                                    botBubble.setAttribute('data-raw-text', completion);
+                                } else {
+                                    botBubble.innerText = completion;
+                                }
+                                
+                                // Auto-scroll to bottom
+                                const chatHistory = document.getElementById('chat-history');
+                                chatHistory.scrollTop = chatHistory.scrollHeight;
+                            } else if (data.type === 'complete') {
+                                // Generation complete
+                                console.log(`🎉 Streaming generation completed in ${data.generation_time?.toFixed(2)}s`);
+                                break;
+                            }
+                        } catch (e) {
+                            console.warn('Failed to parse streaming chunk:', line, e);
+                        }
+                    }
+                }
+            }
+            
+            // Clean up the final completion
+            completion = this.cleanCompletion(completion);
+            
+            // Update final result
+            if (this.isMarkdown(completion)) {
+                botBubble.innerHTML = this.formatMarkdown(completion);
+                botBubble.setAttribute('data-raw-text', completion);
+            } else {
+                botBubble.innerText = completion;
+            }
+            
+            // Enable save button
+            document.getElementById('save-chat-btn').disabled = false;
+            
+            // Note: Token counts not available in streaming mode
+            this.currentTokenCount = 0;
+            this.promptTokens = 0;
+            this.completionTokens = 0;
+            
+        } catch (error) {
+            console.error('Streaming error:', error);
+            botBubble.classList.remove('chat-assistant');
+            botBubble.classList.add('list-group-item-danger');
+            botBubble.innerText = `Streaming Error: ${error.message}`;
+        }
+    }
+    
+    handleNonStreamingResponse(data, botBubble) {
+        const chatHistory = document.getElementById('chat-history');
+        
+        if (data.success) {
+            // Clean and process the completion
+            let completion = this.cleanCompletion(data.completion);
+            
+            // Check if the response appears to be markdown
+            if (this.isMarkdown(completion)) {
+                // Format as markdown
+                botBubble.innerHTML = this.formatMarkdown(completion);
+                // Store raw text as a data attribute for history
+                botBubble.setAttribute('data-raw-text', completion);
+            } else {
+                // Plain text
+                botBubble.innerText = completion;
+            }
+            
+            // Enable save button as soon as we have at least one answer
+            document.getElementById('save-chat-btn').disabled = false;
+            
+            // Update token counts with detailed information
+            this.currentTokenCount = data.token_count || 0;
+            this.promptTokens = data.prompt_tokens || 0;
+            this.completionTokens = data.completion_tokens || 0;
+        } else {
+            botBubble.classList.remove('chat-assistant');
+            botBubble.classList.add('list-group-item-danger');
+            botBubble.innerText = `Error: ${data.error}`;
+        }
+        chatHistory.scrollTop = chatHistory.scrollHeight;
+    }
+    
+    cleanCompletion(completion) {
+        // Remove any model-specific end tokens (</q>, </s>, etc.)
+        return completion
+            .replace(/<\/q>/g, '')
+            .replace(/<\/s>/g, '')
+            .replace(/<\/S>/g, '')
+            .replace(/<end_of_turn>/g, '');
     }
     
     stopGeneration() {

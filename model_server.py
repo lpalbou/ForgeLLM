@@ -143,6 +143,7 @@ class ModelHandler(BaseHTTPRequestHandler):
         top_p = data.get('top_p', 0.9)
         repetition_penalty = data.get('repetition_penalty', 1.1)
         max_kv_size = data.get('max_kv_size')
+        streaming = data.get('streaming', False)
         
         if not prompt:
             self._set_headers(400)
@@ -192,25 +193,48 @@ class ModelHandler(BaseHTTPRequestHandler):
             if max_kv_size:
                 generation_kwargs['max_kv_size'] = max_kv_size
             
-            # Generate text using stream_generate and collect all chunks
-            response_text = ""
-            for chunk in stream_generate(MODEL, TOKENIZER, prompt=prompt, **generation_kwargs):
-                response_text += chunk.text
-            
-            end_time = time.time()
-            
-            # Clean up the response for instruct models
-            if is_instruct:
-                # Remove any repeated patterns or strange artifacts
-                response_text = clean_instruct_response(response_text)
-            
-            self._set_headers()
-            response = {
-                'success': True,
-                'text': response_text,
-                'generation_time': end_time - start_time
-            }
-            self.wfile.write(json.dumps(response).encode())
+            if streaming:
+                # Streaming response
+                self._set_headers(content_type='text/plain')
+                
+                # Generate and stream text chunks
+                for chunk in stream_generate(MODEL, TOKENIZER, prompt=prompt, **generation_kwargs):
+                    chunk_data = json.dumps({
+                        'type': 'chunk',
+                        'text': chunk.text,
+                        'timestamp': time.time()
+                    }) + '\n'
+                    self.wfile.write(chunk_data.encode())
+                    self.wfile.flush()
+                
+                # Send completion signal
+                end_time = time.time()
+                completion_data = json.dumps({
+                    'type': 'complete',
+                    'generation_time': end_time - start_time
+                }) + '\n'
+                self.wfile.write(completion_data.encode())
+                self.wfile.flush()
+            else:
+                # Non-streaming response (original behavior)
+                response_text = ""
+                for chunk in stream_generate(MODEL, TOKENIZER, prompt=prompt, **generation_kwargs):
+                    response_text += chunk.text
+                
+                end_time = time.time()
+                
+                # Clean up the response for instruct models
+                if is_instruct:
+                    # Remove any repeated patterns or strange artifacts
+                    response_text = clean_instruct_response(response_text)
+                
+                self._set_headers()
+                response = {
+                    'success': True,
+                    'text': response_text,
+                    'generation_time': end_time - start_time
+                }
+                self.wfile.write(json.dumps(response).encode())
         except Exception as e:
             logger.error(f"Error generating text: {e}")
             self._set_headers(500)

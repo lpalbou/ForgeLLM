@@ -413,6 +413,7 @@ def setup_api(app: Flask) -> Blueprint:
             repetition_penalty = data.get('repetition_penalty', 1.1)
             max_kv_size = data.get('max_kv_size', 8192)
             system_prompt = data.get('system_prompt', '')
+            streaming = data.get('streaming', False)
             
             if not prompt:
                 return jsonify({
@@ -428,25 +429,34 @@ def setup_api(app: Flask) -> Blueprint:
                     'error': 'No model loaded'
                 }), 400
             
-            # Generate text
-            start_time = time.time()
-            response = model_manager.generate_text({
-                'prompt': prompt,
-                'max_tokens': max_tokens,
-                'temperature': temperature,
-                'history': history,
-                'top_p': top_p,
-                'repetition_penalty': repetition_penalty,
-                'max_kv_size': max_kv_size,
-                'system_prompt': system_prompt
-            })
-            end_time = time.time()
-            
-            return jsonify({
-                'success': True,
-                'completion': response,
-                'generation_time': end_time - start_time
-            })
+            if streaming:
+                # For streaming, we need to handle it differently
+                # This would require implementing Server-Sent Events (SSE) or WebSocket
+                # For now, let's return an error for streaming requests to the web API
+                return jsonify({
+                    'success': False,
+                    'error': 'Streaming not supported via web API. Use model server directly.'
+                }), 400
+            else:
+                # Generate text (non-streaming)
+                start_time = time.time()
+                response = model_manager.generate_text({
+                    'prompt': prompt,
+                    'max_tokens': max_tokens,
+                    'temperature': temperature,
+                    'history': history,
+                    'top_p': top_p,
+                    'repetition_penalty': repetition_penalty,
+                    'max_kv_size': max_kv_size,
+                    'system_prompt': system_prompt
+                })
+                end_time = time.time()
+                
+                return jsonify({
+                    'success': True,
+                    'completion': response,
+                    'generation_time': end_time - start_time
+                })
         except Exception as e:
             logger.error(f"Error generating text: {e}")
             return jsonify({
