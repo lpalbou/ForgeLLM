@@ -847,9 +847,6 @@
                                     </div>
                                     
                                     <div class="d-grid gap-2 d-md-flex justify-content-md-end">
-                                        <button type="button" class="btn btn-warning me-md-2" id="stop-generation-btn" disabled>
-                                            <i class="fas fa-stop me-2"></i>Stop Generation
-                                        </button>
                                         <button type="button" class="btn btn-danger me-md-2" id="unload-model-btn" disabled>
                                             <i class="fas fa-times me-2"></i>Unload Model
                                         </button>
@@ -879,6 +876,9 @@
                                         </button>
                                         <button id="save-chat-btn" class="btn btn-sm btn-outline-primary" disabled data-bs-toggle="tooltip" title="Saves conversation with model metadata">
                                             <i class="fas fa-save"></i> Save History <i class="fas fa-tag small"></i>
+                                        </button>
+                                        <button id="load-chat-btn" class="btn btn-sm btn-outline-success" data-bs-toggle="tooltip" title="Load previously saved conversation">
+                                            <i class="fas fa-upload"></i> Load History
                                         </button>
                                     </div>
                                     <small id="chat-stats" class="text-muted"></small>
@@ -960,6 +960,9 @@
             </div>
         </div>
     </div>
+
+    <!-- Hidden file input for loading chat history -->
+    <input type="file" id="load-history-file-input" accept=".json" style="display: none;">
 
     <!-- Loading Overlay -->
     <div id="loading-overlay" class="position-fixed top-0 start-0 w-100 h-100 bg-dark bg-opacity-50 d-flex justify-content-center align-items-center d-none" style="z-index: 1050;">

@@ -213,9 +213,7 @@ class TrainingInterface {
             });
         }
 
-        document.getElementById('stop-generation-btn').addEventListener('click', () => {
-            this.stopGeneration();
-        });
+
         
         // File browser buttons
         document.getElementById('browse-input-dir').addEventListener('click', () => {
@@ -1566,7 +1564,6 @@ class TrainingInterface {
         const systemPrompt = document.getElementById('system-prompt').value.trim();
         const streaming = document.getElementById('streaming-toggle').checked;
         
-        document.getElementById('stop-generation-btn').disabled = false;
         // Disable chat input during generation
         const chatInput = document.getElementById('chat-input');
         const sendBtn = document.getElementById('send-message-btn');
@@ -1675,7 +1672,6 @@ class TrainingInterface {
             botBubble.classList.add('list-group-item-danger');
             botBubble.innerText = 'Failed to generate text';
         } finally {
-            document.getElementById('stop-generation-btn').disabled = true;
             // Re-enable chat input after generation
             const chatInput = document.getElementById('chat-input');
             const sendBtn = document.getElementById('send-message-btn');
@@ -1847,21 +1843,7 @@ class TrainingInterface {
             .replace(/<end_of_turn>/g, '');
     }
     
-    stopGeneration() {
-        // Implementation for stopping generation
-        document.getElementById('stop-generation-btn').disabled = true;
-        
-        // Re-enable chat input
-        const chatInput = document.getElementById('chat-input');
-        const sendBtn = document.getElementById('send-message-btn');
-        if (chatInput) {
-            chatInput.disabled = false;
-            sendBtn.disabled = chatInput.value.trim().length === 0;
-            chatInput.focus();
-        }
-        
-        this.showAlert('Generation stopped', 'info');
-    }
+
     
     handleTrainingFinished(data) {
         this.isTraining = false;
@@ -2604,8 +2586,112 @@ class TrainingInterface {
         
         this.showAlert('Chat history saved successfully with model metadata', 'success');
     }
-    
 
+    loadChatHistory() {
+        // Trigger the hidden file input
+        const fileInput = document.getElementById('load-history-file-input');
+        if (fileInput) {
+            fileInput.click();
+        }
+    }
+
+    async handleHistoryFileLoad(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        try {
+            const text = await file.text();
+            const historyData = JSON.parse(text);
+
+            // Validate the file format
+            if (!historyData.metadata || !historyData.messages) {
+                this.showAlert('Invalid history file format. Expected metadata and messages.', 'danger');
+                return;
+            }
+
+            // Clear current chat history
+            const chatHistory = document.getElementById('chat-history');
+            chatHistory.innerHTML = '';
+
+            // Load system prompt if available
+            const systemPrompt = historyData.metadata.parameters?.system_prompt || 
+                                historyData.metadata.system_prompt || '';
+            
+            if (systemPrompt) {
+                const systemPromptInput = document.getElementById('system-prompt');
+                if (systemPromptInput) {
+                    systemPromptInput.value = systemPrompt;
+                    this.showAlert(`System prompt loaded: "${systemPrompt.substring(0, 50)}${systemPrompt.length > 50 ? '...' : ''}"`, 'info');
+                }
+            }
+
+            // Load generation parameters if available
+            const params = historyData.metadata.parameters;
+            if (params) {
+                if (params.temperature !== undefined) {
+                    const tempInput = document.getElementById('temperature');
+                    if (tempInput) tempInput.value = params.temperature;
+                }
+                if (params.top_p !== undefined) {
+                    const topPInput = document.getElementById('top-p');
+                    if (topPInput) topPInput.value = params.top_p;
+                }
+                if (params.repetition_penalty !== undefined) {
+                    const repPenInput = document.getElementById('repetition-penalty');
+                    if (repPenInput) repPenInput.value = params.repetition_penalty;
+                }
+                if (params.max_kv_size !== undefined) {
+                    const maxKvInput = document.getElementById('max-kv-size');
+                    if (maxKvInput) maxKvInput.value = params.max_kv_size;
+                }
+            }
+
+            // Load conversation messages
+            let messageCount = 0;
+            for (const message of historyData.messages) {
+                if (message.role === 'system') {
+                    // System messages are already handled above
+                    continue;
+                }
+
+                if (message.role === 'user' || message.role === 'assistant') {
+                    const bubble = document.createElement('div');
+                    bubble.className = `list-group-item ${message.role === 'user' ? 'chat-user' : 'chat-assistant'}`;
+                    
+                    // Handle markdown for assistant messages
+                    if (message.role === 'assistant' && this.isMarkdown(message.content)) {
+                        bubble.innerHTML = this.formatMarkdown(message.content);
+                        bubble.setAttribute('data-raw-text', message.content);
+                    } else {
+                        bubble.innerText = message.content;
+                    }
+                    
+                    chatHistory.appendChild(bubble);
+                    messageCount++;
+                }
+            }
+
+            // Scroll to bottom
+            chatHistory.scrollTop = chatHistory.scrollHeight;
+
+            // Enable relevant buttons
+            if (messageCount > 0) {
+                document.getElementById('save-chat-btn').disabled = false;
+                document.getElementById('clear-chat-btn').disabled = false;
+            }
+
+            // Show success message
+            const modelInfo = historyData.metadata.model?.display_name || historyData.metadata.model?.name || 'Unknown';
+            this.showAlert(`Chat history loaded successfully! ${messageCount} messages from ${modelInfo}`, 'success');
+
+        } catch (error) {
+            console.error('Error loading chat history:', error);
+            this.showAlert(`Error loading chat history: ${error.message}`, 'danger');
+        } finally {
+            // Reset the file input
+            event.target.value = '';
+        }
+    }
 
     // Helper method to show a temporary tooltip
     showTooltip(elementId, message) {
@@ -3030,6 +3116,26 @@ document.addEventListener('DOMContentLoaded', () => {
         saveButton.addEventListener('click', () => {
             if (window.trainingInterface) {
                 window.trainingInterface.saveChatHistory();
+            }
+        });
+    }
+
+    // Add event listener for the load button
+    const loadButton = document.getElementById('load-chat-btn');
+    if (loadButton) {
+        loadButton.addEventListener('click', () => {
+            if (window.trainingInterface) {
+                window.trainingInterface.loadChatHistory();
+            }
+        });
+    }
+
+    // Add event listener for the hidden file input
+    const fileInput = document.getElementById('load-history-file-input');
+    if (fileInput) {
+        fileInput.addEventListener('change', (e) => {
+            if (window.trainingInterface) {
+                window.trainingInterface.handleHistoryFileLoad(e);
             }
         });
     }

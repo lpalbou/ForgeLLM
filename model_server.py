@@ -144,6 +144,7 @@ class ModelHandler(BaseHTTPRequestHandler):
         repetition_penalty = data.get('repetition_penalty', 1.1)
         max_kv_size = data.get('max_kv_size')
         streaming = data.get('streaming', False)
+        system_prompt = data.get('system_prompt', '')
         
         if not prompt:
             self._set_headers(400)
@@ -159,16 +160,29 @@ class ModelHandler(BaseHTTPRequestHandler):
             is_instruct = is_instruct_model(MODEL_NAME)
             logger.info(f"Model {MODEL_NAME} detected as instruct model: {is_instruct}")
             
-            # If it's an instruct model, we may need to handle the prompt differently
-            if is_instruct:
-                # For instruct models, the prompt is often already formatted correctly
-                # We'll use it as is, but ensure it doesn't have extra formatting
+            # Handle system prompt if provided (SOTA approach)
+            if system_prompt and system_prompt.strip():
+                logger.info(f"Using system prompt: {system_prompt[:50]}...")
+                
+                # SOTA Practice: Use simple, universal format that works across models
+                # This matches the working CLI REPL approach
                 if "User:" in prompt and "Assistant:" in prompt:
-                    # The prompt already has the right format
-                    pass
+                    # The prompt already has conversation format, prepend system prompt
+                    prompt = f"System: {system_prompt}\n\n{prompt}"
                 else:
-                    # Add minimal formatting if needed
-                    prompt = f"User: {prompt}\nAssistant:"
+                    # Format as a simple conversation with system prompt
+                    prompt = f"System: {system_prompt}\n\nHuman: {prompt}\nAssistant:"
+            else:
+                # No system prompt, handle as before
+                if is_instruct:
+                    # For instruct models, the prompt is often already formatted correctly
+                    # We'll use it as is, but ensure it doesn't have extra formatting
+                    if "User:" in prompt and "Assistant:" in prompt:
+                        # The prompt already has the right format
+                        pass
+                    else:
+                        # Add minimal formatting if needed
+                        prompt = f"Human: {prompt}\nAssistant:"
             
             # Create sampler with proper parameters
             sampler = make_sampler(temp=temperature, top_p=top_p)
