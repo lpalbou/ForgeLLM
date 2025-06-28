@@ -12,6 +12,7 @@ Welcome to the ForgeLLM documentation. This directory contains comprehensive doc
 - [Usage Guide](USAGE_GUIDE.md) - How to use the ForgeLLM system
 - [Testing Guide](TESTING_GUIDE.md) - How to test the ForgeLLM system
 - [Model Server Integration](MODEL_SERVER_INTEGRATION.md) - How to integrate with the model server
+- [System Prompt Best Practices](SYSTEM_PROMPT_BEST_PRACTICES.md) - Best practices for system prompts with BASE and INSTRUCT models
 
 ## Training Guides
 

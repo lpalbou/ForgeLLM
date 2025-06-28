@@ -1,0 +1,166 @@
+{
+  "architectures": {
+    "llama": {
+      "description": "Meta's Llama architecture family (Llama 2 & 3)",
+      "source": "https://huggingface.co/meta-llama/Meta-Llama-3-8B-Instruct",
+      "message_format": "llama3",
+      "system_prefix": "<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n",
+      "system_suffix": "<|eot_id|>",
+      "user_prefix": "<|start_header_id|>user<|end_header_id|>\n\n",
+      "user_suffix": "<|eot_id|>",
+      "assistant_prefix": "<|start_header_id|>assistant<|end_header_id|>\n\n",
+      "assistant_suffix": "<|eot_id|>",
+      "tool_format": "llama3_tool",
+      "patterns": ["llama", "codellama", "alpaca", "vicuna"]
+    },
+    "qwen": {
+      "description": "Alibaba's Qwen architecture family (Qwen 1.5 & Qwen3)",
+      "source": "https://huggingface.co/Qwen/Qwen1.5-7B-Chat",
+      "message_format": "im_start_end",
+      "system_prefix": "<|im_start|>system\n",
+      "system_suffix": "<|im_end|>\n",
+      "user_prefix": "<|im_start|>user\n",
+      "user_suffix": "<|im_end|>\n",
+      "assistant_prefix": "<|im_start|>assistant\n",
+      "assistant_suffix": "<|im_end|>\n",
+      "tool_format": "json",
+      "patterns": ["qwen", "qwq"]
+    },
+    "mistral": {
+      "description": "Mistral AI architecture family (incl. Mistral Small 3.1)",
+      "source": "https://huggingface.co/mistralai/Mistral-Small-3.1-24B-Instruct-2503",
+      "message_format": "mistral_system_inst",
+      "system_prefix": "<s>\n",
+      "system_suffix": "\n",
+      "user_prefix": "\n",
+      "user_suffix": "\n",
+      "assistant_prefix": "",
+      "assistant_suffix": "</s>",
+      "tool_format": "mistral_tool",
+      "patterns": ["mistral", "mixtral", "codestral"]
+    },
+    "phi": {
+      "description": "Microsoft's Phi architecture family (Phi-3)",
+      "source": "https://huggingface.co/microsoft/Phi-3-mini-4k-instruct",
+      "message_format": "phi3_chat",
+      "system_prefix": "<|system|>\n",
+      "system_suffix": "<|end|>\n",
+      "user_prefix": "<|user|>\n",
+      "user_suffix": "<|end|>\n",
+      "assistant_prefix": "<|assistant|>\n",
+      "assistant_suffix": "<|end|>",
+      "tool_format": "phi3_tool",
+      "patterns": ["phi"]
+    },
+    "gemma": {
+      "description": "Google's Gemma architecture family",
+      "source": "https://ai.google.dev/gemma/docs/core/prompt-structure",
+      "message_format": "gemma_chat",
+      "system_prefix": "",
+      "system_suffix": "",
+      "user_prefix": "<start_of_turn>user\n",
+      "user_suffix": "<end_of_turn>\n",
+      "assistant_prefix": "<start_of_turn>model\n",
+      "assistant_suffix": "<end_of_turn>\n",
+      "tool_format": "gemma_tool",
+      "patterns": ["gemma", "codegemma"]
+    },
+    "granite": {
+      "description": "IBM's Granite architecture family",
+      "source": "https://www.ibm.com/docs/en/watsonx/saas?topic=models-prompting-granite-13b-chat-v2",
+      "message_format": "special_tokens",
+      "system_prefix": "<|system|>\n",
+      "system_suffix": "\n",
+      "user_prefix": "<|user|>\n",
+      "user_suffix": "\n",
+      "assistant_prefix": "<|assistant|>\n",
+      "assistant_suffix": "\n",
+      "tool_format": "TBD",
+      "patterns": ["granite"]
+    },
+    "deepseek": {
+      "description": "DeepSeek architecture family",
+      "source": "https://huggingface.co/deepseek-ai/deepseek-llm-67b-chat",
+      "message_format": "deepseek_chat",
+      "system_prefix": "",
+      "system_suffix": "",
+      "user_prefix": "User: ",
+      "user_suffix": "\n\n",
+      "assistant_prefix": "Assistant: ",
+      "assistant_suffix": "<|end_of_turn|>\n",
+      "tool_format": "TBD",
+      "patterns": ["deepseek"]
+    },
+    "yi": {
+      "description": "01.AI's Yi architecture family",
+      "source": "https://huggingface.co/01-ai/Yi-1.5-9B-Chat",
+      "message_format": "im_start_end",
+      "system_prefix": "<|im_start|>system\n",
+      "system_suffix": "<|im_end|>\n",
+      "user_prefix": "<|im_start|>user\n",
+      "user_suffix": "<|im_end|>\n",
+      "assistant_prefix": "<|im_start|>assistant\n",
+      "assistant_suffix": "<|im_end|>\n",
+      "tool_format": "TBD",
+      "patterns": ["yi-"]
+    },
+    "claude": {
+      "description": "Anthropic's Claude (for Bedrock/Vertex compatibility)",
+      "source": "https://docs.anthropic.com/claude/docs/tool-use",
+      "message_format": "human_assistant",
+      "system_prefix": "",
+      "system_suffix": "\n\n",
+      "user_prefix": "Human: ",
+      "user_suffix": "\n",
+      "assistant_prefix": "Assistant: ",
+      "assistant_suffix": "\n",
+      "tool_format": "xml",
+      "patterns": ["claude"]
+    },
+    "gpt": {
+      "description": "OpenAI GPT architecture (for reference)",
+      "source": "https://platform.openai.com/docs/guides/function-calling",
+      "message_format": "openai_chat",
+      "tool_format": "openai_functions",
+      "patterns": ["gpt", "chatgpt"]
+    },
+    "generic": {
+      "description": "Generic/unknown architecture fallback",
+      "source": "N/A",
+      "message_format": "basic",
+      "system_prefix": "System: ",
+      "system_suffix": "\n\n",
+      "user_prefix": "Human: ",
+      "user_suffix": "\n",
+      "assistant_prefix": "Assistant: ",
+      "assistant_suffix": "\n",
+      "tool_format": "json",
+      "patterns": []
+    }
+  },
+  "message_formats": {
+    "inst": "Instruction format with tags, used by early Mistral and Llama2.",
+    "mistral_system_inst": "Modern Mistral format with explicit and tags.",
+    "llama3": "Llama 3 instruction format with special header and EOT tokens.",
+    "im_start_end": "ChatML format with <|im_start|> and <|im_end|> tokens.",
+    "phi3_chat": "Phi-3 chat format with role and <|end|> tokens.",
+    "gemma_chat": "Gemma chat format with <start_of_turn>/<end_of_turn>. System instructions are prepended to the first user message.",
+    "deepseek_chat": "DeepSeek format with role prefixes and <|end_of_turn|> suffix.",
+    "special_tokens": "Uses role-specific special tokens like <|user|> and <|assistant|>.",
+    "basic": "Simple role: content format (e.g., 'User:...').",
+    "human_assistant": "Human/Assistant turn-based format.",
+    "openai_chat": "OpenAI chat completion format (list of role/content objects)."
+  },
+  "tool_formats": {
+    "pythonic": "Python function call syntax: [func(arg=val)]",
+    "json": "JSON object: {\"name\": \"func\", \"arguments\": {...}}",
+    "xml": "XML wrapped: <function_calls><tool>...</tool></function_calls>",
+    "openai_functions": "OpenAI function calling API format.",
+    "llama3_tool": "Llama 3 format using `<|tool_code|>` and python print statements.",
+    "mistral_tool": "Mistral format using `` and JSON.",
+    "phi3_tool": "Phi-3 format using `<|tool_code|>` and `print(...)` syntax.",
+    "gemma_tool": "Gemma format using `<tool_code>` and `<tool_output>` blocks.",
+    "TBD": "To Be Determined: A definitive public format was not found in model cards."
+  }
+}
+

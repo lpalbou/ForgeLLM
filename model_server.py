@@ -144,7 +144,13 @@ class ModelHandler(BaseHTTPRequestHandler):
         repetition_penalty = data.get('repetition_penalty', 1.1)
         max_kv_size = data.get('max_kv_size')
         streaming = data.get('streaming', False)
-        system_prompt = data.get('system_prompt', '')
+        
+        # NEW: Handle history array and model type hint from frontend
+        history = data.get('history', [])
+        is_base_model_hint = data.get('is_base_model', None)
+        
+        # LEGACY: Still support old system_prompt parameter for backward compatibility
+        legacy_system_prompt = data.get('system_prompt', '')
         
         if not prompt:
             self._set_headers(400)
@@ -156,33 +162,94 @@ class ModelHandler(BaseHTTPRequestHandler):
             from mlx_lm.generate import stream_generate
             from mlx_lm.sample_utils import make_sampler, make_repetition_penalty
             
-            # Detect if this is an instruct model
-            is_instruct = is_instruct_model(MODEL_NAME)
-            logger.info(f"Model {MODEL_NAME} detected as instruct model: {is_instruct}")
-            
-            # Handle system prompt if provided (SOTA approach)
-            if system_prompt and system_prompt.strip():
-                logger.info(f"Using system prompt: {system_prompt[:50]}...")
-                
-                # SOTA Practice: Use simple, universal format that works across models
-                # This matches the working CLI REPL approach
-                if "User:" in prompt and "Assistant:" in prompt:
-                    # The prompt already has conversation format, prepend system prompt
-                    prompt = f"System: {system_prompt}\n\n{prompt}"
-                else:
-                    # Format as a simple conversation with system prompt
-                    prompt = f"System: {system_prompt}\n\nHuman: {prompt}\nAssistant:"
+            # Detect if this is an instruct model (use hint if available)
+            if is_base_model_hint is not None:
+                is_instruct = not is_base_model_hint
+                logger.info(f"Using frontend hint: Model {MODEL_NAME} is {'BASE' if is_base_model_hint else 'INSTRUCT'}")
             else:
-                # No system prompt, handle as before
-                if is_instruct:
-                    # For instruct models, the prompt is often already formatted correctly
-                    # We'll use it as is, but ensure it doesn't have extra formatting
-                    if "User:" in prompt and "Assistant:" in prompt:
-                        # The prompt already has the right format
-                        pass
+                is_instruct = is_instruct_model(MODEL_NAME)
+                logger.info(f"Model {MODEL_NAME} detected as instruct model: {is_instruct}")
+            
+            # NEW: Intelligent prompt formatting based on model type and history
+            final_prompt = prompt
+            is_gemma = is_gemma_model(MODEL_NAME)
+            
+            if history and is_instruct:
+                # INSTRUCT MODEL with history: Use appropriate formatting
+                try:
+                    # Add current user message to history
+                    messages = history + [{"role": "user", "content": prompt}]
+                    
+                    if is_gemma:
+                        # GEMMA-SPECIFIC: Use proper Gemma chat format
+                        logger.info("Using Gemma-specific chat formatting")
+                        final_prompt = format_gemma_chat(messages)
+                        logger.info(f"Gemma chat format result: {final_prompt[:200]}...")
+                    elif hasattr(TOKENIZER, 'apply_chat_template') and TOKENIZER.chat_template:
+                        # Try to use chat template for other models
+                        logger.info("Using tokenizer chat template for INSTRUCT model")
+                        final_prompt = TOKENIZER.apply_chat_template(
+                            messages, 
+                            tokenize=False, 
+                            add_generation_prompt=True
+                        )
+                        logger.info(f"Chat template result: {final_prompt[:200]}...")
                     else:
-                        # Add minimal formatting if needed
-                        prompt = f"Human: {prompt}\nAssistant:"
+                        # Fallback: Manual formatting for INSTRUCT models
+                        logger.info("No chat template available, using manual INSTRUCT formatting")
+                        formatted_messages = []
+                        for msg in messages:
+                            if msg["role"] == "system":
+                                formatted_messages.append(f"System: {msg['content']}")
+                            elif msg["role"] == "user":
+                                formatted_messages.append(f"Human: {msg['content']}")
+                            elif msg["role"] == "assistant":
+                                formatted_messages.append(f"Assistant: {msg['content']}")
+                        final_prompt = "\n".join(formatted_messages) + "\nAssistant:"
+                        
+                except Exception as e:
+                    logger.warning(f"Error applying chat template: {e}, falling back to raw prompt")
+                    final_prompt = prompt
+                    
+            elif history and not is_instruct:
+                # BASE MODEL with history: Prompt is already formatted by frontend
+                logger.info("Using pre-formatted prompt for BASE model (system prompt already included)")
+                final_prompt = prompt
+                
+            elif legacy_system_prompt and legacy_system_prompt.strip():
+                # LEGACY: Handle old system_prompt parameter for backward compatibility
+                logger.info(f"Using legacy system prompt: {legacy_system_prompt[:50]}...")
+                
+                if is_instruct:
+                    if is_gemma:
+                        # GEMMA-SPECIFIC: Use proper Gemma format for legacy system prompts
+                        logger.info("Using Gemma-specific formatting for legacy system prompt")
+                        final_prompt = f"<start_of_turn>model\nSystem: {legacy_system_prompt}<end_of_turn>\n<start_of_turn>user\n{prompt}<end_of_turn>\n<start_of_turn>model\n"
+                    elif "User:" in prompt and "Assistant:" in prompt:
+                        final_prompt = f"System: {legacy_system_prompt}\n\n{prompt}"
+                    else:
+                        final_prompt = f"System: {legacy_system_prompt}\n\nHuman: {prompt}\nAssistant:"
+                else:
+                    # For base models, prepend directly
+                    final_prompt = f"{legacy_system_prompt}\n\n{prompt}"
+                    
+            elif is_instruct and not history:
+                # INSTRUCT MODEL without history: Add minimal formatting if needed
+                if is_gemma:
+                    # GEMMA-SPECIFIC: Use proper Gemma format
+                    if "<start_of_turn>" not in prompt:
+                        final_prompt = f"<start_of_turn>user\n{prompt}<end_of_turn>\n<start_of_turn>model\n"
+                    else:
+                        final_prompt = prompt
+                elif "Human:" not in prompt and "User:" not in prompt and "Assistant:" not in prompt:
+                    final_prompt = f"Human: {prompt}\nAssistant:"
+                else:
+                    final_prompt = prompt
+            else:
+                # BASE MODEL without history or system prompt: Use as-is
+                final_prompt = prompt
+            
+            logger.info(f"Final prompt being used: {final_prompt[:200]}...")
             
             # Create sampler with proper parameters
             sampler = make_sampler(temp=temperature, top_p=top_p)
@@ -212,7 +279,7 @@ class ModelHandler(BaseHTTPRequestHandler):
                 self._set_headers(content_type='text/plain')
                 
                 # Generate and stream text chunks
-                for chunk in stream_generate(MODEL, TOKENIZER, prompt=prompt, **generation_kwargs):
+                for chunk in stream_generate(MODEL, TOKENIZER, prompt=final_prompt, **generation_kwargs):
                     chunk_data = json.dumps({
                         'type': 'chunk',
                         'text': chunk.text,
@@ -232,7 +299,7 @@ class ModelHandler(BaseHTTPRequestHandler):
             else:
                 # Non-streaming response (original behavior)
                 response_text = ""
-                for chunk in stream_generate(MODEL, TOKENIZER, prompt=prompt, **generation_kwargs):
+                for chunk in stream_generate(MODEL, TOKENIZER, prompt=final_prompt, **generation_kwargs):
                     response_text += chunk.text
                 
                 end_time = time.time()
@@ -251,6 +318,8 @@ class ModelHandler(BaseHTTPRequestHandler):
                 self.wfile.write(json.dumps(response).encode())
         except Exception as e:
             logger.error(f"Error generating text: {e}")
+            import traceback
+            traceback.print_exc()
             self._set_headers(500)
             response = {'success': False, 'error': str(e)}
             self.wfile.write(json.dumps(response).encode())
@@ -321,6 +390,35 @@ def is_instruct_model(model_name):
     
     model_name_lower = model_name.lower()
     return any(pattern in model_name_lower for pattern in instruct_patterns)
+
+def is_gemma_model(model_name):
+    """Detect if a model is a Gemma model based on its name."""
+    if not model_name:
+        return False
+    
+    model_name_lower = model_name.lower()
+    gemma_patterns = ["gemma", "recurrentgemma"]
+    return any(pattern in model_name_lower for pattern in gemma_patterns)
+
+def format_gemma_chat(messages):
+    """Format messages for Gemma models using proper start_of_turn/end_of_turn tokens."""
+    formatted_parts = []
+    
+    for message in messages:
+        role = message.get("role", "")
+        content = message.get("content", "")
+        
+        if role == "system":
+            # For Gemma, system messages are formatted as model turns with special content
+            formatted_parts.append(f"<start_of_turn>model\nSystem: {content}<end_of_turn>")
+        elif role == "user":
+            formatted_parts.append(f"<start_of_turn>user\n{content}<end_of_turn>")
+        elif role == "assistant":
+            formatted_parts.append(f"<start_of_turn>model\n{content}<end_of_turn>")
+    
+    # Add the generation prompt for the next model turn
+    formatted_prompt = "\n".join(formatted_parts) + "\n<start_of_turn>model\n"
+    return formatted_prompt
 
 def clean_instruct_response(text):
     """Clean up the response from an instruct model."""

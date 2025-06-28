@@ -1581,46 +1581,89 @@ class TrainingInterface {
             document.getElementById('clear-chat-btn').disabled = false;
         }
         
-        // Check if current model is a base model (for debugging/logging purposes only)
+        // Detect model type for intelligent prompt formatting
         const isBaseModel = await this.isCurrentModelBase();
         console.log('🔍 Base model detection result:', isBaseModel);
         
-        // ALWAYS use raw prompt formatting (no User:/Assistant: tags)
-        // This works for both base models and modern instruct models
+        // Intelligent prompt formatting based on model type
         let finalPrompt = prompt;
+        let historyArray = [];
+        
         if (this.includeHistory) {
             const bubbles = chatHistory.querySelectorAll('.list-group-item');
-            let historyText = '';
             
-            console.log('📚 Using raw text formatting (no User:/Assistant: tags)');
-            // For all models: use plain text continuation without User:/Assistant: tags
-            for (let i = 0; i < bubbles.length; i += 2) {
-                const user = bubbles[i]?.innerText ?? '';
-                const assistant = bubbles[i + 1]?.innerText ?? '';
-                if (user) historyText += `${user}\n`;
-                if (assistant) historyText += `${assistant}\n`;
+            if (isBaseModel) {
+                // BASE MODEL: Use plain text continuation with system prompt prepended
+                console.log('📚 Using BASE model formatting (plain text continuation)');
+                let historyText = '';
+                
+                // Add system prompt at the beginning if provided
+                if (systemPrompt) {
+                    historyText += `${systemPrompt}\n\n`;
+                }
+                
+                // Add conversation history as plain text
+                for (let i = 0; i < bubbles.length; i += 2) {
+                    const user = bubbles[i]?.innerText ?? '';
+                    const assistant = bubbles[i + 1]?.innerText ?? '';
+                    if (user) historyText += `${user}\n`;
+                    if (assistant) historyText += `${assistant}\n`;
+                }
+                finalPrompt = historyText + prompt;
+                
+                // For base models, we still send history as array for backend processing
+                // but the backend should use raw text formatting
+                bubbles.forEach(b => {
+                    if (b.classList.contains('chat-user')) {
+                        historyArray.push({ role: 'user', content: b.innerText });
+                    } else if (b.classList.contains('chat-assistant')) {
+                        historyArray.push({ role: 'assistant', content: b.innerText });
+                    }
+                });
+            } else {
+                // INSTRUCT MODEL: Use proper message format for chat template
+                console.log('📚 Using INSTRUCT model formatting (message structure)');
+                
+                // Build proper message history for instruct models
+                if (systemPrompt) {
+                    historyArray.push({ role: 'system', content: systemPrompt });
+                }
+                
+                bubbles.forEach(b => {
+                    if (b.classList.contains('chat-user')) {
+                        historyArray.push({ role: 'user', content: b.innerText });
+                    } else if (b.classList.contains('chat-assistant')) {
+                        historyArray.push({ role: 'assistant', content: b.innerText });
+                    }
+                });
+                
+                // For instruct models, let the backend handle chat template application
+                // Send the current prompt as-is, history will be used for template
+                finalPrompt = prompt;
             }
-            finalPrompt = historyText + prompt;
         } else {
-            console.log('📝 Single turn raw prompt formatting');
+            // Single turn formatting
+            if (isBaseModel) {
+                console.log('📝 Single turn BASE model formatting');
+                // For base models, prepend system prompt directly to the user prompt
+                if (systemPrompt) {
+                    finalPrompt = `${systemPrompt}\n\n${prompt}`;
+                }
+            } else {
+                console.log('📝 Single turn INSTRUCT model formatting');
+                // For instruct models, use message structure
+                if (systemPrompt) {
+                    historyArray.push({ role: 'system', content: systemPrompt });
+                }
+                // Current prompt will be added as user message by backend
+                finalPrompt = prompt;
+            }
         }
-        // For all models with no history, use prompt as-is
         
         console.log('📝 Original prompt:', prompt);
         console.log('📤 Final prompt being sent:', finalPrompt);
-        
-        // Prepare history array for backend conversion
-        const historyArray = [];
-        if (this.includeHistory) {
-            const bubbles = chatHistory.querySelectorAll('.list-group-item');
-            bubbles.forEach(b => {
-                if (b.classList.contains('chat-user')) {
-                    historyArray.push({ role: 'user', content: b.innerText });
-                } else if (b.classList.contains('chat-assistant')) {
-                    historyArray.push({ role: 'assistant', content: b.innerText });
-                }
-            });
-        }
+        console.log('📋 History array:', historyArray);
+        console.log('🤖 Model type:', isBaseModel ? 'BASE' : 'INSTRUCT');
 
         // USER bubble
         const userBubble = document.createElement('div');
@@ -1640,12 +1683,14 @@ class TrainingInterface {
                 prompt: finalPrompt, 
                 history: historyArray, 
                 max_tokens: maxTokens,
-                system_prompt: systemPrompt || undefined,
+                // Remove system_prompt parameter - it's now handled in prompt/history
                 temperature: temperature || undefined,
                 top_p: topP || undefined,
                 repetition_penalty: repetitionPenalty || undefined,
                 max_kv_size: maxKvSize || undefined,
-                streaming: streaming
+                streaming: streaming,
+                // Add model type hint for backend
+                is_base_model: isBaseModel
             };
             
             console.log('🚀 Sending request:', requestBody);
@@ -2551,8 +2596,8 @@ class TrainingInterface {
                 temperature: temperature,
                 top_p: topP,
                 repetition_penalty: repetitionPenalty,
-                max_kv_size: maxKvSize,
-                system_prompt: systemPrompt || null
+                max_kv_size: maxKvSize
+                // system_prompt now handled in message structure
             },
             timestamp: new Date().toISOString(),
             token_count: this.currentTokenCount || 0
@@ -2613,9 +2658,16 @@ class TrainingInterface {
             const chatHistory = document.getElementById('chat-history');
             chatHistory.innerHTML = '';
 
-            // Load system prompt if available
-            const systemPrompt = historyData.metadata.parameters?.system_prompt || 
-                                historyData.metadata.system_prompt || '';
+            // Load system prompt from message structure (new format)
+            let systemPrompt = '';
+            const systemMessage = historyData.messages.find(msg => msg.role === 'system');
+            if (systemMessage) {
+                systemPrompt = systemMessage.content;
+            } else {
+                // Fallback to old format for backwards compatibility
+                systemPrompt = historyData.metadata.parameters?.system_prompt || 
+                              historyData.metadata.system_prompt || '';
+            }
             
             if (systemPrompt) {
                 const systemPromptInput = document.getElementById('system-prompt');
