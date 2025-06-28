@@ -135,14 +135,15 @@ def test_model(model_name, adapter_path=None, prompt="Hello, how are you?", max_
         logger.info("Model loaded successfully")
         
         # Generate text
-        logger.info(f"Generating with prompt: '{prompt}'")
         start_time = time.time()
         
         # Create sampler with proper parameters
         sampler = make_sampler(temp=temperature)
         
-        # Generate text using stream_generate and collect all chunks
-        response_text = ""
+        # SOTA CLI streaming: Real-time character-by-character output
+        logger.info(f"Generating with prompt: '{prompt}' (streaming to terminal)")
+        print("\n" + "="*50 + "\nGENERATED OUTPUT:\n" + "="*50)
+        
         for chunk in stream_generate(
             model, 
             tokenizer, 
@@ -150,15 +151,13 @@ def test_model(model_name, adapter_path=None, prompt="Hello, how are you?", max_
             max_tokens=max_tokens,
             sampler=sampler
         ):
-            response_text += chunk.text
+            print(chunk.text, end='', flush=True)  # Stream to terminal in real-time
         
         end_time = time.time()
         
-        # Print the response
-        logger.info(f"Generated in {end_time - start_time:.2f} seconds:")
-        print("\n" + "="*50 + "\nGENERATED OUTPUT:\n" + "="*50)
-        print(response_text)
-        print("="*50)
+        # Final formatting
+        print("\n" + "="*50)
+        logger.info(f"Streaming generation completed in {end_time - start_time:.2f} seconds")
         
         return True
     except Exception as e:
@@ -245,14 +244,15 @@ def generate_text(model_name, adapter_path, prompt, max_tokens, temperature):
         logger.info("Model loaded successfully")
         
         # Generate text
-        logger.info(f"Generating with prompt: '{prompt}'")
         start_time = time.time()
         
         # Create sampler with proper parameters
         sampler = make_sampler(temp=temperature)
         
-        # Generate text using stream_generate and collect all chunks
-        response_text = ""
+        # SOTA CLI streaming: Real-time character-by-character output
+        logger.info(f"Generating with prompt: '{prompt}' (streaming to terminal)")
+        print("\n" + "="*50 + "\nGENERATED OUTPUT:\n" + "="*50)
+        
         for chunk in stream_generate(
             model, 
             tokenizer, 
@@ -260,15 +260,13 @@ def generate_text(model_name, adapter_path, prompt, max_tokens, temperature):
             max_tokens=max_tokens,
             sampler=sampler
         ):
-            response_text += chunk.text
+            print(chunk.text, end='', flush=True)  # Stream to terminal in real-time
         
         end_time = time.time()
         
-        # Print the response
-        logger.info(f"Generated in {end_time - start_time:.2f} seconds:")
-        print("\n" + "="*50 + "\nGENERATED OUTPUT:\n" + "="*50)
-        print(response_text)
-        print("="*50)
+        # Final formatting
+        print("\n" + "="*50)
+        logger.info(f"Streaming generation completed in {end_time - start_time:.2f} seconds")
         
         return True
     except Exception as e:
