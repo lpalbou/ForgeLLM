@@ -158,11 +158,11 @@ class TrainingInterface {
                     document.getElementById('adapter-path').value
                 );
                 
-                // Clear any system prompt content from the prompt input field
+                // Clear any system prompt content from the chat input field
                 const systemPrompt = document.getElementById('system-prompt').value.trim();
-                const promptInput = document.getElementById('prompt-input');
-                if (systemPrompt && promptInput.value.includes(systemPrompt)) {
-                    promptInput.value = promptInput.value.replace(systemPrompt, '').trim();
+                const chatInput = document.getElementById('chat-input');
+                if (systemPrompt && chatInput && chatInput.value.includes(systemPrompt)) {
+                    chatInput.value = chatInput.value.replace(systemPrompt, '').trim();
                 }
             }
         });
@@ -180,17 +180,39 @@ class TrainingInterface {
             });
         });
         
-        // Prompt input listener - clean system prompt if detected
-        document.getElementById('prompt-input').addEventListener('input', () => {
-            this.cleanSystemPromptFromInput();
-        });
+        // Chat input handling
+        const chatInput = document.getElementById('chat-input');
+        const sendBtn = document.getElementById('send-message-btn');
         
-        // Generation form
-        document.getElementById('generation-form').addEventListener('submit', (e) => {
-            e.preventDefault();
-            this.generateText();
-        });
-        
+        if (chatInput && sendBtn) {
+            // Auto-resize textarea
+            chatInput.addEventListener('input', () => {
+                chatInput.style.height = 'auto';
+                chatInput.style.height = Math.min(chatInput.scrollHeight, 120) + 'px';
+                
+                // Enable/disable send button based on content
+                const hasContent = chatInput.value.trim().length > 0;
+                sendBtn.disabled = !hasContent;
+            });
+            
+            // Enter key handling
+            chatInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    if (chatInput.value.trim() && this.modelLoaded) {
+                        this.generateTextFromInput();
+                    }
+                }
+            });
+            
+            // Send button click
+            sendBtn.addEventListener('click', () => {
+                if (chatInput.value.trim() && this.modelLoaded) {
+                    this.generateTextFromInput();
+                }
+            });
+        }
+
         document.getElementById('stop-generation-btn').addEventListener('click', () => {
             this.stopGeneration();
         });
@@ -223,15 +245,7 @@ class TrainingInterface {
             this.viewSelectedSessionLogs();
         });
         
-        // Publish selected adapter directly from testing tab
-        document.getElementById('publish-checkpoint-btn').addEventListener('click', () => {
-            const adapterPath = document.getElementById('adapter-path').value;
-            if (!adapterPath) {
-                this.showAlert('Select an adapter checkpoint first.', 'warning');
-                return;
-            }
-            this.publishCheckpoint(encodeURIComponent(adapterPath));
-        });
+
         
         // Publish selected checkpoint from monitoring tab
         document.getElementById('publish-selected-checkpoint-btn').addEventListener('click', () => {
@@ -1180,10 +1194,11 @@ class TrainingInterface {
                     this.chatInitialized = true;
                 }
                 
-                // Clear any existing chat history
+                // Clear any existing chat history and show ready message
                 document.getElementById('chat-history').innerHTML = `
                     <div class="text-center text-muted mt-3 mb-3">
-                        <p>Model loaded and ready. Enter a prompt to start a conversation.</p>
+                        <i class="fas fa-robot fa-2x mb-3"></i>
+                        <p>Model ready! Type a message below to start the conversation.</p>
                     </div>
                 `;
                 
@@ -1233,7 +1248,32 @@ class TrainingInterface {
     updateModelButtons(loaded) {
         document.getElementById('load-model-btn').disabled = loaded;
         document.getElementById('unload-model-btn').disabled = !loaded;
-        document.getElementById('generate-btn').disabled = !loaded;
+        
+        // Show/hide chat input based on model state
+        const chatInputContainer = document.getElementById('chat-input-container');
+        const chatHistory = document.getElementById('chat-history');
+        
+        if (loaded) {
+            chatInputContainer.classList.remove('d-none');
+            // Initialize chat history if empty
+            if (chatHistory.children.length === 0) {
+                chatHistory.innerHTML = `
+                    <div class="text-center text-muted mt-3 mb-3">
+                        <i class="fas fa-robot fa-2x mb-3"></i>
+                        <p>Model ready! Type a message below to start the conversation.</p>
+                    </div>
+                `;
+            }
+        } else {
+            chatInputContainer.classList.add('d-none');
+            // Clear chat history when no model is loaded
+            chatHistory.innerHTML = `
+                <div class="text-center text-muted mt-5">
+                    <i class="fas fa-cloud fa-2x mb-3"></i>
+                    <p>Load a model to start generating text</p>
+                </div>
+            `;
+        }
     }
     
     updateModelStatus(model = null, adapter = null) {
@@ -1290,11 +1330,11 @@ class TrainingInterface {
     // Function to check and clean system prompt from prompt input
     cleanSystemPromptFromInput() {
         const systemPrompt = document.getElementById('system-prompt').value.trim();
-        const promptInput = document.getElementById('prompt-input');
+        const chatInput = document.getElementById('chat-input');
         
-        if (systemPrompt && promptInput.value.includes(systemPrompt)) {
-            // Remove system prompt from the prompt input
-            promptInput.value = promptInput.value.replace(systemPrompt, '').trim();
+        if (systemPrompt && chatInput && chatInput.value.includes(systemPrompt)) {
+            // Remove system prompt from the chat input
+            chatInput.value = chatInput.value.replace(systemPrompt, '').trim();
         }
     }
     
@@ -1532,8 +1572,32 @@ class TrainingInterface {
         return false;
     }
     
-    async generateText() {
-        const prompt = document.getElementById('prompt-input').value.trim();
+    async generateTextFromInput() {
+        const chatInput = document.getElementById('chat-input');
+        const prompt = chatInput.value.trim();
+        
+        if (!prompt) {
+            this.showAlert('Please enter a message', 'warning');
+            return;
+        }
+        
+        // Clear the input and reset its height
+        chatInput.value = '';
+        chatInput.style.height = 'auto';
+        document.getElementById('send-message-btn').disabled = true;
+        
+        // Call the main generation function
+        await this.generateText(prompt);
+    }
+
+    async generateText(prompt = null) {
+        // If no prompt provided, try to get it from the old input (for backward compatibility)
+        if (!prompt) {
+            const promptInput = document.getElementById('prompt-input');
+            if (promptInput) {
+                prompt = promptInput.value.trim();
+            }
+        }
         if (!prompt) {
             this.showAlert('Please enter a prompt', 'warning');
             return;
@@ -1546,8 +1610,14 @@ class TrainingInterface {
         const maxKvSize = parseInt(document.getElementById('max-kv-size').value);
         const systemPrompt = document.getElementById('system-prompt').value.trim();
         
-        document.getElementById('generate-btn').disabled = true;
         document.getElementById('stop-generation-btn').disabled = false;
+        // Disable chat input during generation
+        const chatInput = document.getElementById('chat-input');
+        const sendBtn = document.getElementById('send-message-btn');
+        if (chatInput) {
+            chatInput.disabled = true;
+            sendBtn.disabled = true;
+        }
         
         const chatHistory = document.getElementById('chat-history');
         
@@ -1673,8 +1743,16 @@ class TrainingInterface {
             botBubble.classList.add('list-group-item-danger');
             botBubble.innerText = 'Failed to generate text';
         } finally {
-            document.getElementById('generate-btn').disabled = false;
             document.getElementById('stop-generation-btn').disabled = true;
+            // Re-enable chat input after generation
+            const chatInput = document.getElementById('chat-input');
+            const sendBtn = document.getElementById('send-message-btn');
+            if (chatInput) {
+                chatInput.disabled = false;
+                sendBtn.disabled = chatInput.value.trim().length === 0;
+                // Focus the input for better UX
+                chatInput.focus();
+            }
             
             // Update stats with turn count and detailed token counts
             const turns = chatHistory.querySelectorAll('.list-group-item').length / 2; // user+bot pairs
@@ -1712,8 +1790,17 @@ class TrainingInterface {
     
     stopGeneration() {
         // Implementation for stopping generation
-        document.getElementById('generate-btn').disabled = false;
         document.getElementById('stop-generation-btn').disabled = true;
+        
+        // Re-enable chat input
+        const chatInput = document.getElementById('chat-input');
+        const sendBtn = document.getElementById('send-message-btn');
+        if (chatInput) {
+            chatInput.disabled = false;
+            sendBtn.disabled = chatInput.value.trim().length === 0;
+            chatInput.focus();
+        }
+        
         this.showAlert('Generation stopped', 'info');
     }
     
@@ -2278,12 +2365,21 @@ class TrainingInterface {
 
         clearBtn.addEventListener('click', () => {
             const chatHistory = document.getElementById('chat-history');
-            chatHistory.innerHTML = `
-                <div class="text-center text-muted mt-5">
-                    <i class="fas fa-robot fa-2x mb-3"></i>
-                    <p>Load a model and enter a prompt to start generating text</p>
-                </div>
-            `;
+            if (this.modelLoaded) {
+                chatHistory.innerHTML = `
+                    <div class="text-center text-muted mt-3 mb-3">
+                        <i class="fas fa-robot fa-2x mb-3"></i>
+                        <p>Model ready! Type a message below to start the conversation.</p>
+                    </div>
+                `;
+            } else {
+                chatHistory.innerHTML = `
+                    <div class="text-center text-muted mt-5">
+                        <i class="fas fa-cloud fa-2x mb-3"></i>
+                        <p>Load a model to start generating text</p>
+                    </div>
+                `;
+            }
             this.chatInitialized = false;
             document.getElementById('clear-chat-btn').disabled = true;
             document.getElementById('save-chat-btn').disabled = true;

@@ -196,6 +196,22 @@
             overflow-y: auto;
         }
         
+        /* Chat input auto-resize */
+        #chat-input {
+            min-height: 38px;
+            max-height: 120px;
+            transition: height 0.1s ease;
+        }
+        
+        #chat-input:focus {
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 0.2rem rgba(46, 134, 171, 0.25);
+        }
+        
+        #chat-input-container {
+            background: #f8f9fa;
+        }
+
         /* Compact chat bubbles */
         #chat-history .list-group-item {
             border: none;               /* remove list-group default border */
@@ -736,7 +752,7 @@
                     <div class="col-lg-6">
                         <div class="card">
                             <div class="card-header">
-                                <i class="fas fa-upload me-2"></i>Load Model
+                                <i class="fas fa-cogs me-2"></i>Model Configuration
                             </div>
                             <div class="card-body">
                                 <form id="model-load-form">
@@ -769,82 +785,61 @@
                                         <label for="system-prompt" class="form-label">System Prompt</label>
                                         <textarea class="form-control" id="system-prompt" rows="2" placeholder="Optional system prompt to guide model behavior..."></textarea>
                                     </div>
+                                    
+                                    <!-- Generation Parameters Section -->
+                                    <div class="mb-3">
+                                        <label class="form-label">Generation Parameters</label>
+                                        <div class="row g-2 mb-2">
+                                            <div class="col-md-6">
+                                                <label for="max-tokens" class="form-label small">Max Tokens</label>
+                                                <input type="number" class="form-control" id="max-tokens" value="2000" min="1" required>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label for="max-kv-size" class="form-label small">Context Window</label>
+                                                <select class="form-select" id="max-kv-size">
+                                                    <option value="512">512</option>
+                                                    <option value="1024">1K (1,024)</option>
+                                                    <option value="2048">2K (2,048)</option>
+                                                    <option value="4096">4K (4,096)</option>
+                                                    <option value="8192" selected>8K (8,192)</option>
+                                                    <option value="16384">16K (16,384)</option>
+                                                    <option value="32768">32K (32,768)</option>
+                                                    <option value="65536">64K (65,536)</option>
+                                                    <option value="131072">128K (131,072)</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div class="row g-2">
+                                            <div class="col-md-4">
+                                                <div class="input-group input-group-sm">
+                                                    <span class="input-group-text">Temperature</span>
+                                                    <input type="number" class="form-control" id="temperature" value="0.7" min="0.0" max="2.0" step="0.1">
+                                                </div>
+                                            </div>
+                                            <div class="col-md-4">
+                                                <div class="input-group input-group-sm">
+                                                    <span class="input-group-text">Top P</span>
+                                                    <input type="number" class="form-control" id="top-p" value="0.9" min="0.0" max="1.0" step="0.05">
+                                                </div>
+                                            </div>
+                                            <div class="col-md-4">
+                                                <div class="input-group input-group-sm">
+                                                    <span class="input-group-text">Rep. Penalty</span>
+                                                    <input type="number" class="form-control" id="repetition-penalty" value="1.1" min="1.0" max="2.0" step="0.05">
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
                                     <div class="d-grid gap-2 d-md-flex justify-content-md-end">
-                                        <button type="button" class="btn btn-outline-primary me-md-2" id="publish-checkpoint-btn">
-                                            <i class="fas fa-upload me-1"></i>Publish Adapter
+                                        <button type="button" class="btn btn-warning me-md-2" id="stop-generation-btn" disabled>
+                                            <i class="fas fa-stop me-2"></i>Stop Generation
                                         </button>
                                         <button type="button" class="btn btn-danger me-md-2" id="unload-model-btn" disabled>
                                             <i class="fas fa-times me-2"></i>Unload Model
                                         </button>
                                         <button type="submit" class="btn btn-primary" id="load-model-btn">
                                             <i class="fas fa-download me-2"></i>Load Model
-                                        </button>
-                                    </div>
-                                </form>
-                            </div>
-                        </div>
-                        
-                        <div class="card mt-3">
-                            <div class="card-header">
-                                <i class="fas fa-edit me-2"></i>Generate Text
-                            </div>
-                            <div class="card-body">
-                                <form id="generation-form">
-                                    <div class="mb-3">
-                                        <label for="prompt-input" class="form-label">Prompt</label>
-                                        <textarea class="form-control" id="prompt-input" rows="3" placeholder="Enter your prompt here..." required></textarea>
-                                    </div>
-                                    <div class="mb-3">
-                                        <label for="max-tokens" class="form-label">Max Tokens</label>
-                                        <input type="number" class="form-control" id="max-tokens" value="2000" min="1" required>
-                                    </div>
-                                    <div class="mb-3">
-                                        <label class="form-label">Advanced Parameters</label>
-                                        <div class="row g-2">
-                                            <div class="col-md-4">
-                                                <div class="input-group">
-                                                    <span class="input-group-text">Temperature</span>
-                                                    <input type="number" class="form-control" id="temperature" value="0.7" min="0.0" max="2.0" step="0.1">
-                                                </div>
-                                            </div>
-                                            <div class="col-md-4">
-                                                <div class="input-group">
-                                                    <span class="input-group-text">Top P</span>
-                                                    <input type="number" class="form-control" id="top-p" value="0.9" min="0.0" max="1.0" step="0.05">
-                                                </div>
-                                            </div>
-                                            <div class="col-md-4">
-                                                <div class="input-group">
-                                                    <span class="input-group-text">Rep. Penalty</span>
-                                                    <input type="number" class="form-control" id="repetition-penalty" value="1.1" min="1.0" max="2.0" step="0.05">
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div class="row g-2 mt-2">
-                                            <div class="col-md-6">
-                                                <div class="input-group">
-                                                    <span class="input-group-text">Context Window</span>
-                                                    <select class="form-select" id="max-kv-size">
-                                                        <option value="512">512</option>
-                                                        <option value="1024">1K (1,024)</option>
-                                                        <option value="2048">2K (2,048)</option>
-                                                        <option value="4096">4K (4,096)</option>
-                                                        <option value="8192" selected>8K (8,192)</option>
-                                                        <option value="16384">16K (16,384)</option>
-                                                        <option value="32768">32K (32,768)</option>
-                                                        <option value="65536">64K (65,536)</option>
-                                                        <option value="131072">128K (131,072)</option>
-                                                    </select>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div class="d-grid gap-2 d-md-flex justify-content-md-end">
-                                        <button type="button" class="btn btn-warning me-md-2" id="stop-generation-btn" disabled>
-                                            <i class="fas fa-stop me-2"></i>Stop Generation
-                                        </button>
-                                        <button type="submit" class="btn btn-success" id="generate-btn" disabled>
-                                            <i class="fas fa-magic me-2"></i>Generate
                                         </button>
                                     </div>
                                 </form>
@@ -875,10 +870,17 @@
                                 </div>
 
                                 <!-- Chat history -->
-                                <div id="chat-history" class="list-group overflow-auto" style="height:60vh;">
-                                    <div class="text-center text-muted mt-5">
-                                        <i class="fas fa-robot fa-2x mb-3"></i>
-                                        <p>Load a model and enter a prompt to start generating text</p>
+                                <div id="chat-history" class="list-group overflow-auto" style="height:55vh;">
+                                    <!-- Content will be populated dynamically -->
+                                </div>
+                                
+                                <!-- Chat input (appears when model is loaded) -->
+                                <div id="chat-input-container" class="px-3 py-2 border-top d-none">
+                                    <div class="input-group">
+                                        <textarea id="chat-input" class="form-control" placeholder="Type your message here... (Press Enter to send, Shift+Enter for new line)" rows="1" style="resize: none; overflow-y: hidden;"></textarea>
+                                        <button class="btn btn-primary" type="button" id="send-message-btn" disabled>
+                                            <i class="fas fa-paper-plane"></i>
+                                        </button>
                                     </div>
                                 </div>
                             </div>
