@@ -33,18 +33,9 @@ def main():
         
         args = parser.parse_args()
         
-        # Check for legacy static/template folders in current directory
-        current_dir = os.getcwd()
+        # Use the static/template folders from the arguments or let the app use its defaults
         static_folder = args.static_folder
         template_folder = args.template_folder
-        
-        if static_folder is None and os.path.exists(os.path.join(current_dir, 'static')):
-            static_folder = os.path.join(current_dir, 'static')
-            logger.info(f"Using legacy static folder: {static_folder}")
-        
-        if template_folder is None and os.path.exists(os.path.join(current_dir, 'templates')):
-            template_folder = os.path.join(current_dir, 'templates')
-            logger.info(f"Using legacy template folder: {template_folder}")
         
         # Import the run_web_interface function
         from forgellm.web.run import run_web_interface

@@ -1,382 +1,234 @@
 /**
- * Dashboard Component
- * 
- * Displays training overview and metrics.
+ * Dashboard component
  */
-
 class DashboardComponent {
     constructor() {
-        this.activeTrainingSection = document.getElementById('active-jobs-container');
-        this.noJobsMessage = document.getElementById('no-jobs-message');
-        this.activeJobsList = document.getElementById('active-jobs-list');
-        this.recentModelsContainer = document.getElementById('recent-models-container');
-        this.noModelsMessage = document.getElementById('no-models-message');
-        this.recentModelsList = document.getElementById('recent-models-list');
-        
-        // Quick action buttons
-        this.btnNewTraining = document.getElementById('btn-new-training');
-        this.btnQuickGenerate = document.getElementById('btn-quick-generate');
-        this.btnPublishModel = document.getElementById('btn-publish-model');
+        this.initialized = false;
     }
-    
+
     /**
-     * Initialize the dashboard component
+     * Initialize the component
      */
     init() {
-        // Set up event listeners
-        this.setupEventListeners();
+        if (this.initialized) return;
+        this.initialized = true;
         
-        // Load initial data
+        // Initialize event listeners
+        this.initEventListeners();
+        
+        // Load dashboard data
         this.loadDashboardData();
-        
-        // Set up periodic updates
-        this.startPeriodicUpdates();
     }
-    
+
     /**
-     * Set up event listeners
+     * Initialize event listeners
      */
-    setupEventListeners() {
-        // Quick action buttons
-        if (this.btnNewTraining) {
-            this.btnNewTraining.addEventListener('click', () => {
-                window.app.showView('training');
-            });
-        }
-        
-        if (this.btnQuickGenerate) {
-            this.btnQuickGenerate.addEventListener('click', () => {
-                window.app.showView('generate');
-            });
-        }
-        
-        if (this.btnPublishModel) {
-            this.btnPublishModel.addEventListener('click', () => {
-                window.app.showView('models');
-            });
-        }
-        
-        // Listen for training updates
-        document.addEventListener('training-update', (event) => {
-            this.updateActiveTraining(event.detail);
-        });
-        
-        document.addEventListener('training-finished', (event) => {
-            this.handleTrainingFinished(event.detail);
-        });
+    initEventListeners() {
+        // Add event listeners here
     }
-    
+
     /**
      * Load dashboard data
      */
     async loadDashboardData() {
         try {
-            // Check for active training
-            const hasActiveTraining = await trainingService.checkActiveTraining();
+            // Load dashboard data
+            const response = await apiService.getDashboardData();
             
-            if (hasActiveTraining) {
-                this.showActiveTraining();
-            } else {
-                this.hideActiveTraining();
-            }
+            // Update dashboard UI
+            this.updateDashboard(response);
             
             // Load recent models
-            await this.loadRecentModels();
-            
+            this.loadRecentModels();
         } catch (error) {
             console.error('Failed to load dashboard data:', error);
         }
     }
-    
+
     /**
-     * Start periodic updates
+     * Update dashboard UI
+     * @param {object} data - Dashboard data
      */
-    startPeriodicUpdates() {
-        // Update dashboard every 30 seconds
-        setInterval(() => {
-            this.loadDashboardData();
-        }, 30000);
-    }
-    
-    /**
-     * Show active training section
-     */
-    showActiveTraining() {
-        if (this.noJobsMessage) {
-            this.noJobsMessage.classList.add('d-none');
-        }
+    updateDashboard(data) {
+        const dashboardContainer = document.getElementById('dashboard-container');
+        if (!dashboardContainer) return;
         
-        if (this.activeJobsList) {
-            this.activeJobsList.classList.remove('d-none');
-        }
-    }
-    
-    /**
-     * Hide active training section
-     */
-    hideActiveTraining() {
-        if (this.noJobsMessage) {
-            this.noJobsMessage.classList.remove('d-none');
-        }
+        // Check if training is active
+        const isTrainingActive = data.active === true;
         
-        if (this.activeJobsList) {
-            this.activeJobsList.classList.add('d-none');
-            this.activeJobsList.innerHTML = '';
+        // Clear previous content
+        dashboardContainer.innerHTML = '';
+        
+        if (isTrainingActive) {
+            // Training is active, show real-time metrics
+            this.renderActiveTrainingDashboard(data, dashboardContainer);
+        } else {
+            // No active training, show summary
+            this.renderInactiveTrainingDashboard(dashboardContainer);
         }
     }
     
     /**
-     * Update active training display
-     * 
-     * @param {Object} data - Training data
+     * Render dashboard for active training
+     * @param {object} data - Dashboard data
+     * @param {HTMLElement} container - Container element
      */
-    updateActiveTraining(data) {
-        if (!data || !this.activeJobsList) {
-            return;
-        }
-        
-        this.showActiveTraining();
-        
-        // Clear existing content
-        this.activeJobsList.innerHTML = '';
-        
-        // Create training card
-        const card = document.createElement('div');
-        card.className = 'card mb-3';
-        
-        // Format progress
-        const progress = data.progress || 0;
-        const progressClass = progress < 33 ? 'bg-info' : progress < 66 ? 'bg-primary' : 'bg-success';
-        
-        // Format metrics
-        const trainLoss = data.train_loss !== undefined ? formatUtil.formatDecimal(data.train_loss, 4) : '—';
-        const valLoss = data.val_loss !== undefined ? formatUtil.formatDecimal(data.val_loss, 4) : '—';
-        const trainPpl = data.train_perplexity !== undefined ? formatUtil.formatDecimal(data.train_perplexity, 2) : '—';
-        const valPpl = data.val_perplexity !== undefined ? formatUtil.formatDecimal(data.val_perplexity, 2) : '—';
-        const tokensPerSec = data.tokens_per_sec !== undefined ? formatUtil.formatNumber(Math.round(data.tokens_per_sec)) : '—';
-        const memoryUsage = data.peak_memory_gb !== undefined ? `${formatUtil.formatDecimal(data.peak_memory_gb, 1)} GB` : '—';
-        
-        // Format time estimates
-        let timeInfo = '';
-        if (data.elapsed_minutes !== undefined) {
-            const elapsed = formatUtil.formatDuration(data.elapsed_minutes * 60);
-            
-            if (data.eta_minutes !== undefined) {
-                const eta = formatUtil.formatDuration(data.eta_minutes * 60);
-                timeInfo = `<div class="text-muted">Elapsed: ${elapsed} | ETA: ${eta}</div>`;
-            } else {
-                timeInfo = `<div class="text-muted">Elapsed: ${elapsed}</div>`;
-            }
-        }
-        
-        // Create card content
-        card.innerHTML = `
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <h5 class="mb-0">Training: ${formatUtil.formatModelName(data.model_name || 'Model')}</h5>
-                <span class="badge bg-primary">Active</span>
-            </div>
-            <div class="card-body">
-                <div class="progress mb-3" style="height: 20px;">
-                    <div class="progress-bar ${progressClass}" role="progressbar" style="width: ${progress}%;" 
-                        aria-valuenow="${progress}" aria-valuemin="0" aria-valuemax="100">
-                        ${Math.round(progress)}%
-                    </div>
-                </div>
-                <div class="row">
-                    <div class="col-md-6">
-                        <div class="mb-2">
-                            <strong>Iteration:</strong> ${formatUtil.formatNumber(data.current_iteration || 0)} / ${formatUtil.formatNumber(data.max_iterations || 0)}
-                        </div>
-                        <div class="mb-2">
-                            <strong>Train Loss:</strong> ${trainLoss} (ppl: ${trainPpl})
-                        </div>
-                        <div class="mb-2">
-                            <strong>Valid Loss:</strong> ${valLoss} (ppl: ${valPpl})
-                        </div>
-                        ${timeInfo}
-                    </div>
-                    <div class="col-md-6">
-                        <div class="mb-2">
-                            <strong>Speed:</strong> ${tokensPerSec} tokens/sec
-                        </div>
-                        <div class="mb-2">
-                            <strong>Memory:</strong> ${memoryUsage}
-                        </div>
-                        <div class="mb-2">
-                            <strong>Learning Rate:</strong> ${data.learning_rate ? data.learning_rate.toExponential(2) : '—'}
-                        </div>
-                        ${data.epoch_done !== undefined ? `<div class="mb-2"><strong>Epoch:</strong> ${formatUtil.formatDecimal(data.epoch_done, 2)}</div>` : ''}
-                    </div>
-                </div>
-                <div class="mt-3">
-                    <button class="btn btn-sm btn-primary me-2" id="btn-view-training">
-                        <i class="bi bi-graph-up"></i> View Details
-                    </button>
-                    <button class="btn btn-sm btn-danger" id="btn-stop-training">
-                        <i class="bi bi-stop-fill"></i> Stop Training
-                    </button>
-                </div>
+    renderActiveTrainingDashboard(data, container) {
+        // Create header
+        const header = document.createElement('div');
+        header.className = 'dashboard-header';
+        header.innerHTML = `
+            <h3>Active Training Session</h3>
+            <div class="dashboard-status">
+                <span class="status-badge active">Active</span>
+                <span class="model-name">${data.config?.model_name || 'Unknown Model'}</span>
             </div>
         `;
+        container.appendChild(header);
         
-        // Add event listeners
-        const btnViewTraining = card.querySelector('#btn-view-training');
-        if (btnViewTraining) {
-            btnViewTraining.addEventListener('click', () => {
-                window.app.showView('training');
-            });
+        // Create metrics section
+        const metricsSection = document.createElement('div');
+        metricsSection.className = 'dashboard-metrics';
+        
+        // Progress
+        const progress = (data.current_iteration / data.max_iterations) * 100 || 0;
+        const progressBar = document.createElement('div');
+        progressBar.className = 'progress-container';
+        progressBar.innerHTML = `
+            <div class="progress-label">Progress: ${data.current_iteration || 0} / ${data.max_iterations || 0} iterations (${progress.toFixed(1)}%)</div>
+            <div class="progress-bar">
+                <div class="progress-fill" style="width: ${progress}%"></div>
+            </div>
+        `;
+        metricsSection.appendChild(progressBar);
+        
+        // Key metrics
+        const metricsGrid = document.createElement('div');
+        metricsGrid.className = 'metrics-grid';
+        
+        // Helper function to format metric value
+        const formatMetric = (value, type = 'number') => {
+            if (value === null || value === undefined) return 'N/A';
+            if (type === 'number') return typeof value === 'number' ? value.toFixed(4) : value;
+            if (type === 'time') return typeof value === 'number' ? `${value.toFixed(1)} min` : value;
+            return value;
+        };
+        
+        // Add metrics
+        const metrics = [
+            { label: 'Train Loss', value: formatMetric(data.train_loss) },
+            { label: 'Val Loss', value: formatMetric(data.val_loss) },
+            { label: 'Train PPL', value: formatMetric(data.train_perplexity) },
+            { label: 'Val PPL', value: formatMetric(data.val_perplexity) },
+            { label: 'Elapsed', value: formatMetric(data.elapsed_minutes, 'time') },
+            { label: 'ETA', value: formatMetric(data.eta_minutes, 'time') },
+            { label: 'Tokens/sec', value: formatMetric(data.tokens_per_sec) },
+            { label: 'Memory', value: formatMetric(data.peak_memory_gb) ? `${formatMetric(data.peak_memory_gb)} GB` : 'N/A' }
+        ];
+        
+        metrics.forEach(metric => {
+            const metricEl = document.createElement('div');
+            metricEl.className = 'metric-item';
+            metricEl.innerHTML = `
+                <div class="metric-label">${metric.label}</div>
+                <div class="metric-value">${metric.value}</div>
+            `;
+            metricsGrid.appendChild(metricEl);
+        });
+        
+        metricsSection.appendChild(metricsGrid);
+        container.appendChild(metricsSection);
+        
+        // Add config section
+        if (data.config) {
+            const configSection = document.createElement('div');
+            configSection.className = 'dashboard-config';
+            configSection.innerHTML = `
+                <h4>Training Configuration</h4>
+                <div class="config-grid">
+                    <div class="config-item">
+                        <div class="config-label">Model</div>
+                        <div class="config-value">${data.config.model_name || 'N/A'}</div>
+                    </div>
+                    <div class="config-item">
+                        <div class="config-label">Batch Size</div>
+                        <div class="config-value">${data.config.batch_size || 'N/A'}</div>
+                    </div>
+                    <div class="config-item">
+                        <div class="config-label">Learning Rate</div>
+                        <div class="config-value">${data.config.learning_rate || 'N/A'}</div>
+                    </div>
+                    <div class="config-item">
+                        <div class="config-label">LR Schedule</div>
+                        <div class="config-value">${data.config.lr_schedule || 'N/A'}</div>
+                    </div>
+                </div>
+            `;
+            container.appendChild(configSection);
         }
         
-        const btnStopTraining = card.querySelector('#btn-stop-training');
-        if (btnStopTraining) {
-            btnStopTraining.addEventListener('click', async () => {
-                if (confirm('Are you sure you want to stop the training?')) {
-                    try {
-                        window.app.showLoading('Stopping training...');
-                        await trainingService.stopTraining();
-                        window.app.hideLoading();
-                        window.app.showAlert('Training stopped successfully.', 'success');
-                        this.hideActiveTraining();
-                    } catch (error) {
-                        window.app.hideLoading();
-                        window.app.showAlert(`Failed to stop training: ${error.message}`, 'danger');
-                    }
-                }
-            });
-        }
-        
-        // Add card to list
-        this.activeJobsList.appendChild(card);
+        // Add stop button
+        const actionsSection = document.createElement('div');
+        actionsSection.className = 'dashboard-actions';
+        const stopButton = document.createElement('button');
+        stopButton.className = 'btn btn-danger';
+        stopButton.textContent = 'Stop Training';
+        stopButton.onclick = () => this.stopTraining();
+        actionsSection.appendChild(stopButton);
+        container.appendChild(actionsSection);
     }
     
     /**
-     * Handle training finished event
-     * 
-     * @param {Object} data - Training finished data
+     * Render dashboard when no training is active
+     * @param {HTMLElement} container - Container element
      */
-    handleTrainingFinished(data) {
-        // Hide active training section
-        this.hideActiveTraining();
-        
-        // Show alert
-        window.app.showAlert('Training completed successfully!', 'success');
-        
-        // Reload recent models
-        this.loadRecentModels();
+    renderInactiveTrainingDashboard(container) {
+        container.innerHTML = `
+            <div class="dashboard-inactive">
+                <h3>No Active Training</h3>
+                <p>There is no active training session. Start a new training session from the Training tab.</p>
+            </div>
+        `;
     }
     
+    /**
+     * Stop the current training session
+     */
+    async stopTraining() {
+        try {
+            const confirmed = confirm('Are you sure you want to stop the current training session?');
+            if (!confirmed) return;
+            
+            await apiService.stopTraining();
+            alert('Training stopped successfully');
+            this.loadDashboardData();
+        } catch (error) {
+            console.error('Failed to stop training:', error);
+            alert('Failed to stop training: ' + error.message);
+        }
+    }
+
     /**
      * Load recent models
      */
     async loadRecentModels() {
         try {
-            // Get CPT models
             const response = await apiService.getCPTModels();
             
-            if (response.models && response.models.length > 0) {
-                this.showRecentModels(response.models);
-            } else {
-                this.hideRecentModels();
-            }
-            
+            // Update recent models UI
         } catch (error) {
             console.error('Failed to load recent models:', error);
-            this.hideRecentModels();
         }
     }
-    
+
     /**
-     * Show recent models section
-     * 
-     * @param {Array} models - List of models
-     */
-    showRecentModels(models) {
-        if (this.noModelsMessage) {
-            this.noModelsMessage.classList.add('d-none');
-        }
-        
-        if (this.recentModelsList) {
-            this.recentModelsList.classList.remove('d-none');
-            this.recentModelsList.innerHTML = '';
-            
-            // Show up to 5 most recent models
-            const recentModels = models.slice(0, 5);
-            
-            recentModels.forEach(model => {
-                const card = document.createElement('div');
-                card.className = 'card mb-2';
-                
-                card.innerHTML = `
-                    <div class="card-body">
-                        <h5 class="card-title">${formatUtil.formatModelName(model.name)}</h5>
-                        <p class="card-text">
-                            <small class="text-muted">
-                                Checkpoint: ${model.checkpoint || 'N/A'} 
-                                (Iteration: ${formatUtil.formatNumber(model.iteration || 0)})
-                            </small>
-                        </p>
-                        <div class="d-flex">
-                            <button class="btn btn-sm btn-primary me-2" data-model-id="${model.id}">
-                                <i class="bi bi-chat-dots"></i> Generate
-                            </button>
-                            <button class="btn btn-sm btn-secondary" data-model-id="${model.id}">
-                                <i class="bi bi-info-circle"></i> Details
-                            </button>
-                        </div>
-                    </div>
-                `;
-                
-                // Add event listeners
-                const generateBtn = card.querySelector('.btn-primary');
-                if (generateBtn) {
-                    generateBtn.addEventListener('click', () => {
-                        // Switch to generate view and load this model
-                        window.app.showView('generate');
-                        
-                        // Dispatch event to load model
-                        document.dispatchEvent(new CustomEvent('load-model', { 
-                            detail: { model: model.id } 
-                        }));
-                    });
-                }
-                
-                const detailsBtn = card.querySelector('.btn-secondary');
-                if (detailsBtn) {
-                    detailsBtn.addEventListener('click', () => {
-                        // Switch to models view and show details
-                        window.app.showView('models');
-                        
-                        // Dispatch event to show model details
-                        document.dispatchEvent(new CustomEvent('show-model-details', { 
-                            detail: { model: model.id } 
-                        }));
-                    });
-                }
-                
-                this.recentModelsList.appendChild(card);
-            });
-        }
-    }
-    
-    /**
-     * Hide recent models section
-     */
-    hideRecentModels() {
-        if (this.noModelsMessage) {
-            this.noModelsMessage.classList.remove('d-none');
-        }
-        
-        if (this.recentModelsList) {
-            this.recentModelsList.classList.add('d-none');
-            this.recentModelsList.innerHTML = '';
-        }
-    }
-    
-    /**
-     * Called when the dashboard view is activated
+     * Called when the dashboard tab is activated
      */
     onActivate() {
         // Refresh dashboard data
         this.loadDashboardData();
     }
-} 
+}
+
+// Create a singleton instance
+const dashboardComponent = new DashboardComponent(); 

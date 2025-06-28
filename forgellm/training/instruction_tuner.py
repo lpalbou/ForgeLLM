@@ -14,8 +14,8 @@ from typing import Dict, List, Optional, Tuple, Any, Set
 
 import numpy as np
 
-from forgellm.training.config import InstructTuningConfig
-from forgellm.models.model_manager import ModelManager
+from .training.config import InstructTuningConfig
+from .models.model_manager import ModelManager
 
 logger = logging.getLogger(__name__)
 

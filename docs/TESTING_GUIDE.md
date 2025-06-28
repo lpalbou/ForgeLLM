@@ -1,155 +1,180 @@
-# ForgeLLM Testing Guide
+# Testing Guide
 
-This guide provides instructions for testing the refactored ForgeLLM package.
+This document provides instructions for testing the ForgeLLM system.
 
-## Installation
+## Test Structure
 
-First, install the package in development mode:
+The test suite is organized into several categories:
 
-```bash
-# Install the package
-pip install -e ./forgellm
-```
+1. **Unit Tests**: Test individual components in isolation
+2. **Integration Tests**: Test the interaction between components
+3. **End-to-End Tests**: Test the complete system workflow
 
-## Web Interface
+## Running Tests
 
-Start the web interface:
+### Running All Tests
 
-```bash
-# Start the web interface (default port 5001)
-python forgellm/forgellm_web.py
-
-# If port 5001 is in use, specify a different port
-python forgellm/forgellm_web.py --port 5002
-
-# Use legacy static/template folders if needed
-python forgellm/forgellm_web.py --static-folder static --template-folder templates
-```
-
-The web interface will be available at http://localhost:5001 (or the port you specified).
-
-## Configuration Management
-
-Create and manage configurations:
+To run all tests:
 
 ```bash
-# Create default configurations
-python -m forgellm.cli.commands config create-defaults
-
-# Show a configuration
-python -m forgellm.cli.commands config show configs/cpt_default.yaml
-
-# Export a configuration
-python -m forgellm.cli.commands config export --type cpt --output my_config.yaml
+cd forgellm
+python -m unittest discover -s tests
 ```
 
-## Training
+### Running Specific Test Categories
 
-Start a training job:
+To run specific test categories:
 
 ```bash
-# Using a configuration file
-python -m forgellm.cli.commands train --config configs/cpt_default.yaml
+# Run unit tests
+python -m unittest discover -s tests -p "test_*.py" -k "not integration and not e2e"
 
-# Using command-line arguments
-python -m forgellm.cli.commands train \
-    --model "mlx-community/gemma-3-4b-it-bf16" \
-    --input-dir "mnemosyne" \
-    --batch-size 4 \
-    --learning-rate 5e-6 \
-    --max-iterations 1000
+# Run integration tests
+python -m unittest discover -s tests -p "test_integration.py"
+
+# Run end-to-end tests
+python -m unittest discover -s tests -p "test_e2e.py"
 ```
 
-## Text Generation
+### Running Individual Tests
 
-Generate text with a trained model:
+To run a specific test file:
 
 ```bash
-python -m forgellm.cli.commands generate \
-    --model "mlx-community/gemma-3-4b-it-bf16" \
-    --adapter-path "models/cpt/my_model/adapters.safetensors" \
-    --prompt "Write a short story about AI" \
-    --max-tokens 200
+python -m unittest tests/test_model_server.py
 ```
 
-## Dashboard Generation
-
-Generate a training dashboard:
+To run a specific test case:
 
 ```bash
-python -m forgellm.cli.commands dashboard "models/cpt/my_model/CPT_20250624_191349.json"
+python -m unittest tests.test_model_server.TestModelServer.test_server_status
 ```
 
-## Model Publishing
+## Model Server Tests
 
-Publish a checkpoint to a shareable format:
+The model server tests verify the functionality of the standalone model server component. These tests include:
+
+1. **Server Status**: Tests that the server status endpoint works correctly
+2. **Model Loading**: Tests loading a model into the server
+3. **Text Generation**: Tests generating text with a loaded model
+4. **Error Handling**: Tests error handling in the model server
+
+To run the model server tests:
 
 ```bash
-python -m forgellm.cli.commands publish "models/cpt/my_model/0000500_adapters.safetensors"
+python -m unittest tests/test_model_server.py
 ```
 
-## Dataset Information
+### Environment Variables
 
-Get information about a dataset:
+The model server tests use the following environment variables:
+
+- `TEST_MODEL`: The model to use for testing (default: "mlx-community/gemma-3-1b-it-bf16")
+  - Set to "skip" to skip tests that require a model
+
+Example:
 
 ```bash
-python -m forgellm.cli.commands dataset --input-dir "mnemosyne"
+# Use a specific model for testing
+TEST_MODEL="mlx-community/gemma-3-1b-it-bf16" python -m unittest tests/test_model_server.py
+
+# Skip tests that require a model
+TEST_MODEL="skip" python -m unittest tests/test_model_server.py
 ```
 
-## Instruction Tuning
+## Model Manager Tests
 
-Start instruction tuning:
+The model manager tests verify the functionality of the ModelManager class, which acts as a client to the model server. These tests include:
+
+1. **Initialization**: Tests that the ModelManager initializes correctly
+2. **Server Connection**: Tests that the ModelManager connects to the model server
+3. **Model Loading**: Tests loading a model through the ModelManager
+4. **Text Generation**: Tests generating text through the ModelManager
+5. **Error Handling**: Tests error handling in the ModelManager
+
+To run the model manager tests:
 
 ```bash
-# Using a configuration file
-python -m forgellm.cli.commands instruct --config configs/ift_default.yaml
-
-# Using command-line arguments
-python -m forgellm.cli.commands instruct \
-    --base-model-path "models/cpt/my_model" \
-    --base-model-name "mlx-community/gemma-3-4b-it-bf16" \
-    --output-dir "models/ift/my_instruct_model"
+python -m unittest tests/test_model_manager.py
 ```
 
-## Python API Usage
+## Integration Tests
 
-You can also use ForgeLLM programmatically:
+The integration tests verify the interaction between the web server and model server. These tests include:
+
+1. **Health Endpoint**: Tests that the health endpoint works correctly
+2. **Model Status**: Tests that the model status endpoint works correctly
+3. **Model Loading and Generation**: Tests the complete flow of loading a model and generating text
+4. **Model List**: Tests that the model list endpoint works correctly
+5. **Training Status**: Tests that the training status endpoint works correctly
+6. **Error Handling**: Tests error handling in the web server
+
+To run the integration tests:
+
+```bash
+python -m unittest tests/test_integration.py
+```
+
+### Environment Variables
+
+The integration tests use the following environment variables:
+
+- `TEST_MODEL`: The model to use for testing (default: "mlx-community/gemma-3-1b-it-bf16")
+  - Set to "skip" to skip tests that require a model
+
+Example:
+
+```bash
+# Use a specific model for testing
+TEST_MODEL="mlx-community/gemma-3-1b-it-bf16" python -m unittest tests/test_integration.py
+
+# Skip tests that require a model
+TEST_MODEL="skip" python -m unittest tests/test_integration.py
+```
+
+## Adding New Tests
+
+When adding new tests, follow these guidelines:
+
+1. **Test File Naming**: Name test files with the prefix `test_`
+2. **Test Class Naming**: Name test classes with the prefix `Test`
+3. **Test Method Naming**: Name test methods with the prefix `test_`
+4. **Documentation**: Add docstrings to test classes and methods
+5. **Isolation**: Ensure tests are isolated and don't depend on each other
+6. **Cleanup**: Clean up any resources created during tests
+
+Example:
 
 ```python
-from forgellm.training.config import TrainingConfig
-from forgellm.training.trainer import ContinuedPretrainer
-from forgellm.models.model_manager import ModelManager
-
-# Create configuration
-config = TrainingConfig(
-    model_name="mlx-community/gemma-3-4b-it-bf16",
-    input_dir="mnemosyne",
-    output_dir="models",
-    batch_size=4,
-    learning_rate=5e-6,
-    max_iterations=10000
-)
-
-# Initialize trainer
-trainer = ContinuedPretrainer(config)
-
-# Run training
-trainer.run_training()
-
-# Generate text
-model_manager = ModelManager()
-model_manager.load("mlx-community/gemma-3-4b-it-bf16", "models/cpt/my_model/adapters.safetensors")
-response = model_manager.generate("Write a short story about AI", max_tokens=200)
-print(response)
+class TestNewFeature(unittest.TestCase):
+    """Tests for the new feature."""
+    
+    def setUp(self):
+        """Set up test environment."""
+        # Set up code here
+    
+    def tearDown(self):
+        """Clean up after tests."""
+        # Clean up code here
+    
+    def test_new_feature_works(self):
+        """Test that the new feature works correctly."""
+        # Test code here
 ```
 
-## Troubleshooting
+## Continuous Integration
 
-If you encounter any issues:
+The test suite is run automatically on every push to the repository using GitHub Actions. The workflow is defined in `.github/workflows/tests.yml`.
 
-1. **Import errors**: Make sure you've installed the package with `pip install -e ./forgellm`
-2. **Port in use**: Use a different port with `--port` option
-3. **Missing templates/static files**: Use the `--template-folder` and `--static-folder` options
-4. **Module not found**: Use the correct Python module path (`forgellm.cli.commands` instead of just `forgellm`)
+To run the tests locally before pushing:
 
-For any other issues, check the error message and traceback for details. 
+```bash
+# Run all tests
+python -m unittest discover -s tests
+
+# Run linting
+flake8 forgellm
+
+# Run type checking
+mypy forgellm
+``` 

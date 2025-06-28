@@ -14,10 +14,12 @@ import shutil
 import subprocess
 from datetime import datetime
 from flask import Flask, Blueprint, request, jsonify, current_app, send_file
+import time
 
 from ..models import ModelManager, ModelPublisher
 from ..training.config import TrainingConfig
 from ..training.trainer import ContinuedPretrainer
+from ..training.process_manager import TrainingProcessManager
 from ..training.dashboard import create_comprehensive_dashboard, identify_best_checkpoints, load_training_data
 
 logger = logging.getLogger(__name__)
@@ -44,6 +46,12 @@ def setup_api(app: Flask) -> Blueprint:
     if trainer is None:
         trainer = ContinuedPretrainer()
         app.trainer = trainer
+    
+    # Get training process manager
+    training_manager = getattr(app, 'training_manager', None)
+    if training_manager is None:
+        training_manager = TrainingProcessManager()
+        app.training_manager = training_manager
     
     @bp.route('/cpt_models', methods=['GET'])
     def get_cpt_models():
@@ -268,11 +276,20 @@ def setup_api(app: Flask) -> Blueprint:
     def get_training_status():
         """Get training status."""
         try:
-            # Check if training is active
-            active = trainer.is_training_active()
+            # Check if training is active using the training manager
+            current_training = training_manager.current_training
+            active = current_training is not None and current_training.get("status") == "running"
             
             # Get training status
-            status = trainer.get_training_status() if active else {}
+            if active:
+                status = {
+                    "config": current_training.get("config", {}),
+                    "start_time": current_training.get("start_time"),
+                    "output_dir": current_training.get("output_dir"),
+                    "pid": current_training.get("pid")
+                }
+            else:
+                status = {}
             
             return jsonify({'success': True, 'active': active, **status})
         except Exception as e:
@@ -284,32 +301,25 @@ def setup_api(app: Flask) -> Blueprint:
         """Start training."""
         try:
             # Get training configuration from request
-            config_data = request.json
-            
+            if not request.is_json:
+                logger.error("Request content type is not application/json")
+                return jsonify({'success': False, 'error': 'Request must be JSON'}), 400
+
+            config_data = request.get_json(force=True)
+            if config_data is None:
+                logger.error("Failed to parse JSON data")
+                return jsonify({'success': False, 'error': 'Invalid JSON data'}), 400
+
             # Log received configuration data
             logger.info(f"Received training config data: {config_data}")
-            
-            # Log TrainingConfig expected parameters
-            from forgellm.training.config import TrainingConfig
-            expected_params = list(TrainingConfig.__annotations__.keys())
-            logger.info(f"TrainingConfig expected parameters: {expected_params}")
-            
-            # Check for parameter mismatches
-            for key in config_data:
-                if key not in expected_params:
-                    logger.warning(f"Unexpected parameter in request: '{key}' (not in TrainingConfig)")
-            
-            for key in expected_params:
-                if key not in config_data and key != 'DEFAULT_CONFIG_PATH':
-                    logger.warning(f"Missing expected parameter in request: '{key}'")
-            
-            # Create training configuration
-            config = TrainingConfig(**config_data)
-            
-            # Start training
-            trainer.start_training(config)
-            
-            return jsonify({'success': True})
+
+            # Start training using the training process manager
+            result = training_manager.start_training(config_data)
+
+            if result.get('success', False):
+                return jsonify({'success': True, 'message': 'Training started', 'output_dir': result.get('output_dir'), 'pid': result.get('pid')})
+            else:
+                return jsonify({'success': False, 'error': result.get('error', 'Unknown error')}), 500
         except Exception as e:
             logger.error(f"Error starting training: {e}")
             return jsonify({'success': False, 'error': str(e)}), 500
@@ -318,10 +328,13 @@ def setup_api(app: Flask) -> Blueprint:
     def stop_training():
         """Stop training."""
         try:
-            # Stop training
-            trainer.stop_training()
+            # Stop training using the training manager
+            result = training_manager.stop_training()
             
-            return jsonify({'success': True})
+            if result.get('success', True):
+                return jsonify({'success': True})
+            else:
+                return jsonify({'success': False, 'error': result.get('error', 'Failed to stop training')}), 500
         except Exception as e:
             logger.error(f"Error stopping training: {e}")
             return jsonify({'success': False, 'error': str(e)}), 500
@@ -330,44 +343,116 @@ def setup_api(app: Flask) -> Blueprint:
     def load_model():
         """Load a model."""
         try:
-            # Get model name and adapter path from request
-            model_name = request.json.get('model_name')
-            adapter_path = request.json.get('adapter_path')
+            data = request.get_json()
+            # Accept both 'model_name' and 'model' for backward compatibility
+            model_name = data.get('model_name') or data.get('model')
+            adapter_path = data.get('adapter_path') or data.get('adapter')
             
-            # Load model
-            model_manager.load_model(model_name, adapter_path)
+            if not model_name:
+                return jsonify({
+                    'success': False,
+                    'error': 'Missing model_name'
+                }), 400
             
-            return jsonify({'success': True})
+            success = model_manager.load(model_name, adapter_path)
+            
+            if success:
+                return jsonify({
+                    'success': True,
+                    'message': f'Model {model_name} loading started',
+                    'model_name': model_name,
+                    'adapter_path': adapter_path
+                })
+            else:
+                return jsonify({
+                    'success': False,
+                    'error': f'Failed to load model: {model_manager.error}'
+                }), 500
         except Exception as e:
             logger.error(f"Error loading model: {e}")
-            return jsonify({'success': False, 'error': str(e)}), 500
+            return jsonify({
+                'success': False,
+                'error': str(e)
+            }), 500
     
     @bp.route('/model/unload', methods=['POST'])
     def unload_model():
-        """Unload the current model."""
+        """Unload the model."""
         try:
-            # Unload model
-            model_manager.unload_model()
+            success = model_manager.unload()
             
-            return jsonify({'success': True})
+            if success:
+                return jsonify({
+                    'success': True,
+                    'message': 'Model unloaded successfully'
+                })
+            else:
+                return jsonify({
+                    'success': False,
+                    'error': 'Failed to unload model'
+                }), 500
         except Exception as e:
             logger.error(f"Error unloading model: {e}")
-            return jsonify({'success': False, 'error': str(e)}), 500
+            return jsonify({
+                'success': False,
+                'error': str(e)
+            }), 500
     
     @bp.route('/model/generate', methods=['POST'])
     def generate_text():
-        """Generate text."""
+        """Generate text from the model."""
         try:
-            # Get generation parameters from request
-            params = request.json
+            data = request.get_json()
+            prompt = data.get('prompt')
+            max_tokens = data.get('max_tokens', 100)
+            temperature = data.get('temperature', 0.7)
+            
+            # Additional parameters from web UI
+            history = data.get('history', [])
+            top_p = data.get('top_p', 0.9)
+            repetition_penalty = data.get('repetition_penalty', 1.1)
+            max_kv_size = data.get('max_kv_size', 8192)
+            system_prompt = data.get('system_prompt', '')
+            
+            if not prompt:
+                return jsonify({
+                    'success': False,
+                    'error': 'Missing prompt'
+                }), 400
+            
+            # Check if model is loaded
+            status = model_manager.get_status()
+            if not status.get('loaded'):
+                return jsonify({
+                    'success': False,
+                    'error': 'No model loaded'
+                }), 400
             
             # Generate text
-            text = model_manager.generate_text(params)
+            start_time = time.time()
+            response = model_manager.generate_text({
+                'prompt': prompt,
+                'max_tokens': max_tokens,
+                'temperature': temperature,
+                'history': history,
+                'top_p': top_p,
+                'repetition_penalty': repetition_penalty,
+                'max_kv_size': max_kv_size,
+                'system_prompt': system_prompt
+            })
+            end_time = time.time()
             
-            return jsonify({'success': True, 'text': text})
+            return jsonify({
+                'success': True,
+                'completion': response,
+                'generation_time': end_time - start_time
+            })
         except Exception as e:
             logger.error(f"Error generating text: {e}")
-            return jsonify({'success': False, 'error': str(e)}), 500
+            return jsonify({
+                'success': False,
+                'error': str(e)
+            }), 500
     
     @bp.route('/dashboard/data', methods=['GET'])
     def get_dashboard_data():
@@ -382,6 +467,23 @@ def setup_api(app: Flask) -> Blueprint:
             return jsonify({'success': True, 'active': active, **data})
         except Exception as e:
             logger.error(f"Error getting dashboard data: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+
+    @bp.route('/dashboard/realtime', methods=['GET'])
+    def get_realtime_dashboard_data():
+        """Get real-time dashboard data using the new monitoring system."""
+        try:
+            from ..training.realtime_monitor import get_realtime_monitor
+            
+            # Get real-time monitor
+            monitor = get_realtime_monitor()
+            
+            # Get dashboard data
+            data = monitor.get_dashboard_data()
+            
+            return jsonify({'success': True, **data})
+        except Exception as e:
+            logger.error(f"Error getting real-time dashboard data: {e}")
             return jsonify({'success': False, 'error': str(e)}), 500
     
     @bp.route('/check_dashboard', methods=['GET'])
@@ -447,6 +549,74 @@ def setup_api(app: Flask) -> Blueprint:
             logger.error(f"Error getting historical dashboard: {e}")
             return jsonify({'success': False, 'error': str(e)}), 500
     
+    @bp.route('/training/sessions', methods=['GET'])
+    def get_training_sessions():
+        """Get available training sessions."""
+        try:
+            import glob
+            from pathlib import Path
+            
+            # Look for training sessions in multiple locations
+            possible_dirs = [
+                Path("forgellm/forgellm/models/cpt"),
+                Path("forgellm/models/cpt"),
+                Path("models/cpt")
+            ]
+            
+            all_sessions = []
+            
+            for models_dir in possible_dirs:
+                if models_dir.exists():
+                    # Find all CPT log files
+                    log_pattern = str(models_dir / "*" / "CPT_*.json")
+                    log_files = glob.glob(log_pattern)
+                    
+                    for log_file in log_files:
+                        try:
+                            log_path = Path(log_file)
+                            session_dir = log_path.parent
+                            
+                            # Read training data
+                            with open(log_file, 'r') as f:
+                                data = json.load(f)
+                            
+                            # Extract session info
+                            session_info = {
+                                "session_id": session_dir.name,
+                                "session_name": session_dir.name,
+                                "log_file": str(log_path),
+                                "start_time": data.get('start_time'),
+                                "status": data.get('status', 'unknown'),
+                                "model_name": data.get('config', {}).get('model_name', 'Unknown'),
+                                "metrics_count": len(data.get('metrics', [])),
+                                "modified": datetime.fromtimestamp(log_path.stat().st_mtime).isoformat()
+                            }
+                            
+                            # Add latest metrics if available
+                            metrics = data.get('metrics', [])
+                            if metrics:
+                                latest = metrics[-1]
+                                session_info.update({
+                                    "latest_iteration": latest.get('iteration'),
+                                    "latest_loss": latest.get('train_loss'),
+                                    "latest_val_loss": latest.get('val_loss')
+                                })
+                            
+                            all_sessions.append(session_info)
+                            
+                        except Exception as e:
+                            logger.warning(f"Error reading training session {log_file}: {e}")
+                            continue
+            
+            # Sort sessions by modification time (newest first)
+            all_sessions.sort(key=lambda x: x['modified'], reverse=True)
+            
+            return jsonify({"success": True, "training_sessions": all_sessions})
+            
+        except Exception as e:
+            logger.error(f"Error getting training sessions: {e}")
+            return jsonify({"success": False, "error": str(e)}), 500
+
     @bp.route('/checkpoints', methods=['GET'])
     def get_checkpoints():
         """Get available checkpoints."""
@@ -650,6 +820,152 @@ def setup_api(app: Flask) -> Blueprint:
                 "error": str(e),
                 "total_tokens": 1000000,  # Default value on error
                 "total_files": 0
+            }), 500
+    
+    @bp.route('/model/info', methods=['GET'])
+    def get_model_info():
+        """Get information about the currently loaded model."""
+        try:
+            # Get model info
+            info = model_manager.get_model_info()
+            
+            return jsonify({'success': True, **info})
+        except Exception as e:
+            logger.error(f"Error getting model info: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @bp.route('/health', methods=['GET'])
+    def health_check():
+        """Health check endpoint."""
+        return jsonify({
+            'success': True,
+            'status': 'ok',
+            'version': '0.1.0'
+        })
+    
+    @bp.route('/model/status', methods=['GET'])
+    def get_model_status():
+        """Get the status of the currently loaded model."""
+        try:
+            status = model_manager.get_status()
+            
+            return jsonify(status)
+        except Exception as e:
+            logger.error(f"Error getting model status: {e}")
+            return jsonify({
+                'success': False,
+                'error': str(e)
+            }), 500
+    
+    @bp.route('/filesystem/browse', methods=['GET'])
+    def browse_filesystem():
+        """Browse filesystem directories for file selection."""
+        try:
+            # Get path parameter (default to current working directory)
+            path = request.args.get('path', os.getcwd())
+            
+            # Security check: only allow browsing within the project directory and common directories
+            # Determine the actual project root by finding the directory containing 'forgellm' folder
+            current_dir = os.path.abspath(os.getcwd())
+            
+            # Look for the project root (directory containing forgellm folder)
+            project_root = current_dir
+            while project_root != os.path.dirname(project_root):  # Not at filesystem root
+                if os.path.exists(os.path.join(project_root, 'forgellm')) and os.path.isdir(os.path.join(project_root, 'forgellm')):
+                    break
+                project_root = os.path.dirname(project_root)
+            
+            # If we're inside the forgellm directory, use the parent as project root
+            if project_root.endswith('/forgellm') or project_root.endswith('\\forgellm'):
+                project_root = os.path.dirname(project_root)
+            
+            # Convert relative paths to absolute paths relative to project root
+            if not os.path.isabs(path):
+                path = os.path.join(project_root, path)
+            
+            abs_path = os.path.abspath(path)
+            
+            # Allow browsing within project directory or common directories like /Users, /home, etc.
+            allowed_roots = [project_root, '/Users', '/home', '/data', '/opt', '/tmp']
+            if not any(abs_path.startswith(root) for root in allowed_roots):
+                return jsonify({
+                    'success': False,
+                    'error': 'Access denied to this directory'
+                }), 403
+            
+            # Check if path exists and is a directory
+            if not os.path.exists(abs_path) or not os.path.isdir(abs_path):
+                return jsonify({
+                    'success': False,
+                    'error': 'Directory does not exist'
+                }), 404
+            
+            # Get directory contents
+            items = []
+            try:
+                for item_name in sorted(os.listdir(abs_path)):
+                    item_path = os.path.join(abs_path, item_name)
+                    
+                    # Skip hidden files/directories (starting with .)
+                    if item_name.startswith('.'):
+                        continue
+                    
+                    # Get item info
+                    is_dir = os.path.isdir(item_path)
+                    
+                    # For directories, count subdirectories and files
+                    if is_dir:
+                        try:
+                            sub_items = os.listdir(item_path)
+                            sub_dirs = sum(1 for item in sub_items if os.path.isdir(os.path.join(item_path, item)))
+                            sub_files = sum(1 for item in sub_items if os.path.isfile(os.path.join(item_path, item)))
+                            description = f"{sub_dirs} dirs, {sub_files} files"
+                        except PermissionError:
+                            description = "Access denied"
+                        except Exception:
+                            description = "Unknown"
+                    else:
+                        # For files, show file size
+                        try:
+                            size = os.path.getsize(item_path)
+                            if size < 1024:
+                                description = f"{size} B"
+                            elif size < 1024 * 1024:
+                                description = f"{size/1024:.1f} KB"
+                            elif size < 1024 * 1024 * 1024:
+                                description = f"{size/(1024*1024):.1f} MB"
+                            else:
+                                description = f"{size/(1024*1024*1024):.1f} GB"
+                        except Exception:
+                            description = "Unknown size"
+                    
+                    items.append({
+                        'name': item_name,
+                        'path': item_path,
+                        'is_directory': is_dir,
+                        'description': description
+                    })
+            except PermissionError:
+                return jsonify({
+                    'success': False,
+                    'error': 'Permission denied'
+                }), 403
+            
+            # Add parent directory option (if not at root)
+            parent_path = os.path.dirname(abs_path)
+            show_parent = abs_path != parent_path and any(abs_path.startswith(root) for root in allowed_roots)
+            
+            return jsonify({
+                'success': True,
+                'current_path': abs_path,
+                'parent_path': parent_path if show_parent else None,
+                'items': items
+            })
+        except Exception as e:
+            logger.error(f"Error browsing filesystem: {e}")
+            return jsonify({
+                'success': False,
+                'error': str(e)
             }), 500
     
     return bp 

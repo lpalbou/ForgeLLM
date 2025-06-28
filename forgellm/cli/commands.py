@@ -190,42 +190,60 @@ def setup_config_command(parser):
 
 def run_train_command(args):
     """Run train command."""
-    from forgellm.training.config import TrainingConfig
-    from forgellm.training.trainer import ContinuedPretrainer
+    from .training.config import TrainingConfig
+    from .training.trainer import ContinuedPretrainer
     
-    # Create configuration
-    if args.config:
-        # Load from config file
-        config = TrainingConfig.load(args.config)
-        
-        # Override with command line arguments if provided
-        config_dict = vars(args)
-        for key, value in config_dict.items():
-            if key in TrainingConfig.__annotations__ and value is not None and key != "config":
-                setattr(config, key, value)
-    else:
-        # Check if model_name is provided
-        if args.model_name is None:
-            logger.error("Either --config or --model-name must be provided")
-            return 1
+    try:
+        # Create configuration
+        if args.config:
+            # Load from config file
+            logger.info(f"Loading configuration from {args.config}")
+            config = TrainingConfig.load(args.config)
             
-        # Create from command line arguments
-        config_dict = vars(args)
-        config = TrainingConfig(**{k: v for k, v in config_dict.items() 
-                                 if k in TrainingConfig.__annotations__ and v is not None})
+            # Override with command line arguments if provided
+            config_dict = vars(args)
+            for key, value in config_dict.items():
+                if key in TrainingConfig.__annotations__ and value is not None and key != "config":
+                    logger.info(f"Overriding config parameter {key} with value {value}")
+                    setattr(config, key, value)
+        else:
+            # Check if model_name is provided
+            if args.model_name is None:
+                logger.error("Either --config or --model-name must be provided")
+                return 1
+                
+            # Create from command line arguments
+            logger.info("Creating configuration from command line arguments")
+            config_dict = vars(args)
+            valid_params = {k: v for k, v in config_dict.items() 
+                           if k in TrainingConfig.__annotations__ and v is not None}
+            
+            logger.info(f"Configuration parameters: {valid_params}")
+            config = TrainingConfig(**valid_params)
+        
+        # Log the configuration
+        logger.info(f"Training configuration: {config.to_dict()}")
+        
+        # Initialize trainer
+        trainer = ContinuedPretrainer(config)
+        
+        # Run training
+        logger.info("Starting training")
+        trainer.run_training()
+        
+        logger.info("Training completed successfully")
+        return 0
     
-    # Initialize trainer
-    trainer = ContinuedPretrainer(config)
-    
-    # Run training
-    trainer.run_training()
-    
-    return 0
+    except Exception as e:
+        logger.error(f"Error running training: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return 1
 
 
 def run_generate_command(args):
     """Run generate command."""
-    from forgellm.models.model_manager import ModelManager
+    from .models.model_manager import ModelManager
     
     # Initialize model manager
     model_manager = ModelManager()
@@ -258,10 +276,10 @@ def run_generate_command(args):
 
 def run_dataset_command(args):
     """Run dataset command."""
-    from forgellm.training.data_processor import DocumentProcessor
+    from .training.data_processor import DocumentProcessor
     
     # Initialize document processor
-    from forgellm.training.config import TrainingConfig
+    from .training.config import TrainingConfig
     config = TrainingConfig(model_name="dummy", input_dir=args.input_dir)
     doc_processor = DocumentProcessor(config)
     
@@ -290,7 +308,7 @@ def run_dashboard_generation(args):
     """Run dashboard generation command."""
     try:
         # Import dashboard generator
-        from forgellm.training.dashboard import create_comprehensive_dashboard
+        from .training.dashboard import create_comprehensive_dashboard
         
         # Call dashboard generation function
         create_comprehensive_dashboard(
@@ -308,7 +326,7 @@ def run_dashboard_generation(args):
 
 def run_publish_model(args):
     """Run model publishing command."""
-    from forgellm.models.model_publisher import publish_checkpoint
+    from .models.model_publisher import publish_checkpoint
     
     try:
         output_dir = publish_checkpoint(args.checkpoint_path, args.output_dir)
@@ -321,8 +339,8 @@ def run_publish_model(args):
 
 def run_instruction_tuning(args):
     """Run instruction tuning command."""
-    from forgellm.training.config import InstructTuningConfig
-    from forgellm.training.instruction_tuner import InstructionTuner
+    from .training.config import InstructTuningConfig
+    from .training.instruction_tuner import InstructionTuner
     
     # Create configuration
     if args.config:
@@ -356,7 +374,7 @@ def run_instruction_tuning(args):
 
 def run_create_default_configs(args):
     """Run create default configs command."""
-    from forgellm.training.config import create_default_configs
+    from .training.config import create_default_configs
     
     try:
         create_default_configs()
@@ -386,7 +404,7 @@ def run_show_config(args):
 
 def run_export_config(args):
     """Run export config command."""
-    from forgellm.training.config import TrainingConfig, InstructTuningConfig
+    from .training.config import TrainingConfig, InstructTuningConfig
     
     try:
         # Create config based on type

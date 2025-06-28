@@ -1,405 +1,319 @@
 /**
- * ForgeLLM - Main Application
- * 
- * This file initializes the application and handles navigation between views.
+ * Main application
  */
-
-class ForgeLLMApp {
+class TrainingInterface {
     constructor() {
-        // Current view
-        this.currentView = 'dashboard';
-        
-        // Components
-        this.components = {
-            dashboard: null,
-            training: null,
-            models: null,
-            generation: null,
-            settings: null
-        };
-        
-        // Navigation elements
-        this.navItems = {
-            dashboard: document.getElementById('nav-dashboard'),
-            training: document.getElementById('nav-training'),
-            models: document.getElementById('nav-models'),
-            generate: document.getElementById('nav-generate'),
-            settings: document.getElementById('nav-settings')
-        };
-        
-        // View containers
-        this.viewContainers = {
-            dashboard: document.getElementById('dashboard-view'),
-            training: document.getElementById('training-view'),
-            models: document.getElementById('models-view'),
-            generate: document.getElementById('generate-view'),
-            settings: document.getElementById('settings-view')
-        };
-        
-        // Status elements
-        this.statusIndicator = document.getElementById('status-indicator');
-        this.statusText = document.getElementById('status-text');
-        this.memoryUsage = document.getElementById('memory-usage');
-        
-        // Loading overlay
-        this.loadingOverlay = document.getElementById('loading-overlay');
-        this.loadingMessage = document.getElementById('loading-message');
-        
-        // Alert container
-        this.alertContainer = document.getElementById('alert-container');
-        
-        // Socket connection status
-        this.socketConnected = false;
+        this.initialized = false;
     }
-    
+
     /**
      * Initialize the application
      */
     init() {
+        if (this.initialized) return;
+        this.initialized = true;
+        
+        console.log('Initializing Training Interface...');
+        
+        // Initialize Socket.IO
+        this.initSocket();
+        
         // Initialize components
         this.initComponents();
         
-        // Set up navigation
+        // Initialize navigation
         this.initNavigation();
         
-        // Initialize socket connection
-        this.initSocket();
+        // Initialize event listeners
+        this.initEventListeners();
         
-        // Check memory usage periodically
-        this.startMemoryMonitor();
+        // Load initial data
+        this.loadInitialData();
+        
+        // Start periodic updates
+        this.startPeriodicUpdates();
+        
+        console.log('Training Interface initialized');
     }
-    
+
+    /**
+     * Initialize Socket.IO
+     */
+    initSocket() {
+        // Initialize Socket.IO
+        socketService.init();
+        
+        // Set up event handlers
+        socketService.onConnect(() => {
+            this.updateConnectionStatus(true);
+        });
+        
+        socketService.onDisconnect(() => {
+            this.updateConnectionStatus(false);
+        });
+        
+        socketService.onTrainingUpdate((data) => {
+            this.updateTrainingStatus(data);
+        });
+        
+        socketService.onTrainingFinished((data) => {
+            this.handleTrainingFinished(data);
+        });
+        
+        socketService.onError((data) => {
+            this.showAlert(data.message || 'An error occurred', 'error');
+        });
+    }
+
     /**
      * Initialize components
      */
     initComponents() {
         // Initialize dashboard component
-        this.components.dashboard = new DashboardComponent();
-        this.components.dashboard.init();
+        if (typeof dashboardComponent !== 'undefined') {
+            dashboardComponent.init();
+        }
         
         // Initialize training component
-        this.components.training = new TrainingComponent();
-        this.components.training.init();
+        if (typeof trainingComponent !== 'undefined') {
+            trainingComponent.init();
+        }
         
         // Initialize models component
-        this.components.models = new ModelsComponent();
-        this.components.models.init();
+        if (typeof modelsComponent !== 'undefined') {
+            modelsComponent.init();
+        }
         
         // Initialize generation component
-        this.components.generation = new GenerationComponent();
-        this.components.generation.init();
+        if (typeof generationComponent !== 'undefined') {
+            generationComponent.init();
+        }
     }
-    
+
     /**
      * Initialize navigation
      */
     initNavigation() {
-        // Set up navigation event listeners
-        Object.keys(this.navItems).forEach(view => {
-            const navItem = this.navItems[view];
-            if (navItem) {
-                navItem.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    this.showView(view);
-                });
-            }
-        });
+        // Set up navigation
+        const navLinks = document.querySelectorAll('.nav-link');
         
-        // Show initial view
-        this.showView(this.currentView);
-    }
-    
-    /**
-     * Initialize socket connection
-     */
-    initSocket() {
-        // Initialize Socket.IO service
-        socketService.init();
-        
-        // Set up event listeners
-        socketService.onConnect(() => {
-            this.setConnected(true);
-        });
-        
-        socketService.onDisconnect(() => {
-            this.setConnected(false);
-        });
-        
-        socketService.onTrainingUpdate((data) => {
-            // Dispatch training update event
-            document.dispatchEvent(new CustomEvent('training-update', { detail: data }));
-            
-            // Update memory usage
-            if (data.peak_memory_gb !== undefined) {
-                this.updateMemoryUsage(data.peak_memory_gb);
-            }
-        });
-        
-        socketService.onTrainingFinished((data) => {
-            // Dispatch training finished event
-            document.dispatchEvent(new CustomEvent('training-finished', { detail: data }));
-        });
-        
-        socketService.onGenerationStart((data) => {
-            // Set status to working
-            this.setWorking(true);
-        });
-        
-        socketService.onGenerationComplete((data) => {
-            // Set status to connected
-            this.setWorking(false);
-            
-            // Update memory usage
-            if (data.memory_gb !== undefined) {
-                this.updateMemoryUsage(data.memory_gb);
-            }
-            
-            // Handle generation response
-            if (this.components.generation) {
-                this.components.generation.handleGenerationResponse(data);
-            }
-        });
-        
-        socketService.onError((error) => {
-            // Show error message
-            this.showAlert(error.message, 'danger');
-            
-            // Set status to connected
-            this.setWorking(false);
-        });
-    }
-    
-    /**
-     * Start memory monitor
-     */
-    startMemoryMonitor() {
-        // Check memory usage every 30 seconds
-        setInterval(async () => {
-            try {
-                // Get memory usage from API
-                const response = await apiService.getMemoryUsage();
+        navLinks.forEach(link => {
+            link.addEventListener('click', (e) => {
+                e.preventDefault();
                 
-                if (response.memory_gb !== undefined) {
-                    this.updateMemoryUsage(response.memory_gb);
-                }
-            } catch (error) {
-                console.error('Failed to get memory usage:', error);
-            }
-        }, 30000);
-    }
-    
-    /**
-     * Show a view
-     * 
-     * @param {string} view - View name
-     */
-    showView(view) {
-        // Validate view
-        if (!this.viewContainers[view]) {
-            console.error(`View not found: ${view}`);
-            return;
-        }
-        
-        // Hide all views
-        Object.values(this.viewContainers).forEach(container => {
-            if (container) {
-                container.classList.remove('active');
-            }
-        });
-        
-        // Show selected view
-        this.viewContainers[view].classList.add('active');
-        
-        // Update navigation
-        Object.keys(this.navItems).forEach(key => {
-            const navItem = this.navItems[key];
-            if (navItem) {
-                navItem.classList.remove('active');
-                navItem.classList.add('text-white');
-            }
-        });
-        
-        if (this.navItems[view]) {
-            this.navItems[view].classList.add('active');
-            this.navItems[view].classList.remove('text-white');
-        }
-        
-        // Update current view
-        this.currentView = view;
-        
-        // Notify component
-        if (this.components[view] && typeof this.components[view].onActivate === 'function') {
-            this.components[view].onActivate();
-        }
-    }
-    
-    /**
-     * Set connection status
-     * 
-     * @param {boolean} connected - Whether the socket is connected
-     */
-    setConnected(connected) {
-        this.socketConnected = connected;
-        
-        if (this.statusIndicator) {
-            this.statusIndicator.className = 'bi bi-circle-fill me-2';
-            this.statusIndicator.classList.add(connected ? 'connected' : 'disconnected');
-        }
-        
-        if (this.statusText) {
-            this.statusText.textContent = connected ? 'Connected' : 'Disconnected';
-        }
-    }
-    
-    /**
-     * Set working status
-     * 
-     * @param {boolean} working - Whether the application is working
-     */
-    setWorking(working) {
-        if (this.statusIndicator) {
-            this.statusIndicator.className = 'bi bi-circle-fill me-2';
-            this.statusIndicator.classList.add(working ? 'working' : (this.socketConnected ? 'connected' : 'disconnected'));
-        }
-        
-        if (this.statusText) {
-            this.statusText.textContent = working ? 'Working...' : (this.socketConnected ? 'Connected' : 'Disconnected');
-        }
-    }
-    
-    /**
-     * Update memory usage
-     * 
-     * @param {number} memoryGB - Memory usage in GB
-     */
-    updateMemoryUsage(memoryGB) {
-        if (this.memoryUsage) {
-            this.memoryUsage.textContent = `${formatUtil.formatDecimal(memoryGB, 1)} GB`;
-        }
-    }
-    
-    /**
-     * Show loading overlay
-     * 
-     * @param {string} message - Loading message
-     */
-    showLoading(message = 'Loading...') {
-        const loadingOverlay = document.getElementById('loading-overlay');
-        const loadingMessage = document.getElementById('loading-message');
-        
-        if (loadingOverlay) {
-            loadingOverlay.classList.remove('d-none');
-        }
-        
-        if (loadingMessage) {
-            loadingMessage.textContent = message;
-        }
-    }
-    
-    /**
-     * Hide loading overlay
-     */
-    hideLoading() {
-        const loadingOverlay = document.getElementById('loading-overlay');
-        
-        if (loadingOverlay) {
-            loadingOverlay.classList.add('d-none');
-        }
-    }
-    
-    /**
-     * Show alert message
-     * 
-     * @param {string} message - Alert message
-     * @param {string} type - Alert type (success, info, warning, danger)
-     * @param {number} duration - Duration in milliseconds (0 for no auto-hide)
-     */
-    showAlert(message, type = 'info', duration = 5000) {
-        if (!this.alertContainer) {
-            return;
-        }
-        
-        // Create alert element
-        const alertElement = document.createElement('div');
-        alertElement.className = `alert alert-${type} alert-dismissible fade show`;
-        alertElement.role = 'alert';
-        alertElement.innerHTML = `
-            ${message}
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-        `;
-        
-        // Add alert to container
-        this.alertContainer.appendChild(alertElement);
-        
-        // Auto-hide alert
-        if (duration > 0) {
-            setTimeout(() => {
-                alertElement.classList.remove('show');
-                setTimeout(() => {
-                    alertElement.remove();
-                }, 150);
-            }, duration);
-        }
-    }
-    
-    /**
-     * Show confirmation dialog
-     * 
-     * @param {string} title - Dialog title
-     * @param {string} message - Dialog message
-     * @param {Function} onConfirm - Callback function when confirmed
-     * @param {string} confirmText - Confirm button text
-     * @param {string} cancelText - Cancel button text
-     */
-    showConfirm(title, message, onConfirm, confirmText = 'Confirm', cancelText = 'Cancel') {
-        const modal = document.getElementById('confirm-modal');
-        if (!modal) {
-            return;
-        }
-        
-        const modalTitle = document.getElementById('confirm-modal-title');
-        const modalBody = document.getElementById('confirm-modal-body');
-        const confirmBtn = document.getElementById('confirm-modal-confirm');
-        
-        if (modalTitle) {
-            modalTitle.textContent = title;
-        }
-        
-        if (modalBody) {
-            modalBody.textContent = message;
-        }
-        
-        if (confirmBtn) {
-            confirmBtn.textContent = confirmText;
-            
-            // Remove existing event listeners
-            const newConfirmBtn = confirmBtn.cloneNode(true);
-            confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
-            
-            // Add new event listener
-            newConfirmBtn.addEventListener('click', () => {
-                const bsModal = bootstrap.Modal.getInstance(modal);
-                if (bsModal) {
-                    bsModal.hide();
-                }
+                // Get target view
+                const target = link.getAttribute('data-target');
                 
-                if (typeof onConfirm === 'function') {
-                    onConfirm();
-                }
+                // Show view
+                this.showView(target);
             });
+        });
+        
+        // Show default view
+        this.showView('dashboard');
+    }
+
+    /**
+     * Initialize event listeners
+     */
+    initEventListeners() {
+        // Add event listeners here
+    }
+
+    /**
+     * Show a specific view
+     * @param {string} viewId - View ID
+     */
+    showView(viewId) {
+        // Hide all views
+        const views = document.querySelectorAll('.view');
+        views.forEach(view => {
+            view.classList.add('d-none');
+        });
+        
+        // Show target view
+        const targetView = document.getElementById(`${viewId}-view`);
+        if (targetView) {
+            targetView.classList.remove('d-none');
         }
         
-        // Show modal
-        const bsModal = new bootstrap.Modal(modal);
-        bsModal.show();
+        // Update active navigation link
+        const navLinks = document.querySelectorAll('.nav-link');
+        navLinks.forEach(link => {
+            link.classList.remove('active');
+            
+            if (link.getAttribute('data-target') === viewId) {
+                link.classList.add('active');
+            }
+        });
+        
+        // Call onActivate method of the component
+        const componentName = `${viewId}Component`;
+        if (typeof window[componentName] !== 'undefined' && typeof window[componentName].onActivate === 'function') {
+            window[componentName].onActivate();
+        }
+    }
+
+    /**
+     * Load initial data
+     */
+    async loadInitialData() {
+        // Check training status
+        await this.checkTrainingStatus();
+    }
+
+    /**
+     * Start periodic updates
+     */
+    startPeriodicUpdates() {
+        // Check training status every 5 seconds
+        setInterval(() => {
+            this.checkTrainingStatus();
+        }, 5000);
+    }
+
+    /**
+     * Update connection status
+     * @param {boolean} connected - Connection status
+     */
+    updateConnectionStatus(connected) {
+        // Update connection status UI
+        const statusElement = document.getElementById('connection-status');
+        
+        if (statusElement) {
+            statusElement.textContent = connected ? 'Connected' : 'Disconnected';
+            statusElement.classList.toggle('text-success', connected);
+            statusElement.classList.toggle('text-danger', !connected);
+        }
+    }
+
+    /**
+     * Check training status
+     */
+    async checkTrainingStatus() {
+        try {
+            const response = await apiService.getTrainingStatus();
+            
+            // Update UI
+            this.updateTrainingButtons(response.active);
+            
+            // Update training status
+            if (response.active) {
+                this.updateTrainingStatus(response);
+            }
+        } catch (error) {
+            console.error('Failed to check training status:', error);
+        }
+    }
+
+    /**
+     * Update training buttons
+     * @param {boolean} isTraining - Whether training is active
+     */
+    updateTrainingButtons(isTraining) {
+        // Update training buttons UI
+    }
+
+    /**
+     * Update training status
+     * @param {object} data - Training status data
+     */
+    updateTrainingStatus(data) {
+        // Update training status UI
+    }
+
+    /**
+     * Handle training finished
+     * @param {object} data - Training finished data
+     */
+    handleTrainingFinished(data) {
+        // Handle training finished
+    }
+
+    /**
+     * Show an alert
+     * @param {string} message - Alert message
+     * @param {string} type - Alert type (success, info, warning, error)
+     */
+    showAlert(message, type = 'info') {
+        // Show an alert
+        console.log(`[${type}] ${message}`);
     }
 }
 
-// Initialize the application when the DOM is loaded
-document.addEventListener('DOMContentLoaded', () => {
-    // Create app instance
-    window.app = new ForgeLLMApp();
+// Create a singleton instance
+const trainingInterface = new TrainingInterface();
+
+// Wait for DOM to be fully loaded
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize training interface
+    if (typeof trainingInterface !== 'undefined') trainingInterface.init();
     
-    // Initialize app
-    window.app.init();
+    // Initialize components
+    if (typeof trainingComponent !== 'undefined') trainingComponent.init();
+    if (typeof modelsComponent !== 'undefined') modelsComponent.init();
+    if (typeof generationComponent !== 'undefined') generationComponent.init();
+    if (typeof dashboardComponent !== 'undefined') dashboardComponent.init();
+    
+    // Fix for model loading form
+    const modelLoadForm = document.getElementById('model-load-form');
+    if (modelLoadForm) {
+        modelLoadForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const modelName = document.getElementById('test-model-select').value;
+            const adapterPath = document.getElementById('adapter-path').value;
+            
+            // Show loading overlay
+            document.getElementById('loading-overlay').classList.remove('d-none');
+            document.getElementById('loading-message').textContent = 'Loading model...';
+            
+            // Make the API request directly
+            fetch('/api/model/load', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    model_name: modelName,
+                    adapter_path: adapterPath || null
+                }),
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Update UI
+                    document.getElementById('unload-model-btn').disabled = false;
+                    document.getElementById('generate-btn').disabled = false;
+                    
+                    // Update model status
+                    const modelStatus = document.getElementById('model-status');
+                    if (modelStatus) {
+                        modelStatus.innerHTML = `
+                            <div class="d-flex align-items-center">
+                                <div class="status-indicator status-running me-2"></div>
+                                <div>
+                                    <h5 class="mb-0">${modelName}</h5>
+                                    <small class="text-muted">${adapterPath ? `Adapter: ${adapterPath}` : 'No adapter'}</small>
+                                </div>
+                            </div>
+                        `;
+                    }
+                    
+                    console.log(`Model ${modelName} loaded successfully`);
+                } else {
+                    // Show error message
+                    alert(`Failed to load model: ${data.error}`);
+                }
+            })
+            .catch(error => {
+                console.error('Error loading model:', error);
+                alert(`Failed to load model: ${error.message}`);
+            })
+            .finally(() => {
+                // Hide loading overlay
+                document.getElementById('loading-overlay').classList.add('d-none');
+            });
+        });
+    }
 }); 

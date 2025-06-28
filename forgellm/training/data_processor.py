@@ -10,7 +10,7 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
-from forgellm.training.config import TrainingConfig
+from .config import TrainingConfig
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +21,7 @@ class DocumentProcessor:
     def __init__(self, config: TrainingConfig):
         self.config = config
         self.supported_extensions = {'.txt', '.md', '.rst', '.py', '.json'}
+        self.resolved_input_path = None  # Will be set by collect_documents
         
     def is_valid_file(self, file_path: Path) -> bool:
         """Check if file should be processed"""
@@ -39,8 +40,18 @@ class DocumentProcessor:
             if not content:
                 return None
                 
-            # Add metadata for better context
-            metadata = f"# File: {file_path.relative_to(Path(self.config.input_dir))}\n\n"
+            # Add metadata for better context using the resolved input path
+            if self.resolved_input_path:
+                try:
+                    relative_path = file_path.relative_to(self.resolved_input_path)
+                    metadata = f"# File: {relative_path}\n\n"
+                except ValueError:
+                    # Fallback if relative_to fails
+                    metadata = f"# File: {file_path.name}\n\n"
+            else:
+                # Fallback if resolved_input_path is not set
+                metadata = f"# File: {file_path.name}\n\n"
+                
             return metadata + content
             
         except Exception as e:
@@ -52,8 +63,49 @@ class DocumentProcessor:
         documents = []
         input_path = Path(self.config.input_dir)
         
+        # Convert to absolute path if it's relative, using intelligent project root detection
+        if not input_path.is_absolute():
+            # Find the project root (directory containing 'forgellm' folder)
+            current_dir = Path.cwd().resolve()
+            project_root = current_dir
+            
+            # Look for the project root
+            while project_root != project_root.parent:  # Not at filesystem root
+                if (project_root / 'forgellm').exists() and (project_root / 'forgellm').is_dir():
+                    break
+                project_root = project_root.parent
+            
+            # If we're inside the forgellm directory, use the parent as project root
+            if project_root.name == 'forgellm':
+                project_root = project_root.parent
+            
+            # Resolve relative to project root
+            input_path = (project_root / self.config.input_dir).resolve()
+        
+        logger.info(f"Looking for documents in: {input_path}")
+        logger.info(f"Current working directory: {Path.cwd()}")
+        logger.info(f"Project root detected as: {project_root}")
+        
         if not input_path.exists():
-            raise FileNotFoundError(f"Input directory {input_path} does not exist")
+            # Try alternative paths if the direct path doesn't exist
+            alternative_paths = [
+                Path.cwd() / self.config.input_dir,
+                Path.cwd().parent / self.config.input_dir,
+                Path(__file__).parent.parent.parent / self.config.input_dir,
+                project_root / 'forgellm' / 'dataset',  # Common case
+            ]
+            
+            for alt_path in alternative_paths:
+                logger.info(f"Trying alternative path: {alt_path}")
+                if alt_path.exists():
+                    input_path = alt_path
+                    logger.info(f"Found dataset at: {input_path}")
+                    break
+            else:
+                raise FileNotFoundError(f"Input directory not found. Tried: {input_path} and alternatives: {[str(p) for p in alternative_paths]}")
+        
+        # Store the resolved input path for use by extract_text_from_file
+        self.resolved_input_path = input_path
             
         for file_path in input_path.rglob('*'):
             if self.is_valid_file(file_path):

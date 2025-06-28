@@ -11,6 +11,8 @@ from flask_socketio import SocketIO
 from ..api.routes import setup_api
 from .routes import bp as views_bp
 from .services.socket_service import setup_socketio
+from ..models import ModelManager
+from ..training.trainer import ContinuedPretrainer
 
 logger = logging.getLogger(__name__)
 
@@ -31,17 +33,9 @@ def create_app(static_folder=None, template_folder=None):
     if template_folder is None:
         template_folder = os.path.join(os.path.dirname(__file__), 'templates')
     
-    # Check if legacy folders exist and use them if they do
-    legacy_static = os.path.join(os.getcwd(), 'static')
-    legacy_templates = os.path.join(os.getcwd(), 'templates')
-    
-    if os.path.exists(legacy_static) and os.path.isdir(legacy_static):
-        logger.info(f"Using legacy static folder: {legacy_static}")
-        static_folder = legacy_static
-    
-    if os.path.exists(legacy_templates) and os.path.isdir(legacy_templates):
-        logger.info(f"Using legacy template folder: {legacy_templates}")
-        template_folder = legacy_templates
+    # Use package's own static and template folders
+    logger.info(f"Using static folder: {static_folder}")
+    logger.info(f"Using template folder: {template_folder}")
     
     # Create Flask application
     app = Flask(__name__, 
@@ -51,6 +45,10 @@ def create_app(static_folder=None, template_folder=None):
     # Configure application
     app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev_key')
     app.config['MODELS_DIR'] = os.environ.get('MODELS_DIR', 'models')
+    
+    # Initialize model manager and trainer
+    app.model_manager = ModelManager()
+    app.trainer = ContinuedPretrainer()
     
     # Register blueprints
     app.register_blueprint(views_bp)

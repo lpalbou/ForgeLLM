@@ -9,13 +9,14 @@ import os
 import subprocess
 import sys
 import time
+import threading
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Any
 
-from forgellm.training.config import TrainingConfig
-from forgellm.training.data_processor import PretrainingDataProcessor
-from forgellm.training.monitor import AdvancedTrainingMonitor
+from .config import TrainingConfig
+from .data_processor import PretrainingDataProcessor
+from .monitor import AdvancedTrainingMonitor
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +32,9 @@ class ContinuedPretrainer:
         self.monitor = None
         self._training_process = None
         self._is_training_active = False
+        self._output_monitor_thread = None
+        self._should_stop_monitor = False
+        self._log_file_path = None
         
         if config is not None:
             self._initialize_with_config(config)
@@ -287,15 +291,10 @@ class ContinuedPretrainer:
             # Create descriptive model name for logging (similar to IFT pattern)
             model_name_for_logging = f"mnemosyne_cpt_{self.config.model_name.split('/')[-1]}"
             
-            # Import training metrics logger dynamically to avoid dependency issues
-            import importlib.util
-            spec = importlib.util.spec_from_file_location("training_metrics_logger", "training_metrics_logger.py")
-            if spec is None or spec.loader is None:
-                raise ImportError("Could not load training_metrics_logger.py")
-            metrics_logger_module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(metrics_logger_module)
+            # Import our metrics logger
+            from .metrics_logger import create_training_logger
             
-            metrics_logger = metrics_logger_module.create_training_logger(
+            metrics_logger = create_training_logger(
                 training_type="CPT",
                 model_name=model_name_for_logging,
                 output_dir=self.config.output_dir,  # Store logs in output directory
@@ -304,6 +303,9 @@ class ContinuedPretrainer:
                 output_path=self.config.output_dir,
                 training_command=training_command
             )
+            
+            # Initialize variables that might be used in except blocks
+            raw_log_fh = None
                 
             logger.info("🚀 SOTA CONTINUED PRE-TRAINING")
             logger.info("=" * 80)
@@ -343,18 +345,17 @@ class ContinuedPretrainer:
             parsed_metrics = None
             
             # Define a callback function to process each line
-            def process_line(line):
+            def process_line(raw_line, stripped_line):
                 nonlocal parsed_metrics
                 
-                # Write raw line as-is to file and stdout logger
-                raw_log_fh.write(line)
+                # Write raw line with original formatting to file
+                raw_log_fh.write(raw_line)
                 raw_log_fh.flush()
                 
-                line_stripped = line.strip()
-                logger.info(f"MLX-LM: {line_stripped}")
+                logger.info(f"MLX-LM: {stripped_line}")
                 
                 # Parse and log metrics using enhanced logger
-                parsed_metrics = metrics_logger.parse_and_log_line(line_stripped)
+                parsed_metrics = metrics_logger.parse_and_log_line(stripped_line)
                 if parsed_metrics:
                     logger.info(f"📊 Captured metrics for iteration {parsed_metrics.iteration}")
                     
@@ -422,14 +423,18 @@ class ContinuedPretrainer:
             else:
                 logger.error(f"❌ MLX-LM FULL PARAMETER training failed: Process terminated")
             # Still finalize metrics even on failure
-            metrics_logger.finalize_session()
-            raw_log_fh.close()
+            if 'metrics_logger' in locals():
+                metrics_logger.finalize_session()
+            if raw_log_fh and not raw_log_fh.closed:
+                raw_log_fh.close()
             raise
         except Exception as e:
             logger.error(f"❌ MLX-LM FULL PARAMETER training failed with unexpected error: {e}")
             # Still finalize metrics even on failure
-            metrics_logger.finalize_session()
-            raw_log_fh.close()
+            if 'metrics_logger' in locals():
+                metrics_logger.finalize_session()
+            if raw_log_fh and not raw_log_fh.closed:
+                raw_log_fh.close()
             raise
     
     def validate_model(self, model_path: str) -> float:
@@ -463,434 +468,337 @@ class ContinuedPretrainer:
             return float('inf')
 
     def start_training(self, config: TrainingConfig):
-        """Start training with the given configuration"""
+        """Start training in a separate process
+        
+        Args:
+            config: Training configuration
+        """
         if self._is_training_active:
             logger.warning("Training is already active")
             return
+        
+        try:
+            # Initialize with config
+            self._initialize_with_config(config)
             
-        self._initialize_with_config(config)
-        self._is_training_active = True
+            # Create a temporary file to store the config
+            import tempfile
+            import yaml
+            
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as temp_file:
+                yaml.dump(config.to_dict(), temp_file)
+                temp_config_path = temp_file.name
+            
+            # Create a log file path
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            log_dir = Path(config.output_dir) / "logs"
+            log_dir.mkdir(parents=True, exist_ok=True)
+            self._log_file_path = str(log_dir / f"training_log_{timestamp}.json")
+            
+            # Start training in a separate process
+            cmd = [
+                sys.executable,
+                "-m", "forgellm.training.run_training",
+                "--config", temp_config_path,
+                "--log-file", self._log_file_path
+            ]
+            
+            # Set environment variables
+            env = os.environ.copy()
+            
+            # Add the current directory to PYTHONPATH to ensure imports work
+            python_path = env.get('PYTHONPATH', '')
+            current_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            if python_path:
+                env['PYTHONPATH'] = f"{current_dir}:{python_path}"
+            else:
+                env['PYTHONPATH'] = current_dir
+            
+            # Start the process
+            self._training_process = subprocess.Popen(
+                cmd,
+                env=env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                universal_newlines=True,
+                bufsize=1
+            )
+            
+            # Set training active flag
+            self._is_training_active = True
+            
+            # Start output monitor thread
+            self._should_stop_monitor = False
+            self._output_monitor_thread = threading.Thread(
+                target=self._monitor_output,
+                daemon=True
+            )
+            self._output_monitor_thread.start()
+            
+            logger.info(f"Training started with PID {self._training_process.pid}")
+            
+            # Clean up temporary file after a delay
+            def cleanup_temp_file():
+                time.sleep(10)  # Wait for 10 seconds to ensure the file is read
+                try:
+                    os.unlink(temp_config_path)
+                except Exception as e:
+                    logger.warning(f"Failed to clean up temporary config file: {e}")
+            
+            threading.Thread(target=cleanup_temp_file, daemon=True).start()
+            
+            return {
+                "success": True,
+                "message": "Training started successfully",
+                "pid": self._training_process.pid,
+                "log_file": self._log_file_path
+            }
+        except Exception as e:
+            logger.error(f"Failed to start training: {e}")
+            return {
+                "success": False,
+                "message": f"Failed to start training: {e}"
+            }
+    
+    def _monitor_output(self):
+        """Monitor training process output and update status"""
+        # Import here to avoid circular imports
+        try:
+            from ..web.services.socket_service import training_monitor
+        except ImportError:
+            # Fallback if socket service is not available
+            training_monitor = None
         
-        # Start training in a separate process
-        import subprocess
-        import sys
+        if not self._training_process:
+            return
         
-        cmd = [
-            sys.executable, "-m", "forgellm", "train",
-            "--model-name", config.model_name,
-            "--batch-size", str(config.batch_size),
-            "--learning-rate", str(config.learning_rate),
-            "--max-iterations", str(config.max_iterations),
-            "--save-every", str(config.save_every),
-            "--max-seq-length", str(config.max_seq_length),
-            "--fine-tune-type", config.fine_tune_type,
-            "--num-layers", str(config.num_layers),
-            "--lr-schedule", config.lr_schedule,
-            "--warmup-steps", str(config.warmup_steps),
-            "--seed", str(config.seed)
-        ]
-        
-        # Add input and output dirs if specified
-        if config.input_dir != 'mnemosyne':
-            cmd.extend(["--input-dir", config.input_dir])
-        if config.output_dir != 'models':
-            cmd.extend(["--output-dir", config.output_dir])
-        
-        # Start process
-        self._training_process = subprocess.Popen(cmd)
-        logger.info(f"Training started with PID {self._training_process.pid}")
+        try:
+            for line in iter(self._training_process.stdout.readline, ''):
+                if self._should_stop_monitor:
+                    break
+                
+                # Process output line
+                line = line.strip()
+                if not line:
+                    continue
+                
+                logger.info(f"Training: {line}")
+                
+                # Check if training log file exists and has content
+                if self._log_file_path and os.path.exists(self._log_file_path):
+                    try:
+                        # Check if file size is non-zero and read it
+                        if os.path.getsize(self._log_file_path) > 0:
+                            with open(self._log_file_path, 'r') as f:
+                                try:
+                                    training_data = json.load(f)
+                                    
+                                    # Update training monitor with data
+                                    if training_monitor:
+                                        training_monitor.update_training_data(training_data)
+                                except json.JSONDecodeError:
+                                    # File might be partially written, ignore
+                                    pass
+                    except Exception as e:
+                        logger.warning(f"Error reading training log file: {e}")
+                
+                # Check if process is still running
+                if self._training_process.poll() is not None:
+                    # Process has ended
+                    self._is_training_active = False
+                    
+                    # Read final log file
+                    if self._log_file_path and os.path.exists(self._log_file_path):
+                        try:
+                            with open(self._log_file_path, 'r') as f:
+                                training_data = json.load(f)
+                                if training_monitor:
+                                    training_monitor.emit_finished(training_data)
+                        except Exception as e:
+                            logger.warning(f"Error reading final training log file: {e}")
+                    
+                    break
+        except Exception as e:
+            logger.error(f"Error monitoring training output: {e}")
+        finally:
+            self._is_training_active = False
     
     def stop_training(self):
-        """Stop the current training process"""
-        if not self._is_training_active:
+        """Stop the training process"""
+        if not self._is_training_active or not self._training_process:
             logger.warning("No active training to stop")
-            return
+            return {
+                "success": False,
+                "message": "No active training to stop"
+            }
+        
+        try:
+            # Signal the monitor thread to stop
+            self._should_stop_monitor = True
             
-        if self._training_process is not None:
-            import signal
-            self._training_process.send_signal(signal.SIGTERM)
-            self._training_process.wait()
+            # Terminate the process
+            self._training_process.terminate()
+            
+            # Wait for process to end
+            try:
+                self._training_process.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                # Force kill if it doesn't terminate
+                self._training_process.kill()
+                self._training_process.wait(timeout=5)
+            
+            # Set training inactive
+            self._is_training_active = False
+            
             logger.info("Training stopped")
-            
-        self._is_training_active = False
-        self._training_process = None
+            return {
+                "success": True,
+                "message": "Training stopped successfully"
+            }
+        except Exception as e:
+            logger.error(f"Error stopping training: {e}")
+            return {
+                "success": False,
+                "message": f"Error stopping training: {e}"
+            }
     
     def is_training_active(self):
-        """Check if training is active"""
-        # First, check for the specific MLX-LM process we know is running
-        try:
-            import subprocess
-            import re
-            
-            # Run ps command to get all processes
-            result = subprocess.run(['ps', 'aux'], capture_output=True, text=True)
-            if result.returncode == 0:
-                # Check for mlx_lm process with gemma-3-4b-it-bf16
-                if 'mlx_lm' in result.stdout and 'gemma-3-4b-it-bf16' in result.stdout:
-                    logger.info("Found running MLX-LM process with gemma-3-4b-it-bf16")
-                    
-                    # Extract the training directory from the process command line
-                    match = re.search(r'--config\s+([^\s]+)', result.stdout)
-                    if match:
-                        config_path = match.group(1)
-                        training_dir = os.path.dirname(config_path)
-                        
-                        # Set the config if not already set
-                        if not self.config:
-                            try:
-                                import yaml
-                                with open(config_path, 'r') as f:
-                                    yaml_config = yaml.safe_load(f)
-                                    
-                                # Create a minimal config with the essential fields
-                                from .config import TrainingConfig
-                                self.config = TrainingConfig(
-                                    model_name=yaml_config.get('model', 'mlx-community/gemma-3-4b-it-bf16'),
-                                    input_dir='mnemosyne',
-                                    output_dir=training_dir,
-                                    batch_size=yaml_config.get('batch_size', 4),
-                                    learning_rate=yaml_config.get('learning_rate', 3e-6),
-                                    max_iterations=yaml_config.get('iters', 300),
-                                    max_seq_length=yaml_config.get('max_seq_length', 2048)
-                                )
-                                logger.info(f"Loaded config from {config_path}")
-                            except Exception as e:
-                                logger.error(f"Error loading config from yaml: {e}")
-                    
-                    # Set internal state
-                    self._is_training_active = True
-                    return True
-        except Exception as e:
-            logger.error(f"Error checking for MLX-LM processes: {e}")
+        """Check if training is active
         
-        # If we get here, check the internal state
-        if self._training_process is not None:
-            # Check if process is still running
-            returncode = self._training_process.poll()
-            if returncode is not None:
-                # Process has exited
-                logger.info(f"Training process has exited with code {returncode}")
+        Returns:
+            bool: True if training is active, False otherwise
+        """
+        # Check if process is still running
+        if self._is_training_active and self._training_process:
+            if self._training_process.poll() is None:
+                return True
+            else:
+                # Process has ended
                 self._is_training_active = False
-                self._training_process = None
+                return False
         
-        logger.info(f"No active training detected, returning internal state: {self._is_training_active}")
-        return self._is_training_active
+        return False
     
+    def _find_active_training_log(self):
+        """Find the most recent active training log file
+        
+        Returns:
+            str: Path to active training log file, or None if not found
+        """
+        import glob
+        from pathlib import Path
+        
+        # Look for recent training directories in multiple locations
+        possible_dirs = [
+            Path("forgellm/forgellm/models/cpt"),  # Nested forgellm directory
+            Path("forgellm/models/cpt"),           # Single forgellm directory  
+            Path("models/cpt")                     # Direct models directory
+        ]
+        
+        all_log_files = []
+        
+        # Find all CPT log files from today across all possible directories
+        from datetime import datetime
+        today = datetime.now().strftime("%Y-%m-%d")
+        
+        for models_dir in possible_dirs:
+            if models_dir.exists():
+                # Look for today's files first
+                log_pattern = str(models_dir / f"*{today}*" / "CPT_*.json")
+                log_files = glob.glob(log_pattern)
+                all_log_files.extend(log_files)
+                
+                # Also include any recent files as fallback
+                if not log_files:
+                    log_pattern = str(models_dir / "*" / "CPT_*.json")
+                    recent_files = glob.glob(log_pattern)
+                    all_log_files.extend(recent_files)
+        
+        if not all_log_files:
+            return None
+        
+        # Find the most recent log file that indicates active training
+        most_recent = None
+        most_recent_time = 0
+        
+        for log_file in all_log_files:
+            try:
+                with open(log_file, 'r') as f:
+                    data = json.load(f)
+                    
+                # Check if training is still active (no end_time)
+                if data.get('end_time') is None:
+                    # Get the modification time
+                    mtime = os.path.getmtime(log_file)
+                    if mtime > most_recent_time:
+                        most_recent_time = mtime
+                        most_recent = log_file
+            except Exception:
+                continue
+        
+        return most_recent
+
     def get_training_status(self):
-        """Get the current training status"""
+        """Get training status
+        
+        Returns:
+            dict: Training status
+        """
+        # First check if we have our own active training
         status = {
-            'active': self.is_training_active(),
-            'config': self.config.__dict__ if self.config else {},
-            'status': 'running' if self.is_training_active() else 'stopped'
+            "active": self.is_training_active()
         }
         
-        # Add additional status information if available
-        if self.monitor:
-            status.update(self.monitor.get_current_status())
-            
+        log_file_to_read = None
+        
+        # Add log file path if available from our own training
+        if self._log_file_path:
+            status["log_file"] = self._log_file_path
+            log_file_to_read = self._log_file_path
+        else:
+            # Try to find active training from other processes
+            active_log = self._find_active_training_log()
+            if active_log:
+                log_file_to_read = active_log
+                status["log_file"] = active_log
+                status["active"] = True  # We found an active training
+        
+        # Read the log file if we found one
+        if log_file_to_read and os.path.exists(log_file_to_read):
+            try:
+                if os.path.getsize(log_file_to_read) > 0:
+                    with open(log_file_to_read, 'r') as f:
+                        training_data = json.load(f)
+                        status.update(training_data)
+            except Exception as e:
+                logger.warning(f"Error reading training log file: {e}")
+        
         return status
     
     def get_dashboard_data(self):
-        """Get dashboard data for the web UI"""
-        if not self.is_training_active():
-            return {}
+        """Get data for dashboard
+        
+        Returns:
+            dict: Dashboard data
+        """
+        # Get training status
+        status = self.get_training_status()
+        
+        # Add additional dashboard data
+        if "metrics" in status and len(status["metrics"]) > 0:
+            from .dashboard import identify_best_checkpoints, generate_web_chart_data
             
-        # Basic dashboard data
-        data = {
-            'active': True,
-            'config': self.config.__dict__ if self.config else {},
-            'current_iteration': 0,
-            'max_iterations': self.config.max_iterations if self.config else 0,
-            'progress': 0,
-            'train_loss': None,
-            'val_loss': None,
-            'train_perplexity': None,
-            'val_perplexity': None,
-            'elapsed_minutes': 0,
-            'eta_minutes': None,
-            'tokens_per_sec': None,
-            'trained_tokens': None,
-            'peak_memory_gb': None,
-            'learning_rate': None,
-            'charts': {
-                'loss': {'data': [], 'layout': {}},
-                'perplexity': {'data': [], 'layout': {}},
-                'learning_rate': {'data': [], 'layout': {}},
-                'speed': {'data': [], 'layout': {}}
-            }
-        }
-        
-        # Try to read metrics from log file
-        if self.config and self.config.output_dir:
             try:
-                import os
-                import re
-                import json
-                import glob
-                from datetime import datetime
+                # Identify best checkpoints
+                best_checkpoints = identify_best_checkpoints(status)
+                status["best_checkpoints"] = best_checkpoints
                 
-                # Check for metrics JSON file
-                metrics_files = glob.glob(os.path.join(self.config.output_dir, 'CPT_*.json'))
-                
-                if metrics_files:
-                    # Sort by modification time (newest first)
-                    metrics_file = sorted(metrics_files, 
-                                        key=lambda f: os.path.getmtime(f),
-                                        reverse=True)[0]
+                # Generate chart data for web interface
+                charts = generate_web_chart_data(status)
+                if charts:
+                    status["charts"] = charts
                     
-                    logger.info(f"Reading metrics from {metrics_file}")
-                    
-                    with open(metrics_file, 'r') as f:
-                        metrics_data = json.load(f)
-                    
-                    # Extract config
-                    if 'config' in metrics_data:
-                        # Update config if needed
-                        if not self.config:
-                            from .config import TrainingConfig
-                            self.config = TrainingConfig(
-                                model_name=metrics_data['base_model'],
-                                input_dir=metrics_data['config'].get('input_dir', 'mnemosyne'),
-                                output_dir=metrics_data['output_path']
-                            )
-                    
-                    # Extract metrics
-                    if 'metrics' in metrics_data and metrics_data['metrics']:
-                        metrics = metrics_data['metrics']
-                        
-                        # Get the latest metric
-                        latest_metric = metrics[-1]
-                        
-                        # Update data with latest metrics
-                        data['current_iteration'] = latest_metric.get('iteration', 0)
-                        data['train_loss'] = latest_metric.get('train_loss')
-                        data['val_loss'] = latest_metric.get('val_loss')
-                        data['train_perplexity'] = latest_metric.get('train_perplexity')
-                        data['val_perplexity'] = latest_metric.get('val_perplexity')
-                        data['learning_rate'] = latest_metric.get('learning_rate')
-                        data['tokens_per_sec'] = latest_metric.get('tokens_per_sec')
-                        data['trained_tokens'] = latest_metric.get('trained_tokens')
-                        data['peak_memory_gb'] = latest_metric.get('peak_memory_gb')
-                        
-                        # Calculate progress
-                        if data['max_iterations'] > 0:
-                            data['progress'] = (data['current_iteration'] / data['max_iterations']) * 100
-                        
-                        # Calculate elapsed time
-                        if 'start_time' in metrics_data and metrics_data['start_time']:
-                            start_time = datetime.fromisoformat(metrics_data['start_time'])
-                            latest_time = datetime.fromisoformat(latest_metric['timestamp'])
-                            elapsed_seconds = (latest_time - start_time).total_seconds()
-                            data['elapsed_minutes'] = elapsed_seconds / 60
-                            
-                            # Calculate ETA
-                            if data['progress'] > 0:
-                                total_minutes = (data['elapsed_minutes'] * 100) / data['progress']
-                                data['eta_minutes'] = total_minutes - data['elapsed_minutes']
-                        
-                        # Add best checkpoints if available
-                        data['best_checkpoints'] = []
-                        
-                        # Filter metrics with valid val_loss values before sorting
-                        valid_metrics = [m for m in metrics if m.get('val_loss') is not None]
-                        if valid_metrics:
-                            # Sort by validation loss (ascending)
-                            sorted_metrics = sorted(valid_metrics, key=lambda m: m.get('val_loss', float('inf')))
-                            
-                            # Take up to 3 best checkpoints
-                            for i, metric in enumerate(sorted_metrics[:3]):
-                                data['best_checkpoints'].append({
-                                    'iteration': metric.get('iteration'),
-                                    'val_loss': metric.get('val_loss'),
-                                    'val_perplexity': metric.get('val_perplexity'),
-                                    'path': metric.get('checkpoint_path'),
-                                    'selection_reason': 'Best validation loss'
-                                })
-                        
-                        # Generate chart data
-                        iterations = []
-                        train_losses = []
-                        val_losses = []
-                        train_perplexities = []
-                        val_perplexities = []
-                        learning_rates = []
-                        tokens_per_sec = []
-                        
-                        for metric in metrics:
-                            if metric.get('iteration') is not None:
-                                iterations.append(metric['iteration'])
-                                
-                                # Collect train loss data
-                                if metric.get('train_loss') is not None:
-                                    train_losses.append(metric['train_loss'])
-                                else:
-                                    train_losses.append(None)
-                                
-                                # Collect val loss data
-                                if metric.get('val_loss') is not None:
-                                    val_losses.append(metric['val_loss'])
-                                else:
-                                    val_losses.append(None)
-                                
-                                # Collect perplexity data
-                                if metric.get('train_perplexity') is not None:
-                                    train_perplexities.append(metric['train_perplexity'])
-                                else:
-                                    train_perplexities.append(None)
-                                
-                                if metric.get('val_perplexity') is not None:
-                                    val_perplexities.append(metric['val_perplexity'])
-                                else:
-                                    val_perplexities.append(None)
-                                
-                                # Collect learning rate data
-                                if metric.get('learning_rate') is not None:
-                                    learning_rates.append(metric['learning_rate'])
-                                else:
-                                    learning_rates.append(None)
-                                
-                                # Collect speed data
-                                if metric.get('tokens_per_sec') is not None:
-                                    tokens_per_sec.append(metric['tokens_per_sec'])
-                                else:
-                                    tokens_per_sec.append(None)
-                        
-                        # Create chart data
-                        if iterations:
-                            # Loss chart
-                            data['charts']['loss']['data'] = [
-                                {
-                                    'x': iterations,
-                                    'y': train_losses,
-                                    'type': 'scatter',
-                                    'mode': 'lines+markers',
-                                    'name': 'Train Loss',
-                                    'line': {'color': 'rgb(31, 119, 180)'}
-                                },
-                                {
-                                    'x': iterations,
-                                    'y': val_losses,
-                                    'type': 'scatter',
-                                    'mode': 'lines+markers',
-                                    'name': 'Validation Loss',
-                                    'line': {'color': 'rgb(255, 127, 14)'}
-                                }
-                            ]
-                            data['charts']['loss']['layout'] = {
-                                'title': 'Training Loss',
-                                'xaxis': {'title': 'Iteration'},
-                                'yaxis': {'title': 'Loss'},
-                                'legend': {'orientation': 'h', 'y': -0.2}
-                            }
-                            
-                            # Perplexity chart
-                            data['charts']['perplexity']['data'] = [
-                                {
-                                    'x': iterations,
-                                    'y': train_perplexities,
-                                    'type': 'scatter',
-                                    'mode': 'lines+markers',
-                                    'name': 'Train Perplexity',
-                                    'line': {'color': 'rgb(31, 119, 180)'}
-                                },
-                                {
-                                    'x': iterations,
-                                    'y': val_perplexities,
-                                    'type': 'scatter',
-                                    'mode': 'lines+markers',
-                                    'name': 'Validation Perplexity',
-                                    'line': {'color': 'rgb(255, 127, 14)'}
-                                }
-                            ]
-                            data['charts']['perplexity']['layout'] = {
-                                'title': 'Perplexity',
-                                'xaxis': {'title': 'Iteration'},
-                                'yaxis': {'title': 'Perplexity'},
-                                'legend': {'orientation': 'h', 'y': -0.2}
-                            }
-                            
-                            # Learning rate chart
-                            data['charts']['learning_rate']['data'] = [
-                                {
-                                    'x': iterations,
-                                    'y': learning_rates,
-                                    'type': 'scatter',
-                                    'mode': 'lines',
-                                    'name': 'Learning Rate',
-                                    'line': {'color': 'rgb(44, 160, 44)'}
-                                }
-                            ]
-                            data['charts']['learning_rate']['layout'] = {
-                                'title': 'Learning Rate Schedule',
-                                'xaxis': {'title': 'Iteration'},
-                                'yaxis': {'title': 'Learning Rate', 'type': 'log'}
-                            }
-                            
-                            # Speed chart
-                            data['charts']['speed']['data'] = [
-                                {
-                                    'x': iterations,
-                                    'y': tokens_per_sec,
-                                    'type': 'scatter',
-                                    'mode': 'lines',
-                                    'name': 'Tokens/sec',
-                                    'line': {'color': 'rgb(214, 39, 40)'}
-                                }
-                            ]
-                            data['charts']['speed']['layout'] = {
-                                'title': 'Training Speed',
-                                'xaxis': {'title': 'Iteration'},
-                                'yaxis': {'title': 'Tokens/sec'}
-                            }
-                
-                # If no metrics file or couldn't extract data, try to parse the log file
-                if data['current_iteration'] == 0:
-                    log_file = os.path.join(self.config.output_dir, 'mlx_train_output.log')
-                    if os.path.exists(log_file):
-                        with open(log_file, 'r') as f:
-                            log_content = f.read()
-                        
-                        # Extract iteration
-                        iter_match = re.search(r'Iter (\d+): Train loss', log_content)
-                        if iter_match:
-                            data['current_iteration'] = int(iter_match.group(1))
-                            
-                        # Extract train loss
-                        loss_match = re.search(r'Train loss ([\d\.]+)', log_content)
-                        if loss_match:
-                            data['train_loss'] = float(loss_match.group(1))
-                            
-                        # Extract val loss
-                        val_match = re.search(r'Val loss ([\d\.]+)', log_content)
-                        if val_match:
-                            data['val_loss'] = float(val_match.group(1))
-                            
-                        # Extract tokens per second
-                        tps_match = re.search(r'Tokens/sec ([\d\.]+)', log_content)
-                        if tps_match:
-                            data['tokens_per_sec'] = float(tps_match.group(1))
-                            
-                        # Extract trained tokens
-                        tt_match = re.search(r'Trained Tokens (\d+)', log_content)
-                        if tt_match:
-                            data['trained_tokens'] = int(tt_match.group(1))
-                            
-                        # Extract peak memory
-                        mem_match = re.search(r'Peak mem ([\d\.]+) GB', log_content)
-                        if mem_match:
-                            data['peak_memory_gb'] = float(mem_match.group(1))
-                            
-                        # Extract learning rate
-                        lr_match = re.search(r'Learning Rate ([\d\.e\-]+)', log_content)
-                        if lr_match:
-                            data['learning_rate'] = float(lr_match.group(1))
-                            
-                        # Calculate progress
-                        if data['max_iterations'] > 0:
-                            data['progress'] = (data['current_iteration'] / data['max_iterations']) * 100
             except Exception as e:
-                logger.error(f"Error reading metrics: {e}")
-                import traceback
-                logger.error(traceback.format_exc())
+                logger.warning(f"Error generating dashboard data: {e}")
         
-        return data 
+        return status 

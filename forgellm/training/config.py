@@ -118,6 +118,9 @@ class TrainingConfig:
         valid_keys = cls.__annotations__.keys()
         filtered_dict = {k: v for k, v in config_dict.items() if k in valid_keys}
         
+        # Keep input_dir as-is - let the data processor handle path resolution
+        # This avoids issues with different working directories between web interface and training process
+        
         return cls(**filtered_dict)
 
 
@@ -132,10 +135,10 @@ class InstructTuningConfig:
     data_dir: str = "data/instruction_tuning"
     
     # Training parameters
-    batch_size: int = 4
+    batch_size: int = 6
     learning_rate: float = 5e-6
-    max_seq_length: int = 2500
-    max_iterations: int = 100
+    max_seq_length: int = 2048
+    max_iterations: int = 300
     save_every: int = 25
     eval_every: int = 25
     
@@ -229,7 +232,7 @@ def create_default_configs():
     # Create default CPT config
     cpt_config_path = configs_dir / "cpt_default.yaml"
     if not cpt_config_path.exists():
-        cpt_config = TrainingConfig(model_name="mlx-community/gemma-3-4b-it-bf16", input_dir="mnemosyne")
+        cpt_config = TrainingConfig(model_name="mlx-community/gemma-3-4b-it-bf16", input_dir="forgellm/dataset")
         cpt_config.save(str(cpt_config_path))
     
     # Create default IFT config

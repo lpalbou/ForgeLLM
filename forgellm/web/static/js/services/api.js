@@ -1,55 +1,55 @@
 /**
- * API Service
- * 
- * Handles all communication with the backend API.
+ * API service for communicating with the server
  */
+class ApiService {
+    constructor() {
+        this.baseUrl = '';
+    }
 
-const apiService = {
-    /**
-     * Base API URL
-     */
-    baseUrl: '/api',
-    
     /**
      * Make a GET request to the API
-     * 
      * @param {string} endpoint - API endpoint
-     * @param {Object} params - Query parameters
-     * @returns {Promise} - Promise with response data
+     * @param {object} params - Query parameters
+     * @returns {Promise<object>} - Response data
      */
     async get(endpoint, params = {}) {
         try {
-            const url = new URL(`${this.baseUrl}/${endpoint}`, window.location.origin);
-            
-            // Add query parameters
-            Object.keys(params).forEach(key => {
-                url.searchParams.append(key, params[key]);
-            });
-            
-            const response = await fetch(url.toString());
-            
+            // Build query string
+            const queryString = Object.keys(params)
+                .map(key => `${encodeURIComponent(key)}=${encodeURIComponent(params[key])}`)
+                .join('&');
+
+            // Build URL
+            const url = `${this.baseUrl}/api/${endpoint}${queryString ? `?${queryString}` : ''}`;
+
+            // Make request
+            const response = await fetch(url);
+
+            // Check if response is OK
             if (!response.ok) {
                 throw new Error(`API error: ${response.status} ${response.statusText}`);
             }
-            
+
+            // Parse response
             return await response.json();
         } catch (error) {
             console.error(`GET ${endpoint} failed:`, error);
             throw error;
         }
-    },
-    
+    }
+
     /**
      * Make a POST request to the API
-     * 
      * @param {string} endpoint - API endpoint
-     * @param {Object} data - Request body data
-     * @returns {Promise} - Promise with response data
+     * @param {object} data - Request body
+     * @returns {Promise<object>} - Response data
      */
     async post(endpoint, data = {}) {
         try {
-            const url = `${this.baseUrl}/${endpoint}`;
-            
+            // Build URL
+            const url = `${this.baseUrl}/api/${endpoint}`;
+
+            // Make request
             const response = await fetch(url, {
                 method: 'POST',
                 headers: {
@@ -57,220 +57,157 @@ const apiService = {
                 },
                 body: JSON.stringify(data)
             });
-            
+
+            // Check if response is OK
             if (!response.ok) {
                 throw new Error(`API error: ${response.status} ${response.statusText}`);
             }
-            
+
+            // Parse response
             return await response.json();
         } catch (error) {
             console.error(`POST ${endpoint} failed:`, error);
             throw error;
         }
-    },
-    
-    /**
-     * Make a PUT request to the API
-     * 
-     * @param {string} endpoint - API endpoint
-     * @param {Object} data - Request body data
-     * @returns {Promise} - Promise with response data
-     */
-    async put(endpoint, data = {}) {
-        try {
-            const url = `${this.baseUrl}/${endpoint}`;
-            
-            const response = await fetch(url, {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(data)
-            });
-            
-            if (!response.ok) {
-                throw new Error(`API error: ${response.status} ${response.statusText}`);
-            }
-            
-            return await response.json();
-        } catch (error) {
-            console.error(`PUT ${endpoint} failed:`, error);
-            throw error;
-        }
-    },
-    
-    /**
-     * Make a DELETE request to the API
-     * 
-     * @param {string} endpoint - API endpoint
-     * @returns {Promise} - Promise with response data
-     */
-    async delete(endpoint) {
-        try {
-            const url = `${this.baseUrl}/${endpoint}`;
-            
-            const response = await fetch(url, {
-                method: 'DELETE'
-            });
-            
-            if (!response.ok) {
-                throw new Error(`API error: ${response.status} ${response.statusText}`);
-            }
-            
-            return await response.json();
-        } catch (error) {
-            console.error(`DELETE ${endpoint} failed:`, error);
-            throw error;
-        }
-    },
-    
-    // Training API methods
-    
-    /**
-     * Start a new training job
-     * 
-     * @param {Object} config - Training configuration
-     * @returns {Promise} - Promise with response data
-     */
-    async startTraining(config) {
-        return this.post('training/start', config);
-    },
-    
-    /**
-     * Stop the current training job
-     * 
-     * @returns {Promise} - Promise with response data
-     */
-    async stopTraining() {
-        return this.post('training/stop');
-    },
-    
-    /**
-     * Get the current training status
-     * 
-     * @returns {Promise} - Promise with response data
-     */
-    async getTrainingStatus() {
-        return this.get('training/status');
-    },
-    
-    /**
-     * Get dashboard data for the current training
-     * 
-     * @returns {Promise} - Promise with response data
-     */
-    async getDashboardData() {
-        return this.get('dashboard/data');
-    },
-    
-    /**
-     * Get historical dashboard data
-     * 
-     * @param {string} logFile - Path to the log file
-     * @returns {Promise} - Promise with response data
-     */
-    async getHistoricalDashboard(logFile) {
-        return this.post('dashboard/historical', { log_file: logFile });
-    },
-    
-    /**
-     * Publish a checkpoint to a shareable format
-     * 
-     * @param {string} path - Path to the checkpoint
-     * @returns {Promise} - Promise with response data
-     */
-    async publishCheckpoint(path) {
-        return this.post('training/publish_checkpoint', { path });
-    },
-    
-    // Model API methods
-    
+    }
+
     /**
      * Get available base models
-     * 
-     * @returns {Promise} - Promise with response data
+     * @returns {Promise<object>} - Response data
      */
     async getBaseModels() {
         return this.get('base_models');
-    },
-    
+    }
+
     /**
      * Get available CPT models
-     * 
-     * @returns {Promise} - Promise with response data
+     * @returns {Promise<object>} - Response data
      */
     async getCPTModels() {
         return this.get('cpt_models');
-    },
-    
+    }
+
     /**
-     * Get available instruction-tuned models
-     * 
-     * @returns {Promise} - Promise with response data
+     * Get available IFT models
+     * @returns {Promise<object>} - Response data
      */
     async getIFTModels() {
         return this.get('ift_models');
-    },
-    
-    /**
-     * Load a model for generation
-     * 
-     * @param {string} model - Model name or path
-     * @param {string} adapterPath - Optional adapter path
-     * @returns {Promise} - Promise with response data
-     */
-    async loadModel(model, adapterPath = null) {
-        return this.post('models/load', { 
-            model, 
-            adapter_path: adapterPath 
-        });
-    },
-    
-    /**
-     * Unload the current model
-     * 
-     * @returns {Promise} - Promise with response data
-     */
-    async unloadModel() {
-        return this.post('models/unload');
-    },
-    
-    /**
-     * Generate text with the loaded model
-     * 
-     * @param {Object} params - Generation parameters
-     * @returns {Promise} - Promise with response data
-     */
-    async generateText(params) {
-        return this.post('models/generate', params);
-    },
-    
+    }
+
     /**
      * Get dataset information
-     * 
      * @param {string} dir - Dataset directory
-     * @returns {Promise} - Promise with response data
+     * @returns {Promise<object>} - Response data
      */
     async getDatasetInfo(dir = 'mnemosyne') {
         return this.get('dataset/info', { dir });
-    },
-    
+    }
+
     /**
-     * Get memory usage information
-     * 
-     * @returns {Promise} - Promise with response data
+     * Start training
+     * @param {object} config - Training configuration
+     * @returns {Promise<object>} - Response data
      */
-    async getMemoryUsage() {
-        return this.get('memory');
-    },
-    
+    async startTraining(config) {
+        return this.post('training/start', config);
+    }
+
     /**
-     * Check if a training dashboard exists for a model
-     * 
+     * Stop training
+     * @returns {Promise<object>} - Response data
+     */
+    async stopTraining() {
+        return this.post('training/stop');
+    }
+
+    /**
+     * Get training status
+     * @returns {Promise<object>} - Response data
+     */
+    async getTrainingStatus() {
+        return this.get('training/status');
+    }
+
+    /**
+     * Get dashboard data
+     * @returns {Promise<object>} - Response data
+     */
+    async getDashboardData() {
+        return this.get('dashboard/data');
+    }
+
+    /**
+     * Get checkpoints
+     * @returns {Promise<object>} - Response data
+     */
+    async getCheckpoints() {
+        return this.get('checkpoints');
+    }
+
+    /**
+     * Load a model
+     * @param {string} modelName - Model name
+     * @param {string} adapterPath - Adapter path
+     * @returns {Promise<object>} - Response data
+     */
+    async loadModel(modelName, adapterPath = null) {
+        return this.post('model/load', { model_name: modelName, adapter_path: adapterPath });
+    }
+
+    /**
+     * Unload the current model
+     * @returns {Promise<object>} - Response data
+     */
+    async unloadModel() {
+        return this.post('model/unload');
+    }
+
+    /**
+     * Generate text
+     * @param {object} params - Generation parameters
+     * @returns {Promise<object>} - Response data
+     */
+    async generateText(params) {
+        return this.post('model/generate', params);
+    }
+
+    /**
+     * Check if a dashboard exists for a model
      * @param {string} path - Model path
-     * @returns {Promise} - Promise with response data
+     * @returns {Promise<object>} - Response data
      */
     async checkDashboard(path) {
         return this.get('check_dashboard', { path });
     }
-}; 
+
+    /**
+     * Publish a checkpoint
+     * @param {string} path - Checkpoint path
+     * @returns {Promise<object>} - Response data
+     */
+    async publishCheckpoint(path) {
+        return this.post('training/publish_checkpoint', { path });
+    }
+
+    /**
+     * Get raw logs
+     * @param {string} logFile - Log file path
+     * @returns {Promise<object>} - Response data
+     */
+    async getRawLogs(logFile) {
+        return this.post('logs/raw', { log_file: logFile });
+    }
+
+    /**
+     * Get historical dashboard data
+     * @param {string} logFile - Log file path
+     * @returns {Promise<object>} - Response data
+     */
+    async getHistoricalDashboard(logFile) {
+        return this.post('dashboard/historical', { log_file: logFile });
+    }
+}
+
+// Create a singleton instance
+const apiService = new ApiService(); 

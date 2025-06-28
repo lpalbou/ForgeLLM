@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Base Model Detection Test</title>
+</head>
+<body>
+    <h1>Base Model Detection Test</h1>
+    <div id="result"></div>
+    
+    <script>
+    async function testBaseModelDetection() {
+        try {
+            // Simulate the isCurrentModelBase logic
+            const response = await fetch('/api/model/status');
+            const data = await response.json();
+            
+            console.log('🔍 Model status response:', data);
+            
+            if (data.loaded && data.model_name) {
+                const modelName = data.model_name.toLowerCase();
+                console.log('📋 Model name (lowercase):', modelName);
+                
+                const instructPatterns = [
+                    'instruct', 'chat', 'sft', 'dpo', 'rlhf', 
+                    'assistant', 'alpaca', 'vicuna', 'wizard', 'orca',
+                    'dolphin', 'openhermes', 'airoboros', 'nous',
+                    'claude', 'gpt', 'turbo', 'dialogue', 'conversation'
+                ];
+                
+                const specialPatterns = ['it'];
+                
+                const basePatterns = [
+                    'base', 'pt', 'pretrain', 'foundation'
+                ];
+                
+                const hasBasePattern = basePatterns.some(pattern => 
+                    modelName.includes(`-${pattern}`) || 
+                    modelName.includes(`_${pattern}`) ||
+                    modelName.includes(`-${pattern}-`) ||
+                    modelName.includes(`_${pattern}_`) ||
+                    modelName.endsWith(`-${pattern}`) ||
+                    modelName.endsWith(`_${pattern}`) ||
+                    modelName.endsWith(pattern)
+                );
+                
+                console.log('⚡ Has base pattern:', hasBasePattern);
+                
+                if (hasBasePattern) {
+                    console.log('✅ Detected as base model (explicit base pattern found)');
+                    document.getElementById('result').innerHTML = `
+                        <h2>✅ BASE MODEL DETECTED</h2>
+                        <p>Model: ${data.model_name}</p>
+                        <p>Reason: Explicit base pattern found</p>
+                        <p><strong>Prompt should be sent RAW (no User:/Assistant: formatting)</strong></p>
+                    `;
+                    return true;
+                }
+                
+                let hasInstructPattern = instructPatterns.some(pattern => 
+                    modelName.includes(pattern)
+                );
+                
+                console.log('🤖 Has instruct pattern (regular):', hasInstructPattern);
+                
+                if (!hasInstructPattern) {
+                    hasInstructPattern = specialPatterns.some(pattern => {
+                        const regex = new RegExp(`\\b${pattern}\\b`, 'i');
+                        const matches = regex.test(modelName);
+                        console.log(`🔍 Testing special pattern "${pattern}" with regex:`, matches);
+                        return matches;
+                    });
+                }
+                
+                console.log('🤖 Has instruct pattern (final):', hasInstructPattern);
+                
+                const isBase = !hasInstructPattern;
+                console.log('�� Final base model decision:', isBase);
+                
+                document.getElementById('result').innerHTML = `
+                    <h2>${isBase ? '✅ BASE MODEL' : '🤖 INSTRUCT MODEL'} DETECTED</h2>
+                    <p>Model: ${data.model_name}</p>
+                    <p>Has base pattern: ${hasBasePattern}</p>
+                    <p>Has instruct pattern: ${hasInstructPattern}</p>
+                    <p><strong>Prompt formatting: ${isBase ? 'RAW (no User:/Assistant:)' : 'User:/Assistant: format'}</strong></p>
+                `;
+                
+                return isBase;
+            } else {
+                document.getElementById('result').innerHTML = '<h2>❌ No model loaded</h2>';
+                return false;
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            document.getElementById('result').innerHTML = `<h2>❌ Error: ${error.message}</h2>`;
+            return false;
+        }
+    }
+    
+    // Run the test
+    testBaseModelDetection();
+    </script>
+</body>
+</html>

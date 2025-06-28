@@ -3,350 +3,896 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ForgeLLM - Training Interface</title>
-    <link rel="icon" href="/favicon.ico" type="image/x-icon">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
-    <script src="https://cdn.jsdelivr.net/npm/plotly.js@2.20.0/dist/plotly.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/socket.io@4.6.1/client-dist/socket.io.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/marked@4.0.0/marked.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/dompurify@2.3.1/dist/purify.min.js"></script>
+    <title>MLX Training Interface</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <!-- Plotly -->
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <!-- Socket.IO -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    
+    <style>
+        :root {
+            --primary-color: #2E86AB;
+            --secondary-color: #A23B72;
+            --success-color: #28a745;
+            --warning-color: #ffc107;
+            --danger-color: #dc3545;
+            --info-color: #17a2b8;
+            --light-color: #f8f9fa;
+            --dark-color: #343a40;
+        }
+        
+        body {
+            background-color: var(--light-color);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        .navbar {
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .navbar-brand {
+            font-weight: bold;
+            font-size: 1.5rem;
+        }
+        
+        .card {
+            border: none;
+            border-radius: 15px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            transition: transform 0.2s ease;
+        }
+        
+        .card:hover {
+            transform: translateY(-2px);
+        }
+        
+        .card-header {
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            color: white;
+            border-radius: 15px 15px 0 0 !important;
+            font-weight: bold;
+        }
+        
+        .nav-tabs .nav-link {
+            border: none;
+            border-radius: 10px 10px 0 0;
+            margin-right: 5px;
+            font-weight: 500;
+        }
+        
+        .nav-tabs .nav-link.active {
+            background: var(--primary-color);
+            color: white;
+        }
+        
+        .btn-primary {
+            background: var(--primary-color);
+            border-color: var(--primary-color);
+            border-radius: 10px;
+            font-weight: 500;
+        }
+        
+        .btn-success {
+            background: var(--success-color);
+            border-color: var(--success-color);
+            border-radius: 10px;
+        }
+        
+        .btn-danger {
+            background: var(--danger-color);
+            border-color: var(--danger-color);
+            border-radius: 10px;
+        }
+        
+        .form-control, .form-select {
+            border-radius: 10px;
+            border: 2px solid #e9ecef;
+            transition: border-color 0.2s ease;
+        }
+        
+        .form-control:focus, .form-select:focus {
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 0.2rem rgba(46, 134, 171, 0.25);
+        }
+        
+        .progress {
+            height: 25px;
+            border-radius: 15px;
+            background-color: #e9ecef;
+        }
+        
+        .progress-bar {
+            border-radius: 15px;
+            background: linear-gradient(90deg, var(--success-color), var(--primary-color));
+        }
+        
+        .metric-card {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            text-align: center;
+        }
+        
+        .metric-value {
+            font-size: 2rem;
+            font-weight: bold;
+            color: var(--primary-color);
+        }
+        
+        .metric-label {
+            color: var(--dark-color);
+            font-size: 0.9rem;
+            margin-top: 5px;
+        }
+        
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 8px;
+        }
+        
+        .status-running { background-color: var(--success-color); }
+        .status-stopped { background-color: var(--danger-color); }
+        .status-completed { background-color: var(--info-color); }
+        
+        .chart-container {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+        
+        .loading-spinner {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+        
+        .alert {
+            border-radius: 10px;
+            border: none;
+        }
+        
+        .checkpoint-item {
+            background: white;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-left: 4px solid var(--primary-color);
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        }
+        
+        .checkpoint-rank {
+            background: var(--primary-color);
+            color: white;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            margin-right: 10px;
+        }
+        
+        .generation-output {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 15px;
+            font-family: 'Courier New', monospace;
+            white-space: pre-wrap;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        
+        /* Compact chat bubbles */
+        #chat-history .list-group-item {
+            border: none;               /* remove list-group default border */
+            padding: .6rem .8rem;       /* tighter padding */
+            margin-bottom: .3rem;       /* small gap between bubbles */
+            border-radius: .5rem;
+        }
+        #chat-history .chat-user {
+            background: #dee2e6;        /* light grey */
+            text-align: right;
+        }
+        #chat-history .chat-assistant {
+            background: #d0e4ff;        /* light blue */
+            text-align: left;
+        }
+        
+        /* Markdown formatting styles */
+        #chat-history .chat-assistant h1,
+        #chat-history .chat-assistant h2,
+        #chat-history .chat-assistant h3,
+        #chat-history .chat-assistant h4,
+        #chat-history .chat-assistant h5,
+        #chat-history .chat-assistant h6 {
+            margin-top: 0.5rem;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+        }
+        
+        #chat-history .chat-assistant h1 { font-size: 1.5rem; }
+        #chat-history .chat-assistant h2 { font-size: 1.4rem; }
+        #chat-history .chat-assistant h3 { font-size: 1.3rem; }
+        #chat-history .chat-assistant h4 { font-size: 1.2rem; }
+        #chat-history .chat-assistant h5 { font-size: 1.1rem; }
+        #chat-history .chat-assistant h6 { font-size: 1rem; }
+        
+        #chat-history .chat-assistant pre {
+            margin: 0.5rem 0;
+            max-width: 100%;
+            overflow-x: auto;
+        }
+        
+        #chat-history .chat-assistant code {
+            font-family: 'Courier New', monospace;
+        }
+        
+        #chat-history .chat-assistant ul,
+        #chat-history .chat-assistant ol {
+            margin: 0.5rem 0;
+            padding-left: 1.5rem;
+        }
+        
+        #chat-history .chat-assistant blockquote {
+            margin: 0.5rem 0;
+        }
+        
+        #chat-history .chat-assistant p {
+            margin: 0.5rem 0;
+        }
+    </style>
 </head>
 <body>
-    <div class="container-fluid">
-        <div class="row">
-            <!-- Sidebar Navigation -->
-            <div class="col-md-2 bg-dark text-white sidebar">
-                <h2 class="py-3">ForgeLLM</h2>
-                <ul class="nav flex-column">
-                    <li class="nav-item">
-                        <a class="nav-link active" href="#" data-target="dashboard">
-                            <i class="bi bi-speedometer2"></i> Dashboard
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="#" data-target="training">
-                            <i class="bi bi-gear"></i> Training
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="#" data-target="models">
-                            <i class="bi bi-box"></i> Models
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="#" data-target="generate">
-                            <i class="bi bi-chat"></i> Generate
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="#" data-target="settings">
-                            <i class="bi bi-sliders"></i> Settings
-                        </a>
-                    </li>
-                </ul>
-                <div class="mt-auto text-center py-3">
-                    <span id="connection-status" class="badge bg-secondary">Disconnected</span>
-                    <div class="mt-2">
-                        <span>Memory: <span id="memory-usage">0.0 GB</span></span>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-dark">
+        <div class="container">
+            <a class="navbar-brand" href="#">
+                <i class="fas fa-brain me-2"></i>MLX Training Interface
+            </a>
+            <div class="navbar-nav ms-auto">
+                <span class="navbar-text" id="connection-status">
+                    <span class="status-indicator status-stopped"></span>
+                    Connecting...
+                </span>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="container mt-4">
+        <!-- Tabs -->
+        <ul class="nav nav-tabs mb-4" id="mainTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="training-tab" data-bs-toggle="tab" data-bs-target="#training" type="button" role="tab">
+                    <i class="fas fa-play me-2"></i>Training
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="monitoring-tab" data-bs-toggle="tab" data-bs-target="#monitoring" type="button" role="tab">
+                    <i class="fas fa-chart-line me-2"></i>Monitoring
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="testing-tab" data-bs-toggle="tab" data-bs-target="#testing" type="button" role="tab">
+                    <i class="fas fa-flask me-2"></i>Testing
+                </button>
+            </li>
+        </ul>
+
+        <!-- Tab Content -->
+        <div class="tab-content" id="mainTabContent">
+            <!-- Training Tab -->
+            <div class="tab-pane fade show active" id="training" role="tabpanel">
+                <div class="row">
+                    <div class="col-lg-8">
+                        <div class="card">
+                            <div class="card-header">
+                                <i class="fas fa-cog me-2"></i>Training Configuration
+                            </div>
+                            <div class="card-body">
+                                <form id="training-form">
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="model-select" class="form-label">Model</label>
+                                                <select class="form-select" id="model-select" required>
+                                                    <option value="">Loading models...</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <div class="mb-3">
+                                                <label for="input-dir" class="form-label">Training Dataset</label>
+                                                <div class="input-group">
+                                                    <input type="text" class="form-control" id="input-dir" value="forgellm/dataset" required readonly>
+                                                    <button type="button" class="btn btn-outline-primary" id="browse-input-dir">
+                                                        <i class="fas fa-folder-open"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <div class="mb-3">
+                                                <label for="output-dir" class="form-label">Output Directory</label>
+                                                <div class="input-group">
+                                                    <input type="text" class="form-control" id="output-dir" value="models" required readonly>
+                                                    <button type="button" class="btn btn-outline-primary" id="browse-output-dir">
+                                                        <i class="fas fa-folder-open"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="row">
+                                        <div class="col-md-3">
+                                            <div class="mb-3">
+                                                <label for="batch-size" class="form-label">Batch Size</label>
+                                                <input type="number" class="form-control" id="batch-size" value="6" required min="1">
+                                            </div>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <div class="mb-3">
+                                                <label for="learning-rate" class="form-label">Learning Rate</label>
+                                                <input type="text" class="form-control" id="learning-rate" value="3e-6" required>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <div class="mb-3">
+                                                <label for="max-iterations" class="form-label">Max Iterations</label>
+                                                <input type="number" class="form-control" id="max-iterations" value="300" required min="1">
+                                            </div>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <div class="mb-3">
+                                                <label for="warmup-steps" class="form-label">Warmup Steps</label>
+                                                <input type="number" class="form-control" id="warmup-steps" value="60" required min="0">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="row">
+                                        <div class="col-md-4">
+                                            <div class="mb-3">
+                                                <label for="max-seq-length" class="form-label">Max Sequence Length</label>
+                                                <input type="number" class="form-control" id="max-seq-length" value="2048" min="512" max="8192" step="512" required>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <div class="mb-3">
+                                                <label for="weight-decay" class="form-label">Weight Decay</label>
+                                                <input type="number" class="form-control" id="weight-decay" value="0.01" step="0.001" min="0" max="0.1" required>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <div class="mb-3">
+                                                <label for="lr-decay-factor" class="form-label">LR Decay Factor</label>
+                                                <input type="number" class="form-control" id="lr-decay-factor" value="0.1" step="0.01" min="0.01" max="1.0" required>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="row">
+                                        <div class="col-md-4">
+                                            <div class="mb-3">
+                                                <label for="fine-tune-type" class="form-label">Fine-tuning Type</label>
+                                                <select class="form-select" id="fine-tune-type" required>
+                                                    <option value="full" selected>Full (all parameters)</option>
+                                                    <option value="lora">LoRA</option>
+                                                    <option value="dora">DoRA</option>
+                                                </select>
+                                                <small class="form-text text-muted">Full trains all parameters, LoRA/DoRA use parameter-efficient methods</small>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <div class="mb-3">
+                                                <label for="num-layers" class="form-label">Layers to Fine-tune</label>
+                                                <input type="number" class="form-control" id="num-layers" value="-1" min="-1" max="100" step="1" required>
+                                                <small class="form-text text-muted">Use -1 for all layers or specify number (for LoRA/DoRA)</small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="row">
+                                        <div class="col-md-4">
+                                            <div class="mb-3">
+                                                <label for="lr-schedule" class="form-label">LR Schedule</label>
+                                                <select class="form-select" id="lr-schedule" required>
+                                                    <option value="cosine_decay">Cosine Decay</option>
+                                                    <option value="linear_decay">Linear Decay</option>
+                                                    <option value="constant">Constant</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <div class="mb-3">
+                                                <label for="save-every" class="form-label">Save Every X Steps</label>
+                                                <select class="form-select" id="save-every" required>
+                                                    <option value="5">5 steps</option>
+                                                    <option value="10">10 steps</option>
+                                                    <option value="25">25 steps</option>
+                                                    <option value="50" selected>50 steps</option>
+                                                    <option value="100">100 steps</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <div class="mb-3">
+                                                <label for="eval-every" class="form-label">Eval Every X Steps</label>
+                                                <select class="form-select" id="eval-every" required>
+                                                    <option value="5">5</option>
+                                                    <option value="10">10</option>
+                                                    <option value="25" selected>25</option>
+                                                    <option value="50">50</option>
+                                                    <option value="100">100</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <div class="mb-3">
+                                                <label for="val-fast-pct" class="form-label">Quick Val %</label>
+                                                <input type="number" class="form-control" id="val-fast-pct" value="1.0" step="0.01" min="0.05" max="1" required>
+                                                <small class="form-text text-muted">Percentage of validation set used for quick checks</small>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <div class="mb-3">
+                                                <label for="validation-split" class="form-label">Validation Split</label>
+                                                <input type="number" class="form-control" id="validation-split" value="0.1" step="0.01" min="0.05" max="0.3" required>
+                                                <small class="form-text text-muted">Fraction of data used for validation</small>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <div class="mb-3">
+                                                <div class="form-check mt-4">
+                                                    <!-- Early stopping is disabled by default. Users can enable it here. -->
+                                                    <input class="form-check-input" type="checkbox" id="enable-early-stopping">
+                                                    <label class="form-check-label" for="enable-early-stopping">
+                                                        Enable Early Stopping
+                                                    </label>
+                                                    <small class="form-text text-muted">When enabled, training stops if validation loss stops improving (disabled by default)</small>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Training Estimates -->
+                                    <div class="row">
+                                        <div class="col-12">
+                                            <div class="alert alert-info" id="training-estimates">
+                                                <i class="fas fa-calculator me-2"></i>
+                                                <strong>Training Estimates:</strong>
+                                                <span id="epoch-estimate">Configure parameters to see estimates</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Learning Rate Schedule Preview -->
+                                    <div class="row mt-3">
+                                        <div class="col-12">
+                                            <div class="card mb-4">
+                                                <div class="card-header">
+                                                    <i class="fas fa-chart-line me-2"></i>Learning Rate Schedule Preview
+                                                </div>
+                                                <div class="card-body">
+                                                    <div id="lr-schedule-chart" style="height: 300px;"></div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                                        <button type="button" class="btn btn-danger me-md-2" id="stop-training-btn" disabled>
+                                            <i class="fas fa-stop me-2"></i>Stop Training
+                                        </button>
+                                        <button type="submit" class="btn btn-primary" id="start-training-btn">
+                                            <i class="fas fa-play me-2"></i>Start Training
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-lg-4">
+                        <div class="card">
+                            <div class="card-header">
+                                <i class="fas fa-info-circle me-2"></i>Training Status
+                            </div>
+                            <div class="card-body">
+                                <div id="training-status">
+                                    <div class="text-center text-muted">
+                                        <i class="fas fa-clock fa-2x mb-3"></i>
+                                        <p>No training in progress</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="card mt-3">
+                            <div class="card-header">
+                                <i class="fas fa-graduation-cap me-2"></i>Training Sessions
+                            </div>
+                            <div class="card-body">
+                                <div id="checkpoints-list">
+                                    <div class="text-center text-muted">
+                                        <i class="fas fa-folder-open fa-2x mb-3"></i>
+                                        <p>Loading checkpoints...</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
-            
-            <!-- Main Content Area -->
-            <div class="col-md-10 main-content">
-                <!-- Dashboard View -->
-                <div id="dashboard-view" class="view">
-                    <h1>Dashboard</h1>
-                    <div class="row">
-                        <div class="col-md-12">
-                            <div class="card mb-4">
-                                <div class="card-header">
-                                    <h5>Training Progress</h5>
-                                </div>
-                                <div class="card-body">
-                                    <div id="training-progress"></div>
+
+            <!-- Monitoring Tab -->
+            <div class="tab-pane fade" id="monitoring" role="tabpanel">
+                <div class="row">
+                    <!-- Training Session Selection -->
+                    <div class="col-12 mb-4">
+                        <div class="card">
+                            <div class="card-header">
+                                <i class="fas fa-history me-2"></i>Training Session
+                            </div>
+                            <div class="card-body">
+                                <div class="row align-items-end">
+                                    <div class="col-md-8">
+                                        <label for="training-session-select" class="form-label">Select Training Session</label>
+                                        <select class="form-select" id="training-session-select">
+                                            <option value="">Current training session</option>
+                                        </select>
+                                    </div>
+                                                        <div class="col-md-4 d-flex gap-2">
+                        <button type="button" class="btn btn-primary flex-grow-1" id="load-session-btn">
+                            <i class="fas fa-eye me-2"></i>View Session
+                        </button>
+                        <button type="button" class="btn btn-outline-info" id="view-logs-btn" title="View session logs">
+                            <i class="fas fa-file-code"></i>
+                        </button>
+                    </div>
                                 </div>
                             </div>
                         </div>
                     </div>
-                </div>
-                
-                <!-- Training View -->
-                <div id="training-view" class="view d-none">
-                    <h1>Training Configuration</h1>
-                    <div class="row">
-                        <div class="col-md-12">
-                            <form id="training-config-form">
-                                <div class="card mb-4">
-                                    <div class="card-header">
-                                        <h5>Model Configuration</h5>
-                                    </div>
-                                    <div class="card-body">
-                                        <div class="row mb-3">
-                                            <div class="col-md-6">
-                                                <label for="model_name" class="form-label">Model Name</label>
-                                                <input type="text" class="form-control" id="model_name" name="model_name" 
-                                                       placeholder="Base model to train (e.g., mistralai/Mistral-7B-v0.1)" required>
-                                                <small class="text-muted">Base model to train (e.g., mistralai/Mistral-7B-v0.1)</small>
-                                            </div>
-                                            <div class="col-md-6">
-                                                <label for="dataset" class="form-label">Dataset Directory</label>
-                                                <input type="text" class="form-control" id="dataset" name="dataset" 
-                                                       placeholder="Path to training data" required>
-                                                <small class="text-muted">Path to training data directory</small>
-                                            </div>
-                                        </div>
+                    
+                    <!-- Key Metrics -->
+                    <div class="col-12">
+                        <div class="row" id="metrics-row">
+                            <div class="col-md-2">
+                                <div class="metric-card">
+                                    <div class="metric-value" id="current-iteration">-</div>
+                                    <div class="metric-label">Iteration</div>
+                                </div>
+                            </div>
+                            <div class="col-md-2">
+                                <div class="metric-card">
+                                    <div class="metric-value" id="train-loss">-</div>
+                                    <div class="metric-label">Train Loss</div>
+                                </div>
+                            </div>
+                            <div class="col-md-2">
+                                <div class="metric-card">
+                                    <div class="metric-value" id="val-loss">-</div>
+                                    <div class="metric-label">Val Loss</div>
+                                </div>
+                            </div>
+                            <div class="col-md-2">
+                                <div class="metric-card">
+                                    <div class="metric-value" id="perplexity">-</div>
+                                    <div class="metric-label">Perplexity</div>
+                                </div>
+                            </div>
+                            <div class="col-md-2">
+                                <div class="metric-card">
+                                    <div class="metric-value" id="tokens-per-sec">-</div>
+                                    <div class="metric-label">Tokens/sec</div>
+                                </div>
+                            </div>
+                            <div class="col-md-2">
+                                <div class="metric-card">
+                                    <div class="metric-value" id="trained-tokens">-</div>
+                                    <div class="metric-label">Trained Tokens</div>
+                                </div>
+                            </div>
+                            <div class="col-md-2">
+                                <div class="metric-card">
+                                    <div class="metric-value" id="epoch-done">-</div>
+                                    <div class="metric-label">Epoch</div>
+                                </div>
+                            </div>
+                            <div class="col-md-2">
+                                <div class="metric-card">
+                                    <div class="metric-value" id="memory-usage">-</div>
+                                    <div class="metric-label">Memory (GB)</div>
+                                </div>
+                            </div>
+                            <div class="col-md-2">
+                                <div class="metric-card">
+                                    <div class="metric-value" id="learning-rate">-</div>
+                                    <div class="metric-label">Learning Rate</div>
+                                </div>
+                            </div>
+                            <div class="col-md-2">
+                                <div class="metric-card">
+                                    <div class="metric-value" id="warmup-steps">-</div>
+                                    <div class="metric-label">Warmup Steps</div>
+                                </div>
+                            </div>
+                            <div class="col-md-2">
+                                <div class="metric-card">
+                                    <div class="metric-value" id="lr-decay-factor">-</div>
+                                    <div class="metric-label">LR Decay</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Progress Bar -->
+                    <div class="col-12 mb-4">
+                        <div class="card">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <span>Training Progress</span>
+                                    <div class="d-flex align-items-center gap-3">
+                                        <span id="elapsed-time" class="text-muted small">E.Time: --</span>
+                                        <span id="eta-time" class="text-muted small">R.Time: --</span>
+                                        <span id="progress-text">0%</span>
                                     </div>
                                 </div>
-                                
-                                <div class="card mb-4">
-                                    <div class="card-header">
-                                        <h5>Training Parameters</h5>
-                                    </div>
-                                    <div class="card-body">
-                                        <div class="row mb-3">
-                                            <div class="col-md-4">
-                                                <label for="batch_size" class="form-label">Batch Size</label>
-                                                <input type="number" class="form-control" id="batch_size" name="batch_size" 
-                                                       value="4" min="1" required>
-                                            </div>
-                                            <div class="col-md-4">
-                                                <label for="learning_rate" class="form-label">Learning Rate</label>
-                                                <input type="number" class="form-control" id="learning_rate" name="learning_rate" 
-                                                       value="5e-6" step="1e-6" required>
-                                            </div>
-                                            <div class="col-md-4">
-                                                <label for="epochs" class="form-label">Max Iterations</label>
-                                                <input type="number" class="form-control" id="epochs" name="epochs" 
-                                                       value="1000" min="1" required>
-                                            </div>
-                                        </div>
-                                        
-                                        <div class="row mb-3">
-                                            <div class="col-md-4">
-                                                <label for="validation_split" class="form-label">Validation Split</label>
-                                                <input type="number" class="form-control" id="validation_split" name="validation_split" 
-                                                       value="0.1" min="0" max="0.5" step="0.01" required>
-                                            </div>
-                                            <div class="col-md-4">
-                                                <label for="sequence_length" class="form-label">Sequence Length</label>
-                                                <input type="number" class="form-control" id="sequence_length" name="sequence_length" 
-                                                       value="2048" min="128" required>
-                                            </div>
-                                            <div class="col-md-4">
-                                                <label for="warmup_steps" class="form-label">Warmup Steps</label>
-                                                <input type="number" class="form-control" id="warmup_steps" name="warmup_steps" 
-                                                       value="150" min="0" required>
-                                            </div>
-                                        </div>
-                                        
-                                        <div class="row mb-3">
-                                            <div class="col-md-4">
-                                                <label for="eval_interval" class="form-label">Eval Interval</label>
-                                                <input type="number" class="form-control" id="eval_interval" name="eval_interval" 
-                                                       value="25" min="1" required>
-                                            </div>
-                                            <div class="col-md-4">
-                                                <label for="save_interval" class="form-label">Save Interval</label>
-                                                <input type="number" class="form-control" id="save_interval" name="save_interval" 
-                                                       value="500" min="1" required>
-                                            </div>
-                                            <div class="col-md-4">
-                                                <label for="gradient_accumulation_steps" class="form-label">Gradient Accumulation</label>
-                                                <input type="number" class="form-control" id="gradient_accumulation_steps" name="gradient_accumulation_steps" 
-                                                       value="1" min="1" required>
-                                            </div>
-                                        </div>
-                                        
-                                        <div class="form-check form-switch mb-3">
-                                            <input class="form-check-input" type="checkbox" id="use_lora" name="use_lora">
-                                            <label class="form-check-label" for="use_lora">Use LoRA</label>
-                                        </div>
-                                        
-                                        <div id="lora-options" class="row mb-3">
-                                            <div class="col-md-4">
-                                                <label for="lora_r" class="form-label">LoRA Rank</label>
-                                                <input type="number" class="form-control" id="lora_r" name="lora_r" 
-                                                       value="8" min="1">
-                                            </div>
-                                            <div class="col-md-4">
-                                                <label for="lora_alpha" class="form-label">LoRA Alpha</label>
-                                                <input type="number" class="form-control" id="lora_alpha" name="lora_alpha" 
-                                                       value="16" min="1">
-                                            </div>
-                                            <div class="col-md-4">
-                                                <label for="lora_dropout" class="form-label">LoRA Dropout</label>
-                                                <input type="number" class="form-control" id="lora_dropout" name="lora_dropout" 
-                                                       value="0.05" min="0" max="1" step="0.01">
-                                            </div>
-                                        </div>
-                                    </div>
+                                <div class="progress">
+                                    <div class="progress-bar" id="progress-bar" role="progressbar" style="width: 0%"></div>
                                 </div>
-                                
-                                <div class="d-grid gap-2">
-                                    <button type="submit" class="btn btn-primary" id="start-training-btn">Start Training</button>
-                                </div>
-                            </form>
-                            
-                            <div id="training-monitoring" class="mt-4 d-none">
-                                <div class="card mb-4">
-                                    <div class="card-header d-flex justify-content-between align-items-center">
-                                        <h5 class="mb-0">Training Progress</h5>
-                                        <button class="btn btn-danger btn-sm" id="stop-training-btn">Stop Training</button>
-                                    </div>
-                                    <div class="card-body">
-                                        <div class="progress mb-3">
-                                            <div id="training-progress" class="progress-bar" role="progressbar" style="width: 0%;" 
-                                                 aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">0%</div>
-                                        </div>
-                                        
-                                        <div class="row">
-                                            <div class="col-md-6">
-                                                <div class="mb-2">
-                                                    <strong>Status:</strong> <span id="training-status">Initializing...</span>
-                                                </div>
-                                                <div class="mb-2">
-                                                    <strong>Iteration:</strong> <span id="training-iteration">0/0</span>
-                                                </div>
-                                                <div class="mb-2">
-                                                    <strong>Loss:</strong> <span id="training-loss">—</span>
-                                                </div>
-                                                <div class="mb-2">
-                                                    <strong>Validation Loss:</strong> <span id="training-val-loss">—</span>
-                                                </div>
-                                            </div>
-                                            <div class="col-md-6">
-                                                <div class="mb-2">
-                                                    <strong>Elapsed:</strong> <span id="training-elapsed">00:00:00</span>
-                                                </div>
-                                                <div class="mb-2">
-                                                    <strong>ETA:</strong> <span id="training-eta">00:00:00</span>
-                                                </div>
-                                                <div class="mb-2">
-                                                    <strong>Speed:</strong> <span id="training-speed">0 tokens/sec</span>
-                                                </div>
-                                                <div class="mb-2">
-                                                    <strong>Memory:</strong> <span id="training-memory">0.0 GB</span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                                
-                                <div class="row">
-                                    <div class="col-md-6">
-                                        <div class="card mb-4">
-                                            <div class="card-header">
-                                                <h5>Loss</h5>
-                                            </div>
-                                            <div class="card-body">
-                                                <canvas id="loss-chart" height="250"></canvas>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <div class="card mb-4">
-                                            <div class="card-header">
-                                                <h5>Perplexity</h5>
-                                            </div>
-                                            <div class="card-body">
-                                                <canvas id="perplexity-chart" height="250"></canvas>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                                
-                                <div class="row">
-                                    <div class="col-md-6">
-                                        <div class="card mb-4">
-                                            <div class="card-header">
-                                                <h5>Learning Rate</h5>
-                                            </div>
-                                            <div class="card-body">
-                                                <canvas id="learning-rate-chart" height="250"></canvas>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <div class="card mb-4">
-                                            <div class="card-header">
-                                                <h5>Performance</h5>
-                                            </div>
-                                            <div class="card-body">
-                                                <canvas id="performance-chart" height="250"></canvas>
-                                            </div>
-                                        </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Charts -->
+                    <div class="col-lg-6">
+                        <div class="chart-container">
+                            <div id="loss-chart"></div>
+                        </div>
+                    </div>
+                    <div class="col-lg-6">
+                        <div class="chart-container">
+                            <div id="perplexity-chart"></div>
+                        </div>
+                    </div>
+                    <div class="col-lg-6">
+                        <div class="chart-container">
+                            <div id="lr-chart"></div>
+                        </div>
+                    </div>
+                    <div class="col-lg-6">
+                        <div class="chart-container">
+                            <div id="speed-chart"></div>
+                        </div>
+                    </div>
+                    
+                    <!-- Best Checkpoints -->
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header">
+                                <i class="fas fa-trophy me-2"></i>Top 3 Best Checkpoints
+                            </div>
+                            <div class="card-body">
+                                <div id="best-checkpoints">
+                                    <div class="text-center text-muted">
+                                        <i class="fas fa-chart-line fa-2x mb-3"></i>
+                                        <p>No training data available</p>
                                     </div>
                                 </div>
                             </div>
                         </div>
                     </div>
-                </div>
-                
-                <!-- Models View -->
-                <div id="models-view" class="view d-none">
-                    <h1>Models</h1>
-                    <div class="row">
-                        <div class="col-md-12">
-                            <div class="card mb-4">
-                                <div class="card-header">
-                                    <h5>CPT Models</h5>
+                    
+                    <!-- All Checkpoints Selection -->
+                    <div class="col-12 mt-3">
+                        <div class="card">
+                            <div class="card-header">
+                                <i class="fas fa-list-alt me-2"></i>All Available Checkpoints
+                            </div>
+                            <div class="card-body">
+                                <div class="row align-items-end">
+                                    <div class="col-md-8">
+                                        <label for="checkpoint-select" class="form-label">Select Checkpoint to Publish</label>
+                                        <select class="form-select" id="checkpoint-select">
+                                            <option value="">Select a checkpoint...</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <button type="button" class="btn btn-primary w-100" id="publish-selected-checkpoint-btn">
+                                            <i class="fas fa-cloud-upload-alt me-2"></i>Publish Selected Checkpoint
+                                        </button>
+                                    </div>
                                 </div>
-                                <div class="card-body">
-                                    <div id="cpt-models-list"></div>
+                                <div class="mt-3 small text-muted">
+                                    <i class="fas fa-info-circle me-1"></i>
+                                    This list shows all available checkpoints for the selected training session.
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
-                
-                <!-- Generate View -->
-                <div id="generate-view" class="view d-none">
-                    <h1>Generate</h1>
-                    <div class="row">
-                        <div class="col-md-12">
-                            <div class="card mb-4">
-                                <div class="card-header">
-                                    <h5>Model Selection</h5>
-                                </div>
-                                <div class="card-body">
-                                    <div class="row">
-                                        <div class="col-md-6">
-                                            <label for="base-model-select">Base Model</label>
-                                            <select class="form-select" id="base-model-select"></select>
-                                        </div>
-                                        <div class="col-md-6">
-                                            <label for="adapter-select">Adapter</label>
-                                            <select class="form-select" id="adapter-select">
-                                                <option value="">None</option>
+            </div>
+
+            <!-- Testing Tab -->
+            <div class="tab-pane fade" id="testing" role="tabpanel">
+                <div class="row">
+                    <div class="col-lg-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <i class="fas fa-upload me-2"></i>Load Model
+                            </div>
+                            <div class="card-body">
+                                <form id="model-load-form">
+                                    <div class="mb-3">
+                                        <label for="test-model-select" class="form-label">Base Model</label>
+                                        <div class="input-group">
+                                            <select class="form-select" id="test-model-select" required>
+                                                <option value="">Select model...</option>
                                             </select>
+                                            <button class="btn btn-outline-secondary" type="button" id="copy-model-path-btn" title="Copy full model path">
+                                                <i class="fas fa-copy"></i>
+                                            </button>
+                                            <button class="btn btn-outline-info" type="button" id="view-dashboard-btn" title="View training dashboard" disabled>
+                                                <i class="fas fa-chart-line"></i>
+                                            </button>
                                         </div>
                                     </div>
-                                    <div class="mt-3">
-                                        <button id="load-model-btn" class="btn btn-primary">Load Model</button>
-                                        <button id="unload-model-btn" class="btn btn-secondary" disabled>Unload Model</button>
+                                    <div class="mb-3">
+                                        <label for="adapter-path" class="form-label">Adapter Path (Optional)</label>
+                                        <div class="input-group">
+                                            <select class="form-select" id="adapter-path">
+                                                <option value="">No adapter (base model only)</option>
+                                            </select>
+                                            <button class="btn btn-outline-secondary" type="button" id="copy-adapter-path-btn" title="Copy full adapter path">
+                                                <i class="fas fa-copy"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label for="system-prompt" class="form-label">System Prompt</label>
+                                        <textarea class="form-control" id="system-prompt" rows="2" placeholder="Optional system prompt to guide model behavior..."></textarea>
+                                    </div>
+                                    <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                                        <button type="button" class="btn btn-outline-primary me-md-2" id="publish-checkpoint-btn">
+                                            <i class="fas fa-upload me-1"></i>Publish Adapter
+                                        </button>
+                                        <button type="button" class="btn btn-danger me-md-2" id="unload-model-btn" disabled>
+                                            <i class="fas fa-times me-2"></i>Unload Model
+                                        </button>
+                                        <button type="submit" class="btn btn-primary" id="load-model-btn">
+                                            <i class="fas fa-download me-2"></i>Load Model
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                        
+                        <div class="card mt-3">
+                            <div class="card-header">
+                                <i class="fas fa-edit me-2"></i>Generate Text
+                            </div>
+                            <div class="card-body">
+                                <form id="generation-form">
+                                    <div class="mb-3">
+                                        <label for="prompt-input" class="form-label">Prompt</label>
+                                        <textarea class="form-control" id="prompt-input" rows="3" placeholder="Enter your prompt here..." required></textarea>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label for="max-tokens" class="form-label">Max Tokens</label>
+                                        <input type="number" class="form-control" id="max-tokens" value="2000" min="1" required>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">Advanced Parameters</label>
+                                        <div class="row g-2">
+                                            <div class="col-md-4">
+                                                <div class="input-group">
+                                                    <span class="input-group-text">Temperature</span>
+                                                    <input type="number" class="form-control" id="temperature" value="0.7" min="0.0" max="2.0" step="0.1">
+                                                </div>
+                                            </div>
+                                            <div class="col-md-4">
+                                                <div class="input-group">
+                                                    <span class="input-group-text">Top P</span>
+                                                    <input type="number" class="form-control" id="top-p" value="0.9" min="0.0" max="1.0" step="0.05">
+                                                </div>
+                                            </div>
+                                            <div class="col-md-4">
+                                                <div class="input-group">
+                                                    <span class="input-group-text">Rep. Penalty</span>
+                                                    <input type="number" class="form-control" id="repetition-penalty" value="1.1" min="1.0" max="2.0" step="0.05">
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="row g-2 mt-2">
+                                            <div class="col-md-6">
+                                                <div class="input-group">
+                                                    <span class="input-group-text">Context Window</span>
+                                                    <select class="form-select" id="max-kv-size">
+                                                        <option value="512">512</option>
+                                                        <option value="1024">1K (1,024)</option>
+                                                        <option value="2048">2K (2,048)</option>
+                                                        <option value="4096">4K (4,096)</option>
+                                                        <option value="8192" selected>8K (8,192)</option>
+                                                        <option value="16384">16K (16,384)</option>
+                                                        <option value="32768">32K (32,768)</option>
+                                                        <option value="65536">64K (65,536)</option>
+                                                        <option value="131072">128K (131,072)</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                                        <button type="button" class="btn btn-warning me-md-2" id="stop-generation-btn" disabled>
+                                            <i class="fas fa-stop me-2"></i>Stop Generation
+                                        </button>
+                                        <button type="submit" class="btn btn-success" id="generate-btn" disabled>
+                                            <i class="fas fa-magic me-2"></i>Generate
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-lg-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <i class="fas fa-terminal me-2"></i>Generation Output
+                            </div>
+                            <div class="card-body p-0">
+                                <!-- Toolbar -->
+                                <div class="d-flex justify-content-between align-items-center px-3 py-2 border-bottom">
+                                    <div class="btn-group" role="group" aria-label="Chat toolbar">
+                                        <button id="clear-chat-btn" class="btn btn-sm btn-outline-secondary" disabled>
+                                            <i class="fas fa-trash"></i> Clear
+                                        </button>
+                                        <button id="toggle-chat-btn" class="btn btn-sm btn-outline-secondary" data-bs-toggle="tooltip" title="Toggle chat history for context (on by default)">
+                                            <i class="fas fa-book-open"></i> History: On
+                                        </button>
+                                        <button id="save-chat-btn" class="btn btn-sm btn-outline-primary" disabled data-bs-toggle="tooltip" title="Saves conversation with model metadata">
+                                            <i class="fas fa-save"></i> Save History <i class="fas fa-tag small"></i>
+                                        </button>
+                                    </div>
+                                    <small id="chat-stats" class="text-muted"></small>
+                                </div>
+
+                                <!-- Chat history -->
+                                <div id="chat-history" class="list-group overflow-auto" style="height:60vh;">
+                                    <div class="text-center text-muted mt-5">
+                                        <i class="fas fa-robot fa-2x mb-3"></i>
+                                        <p>Load a model and enter a prompt to start generating text</p>
                                     </div>
                                 </div>
                             </div>
                         </div>
-                    </div>
-                </div>
-                
-                <!-- Settings View -->
-                <div id="settings-view" class="view d-none">
-                    <h1>Settings</h1>
-                    <div class="row">
-                        <div class="col-md-12">
-                            <div class="card mb-4">
-                                <div class="card-header">
-                                    <h5>General Settings</h5>
-                                </div>
-                                <div class="card-body">
-                                    <div class="form-check form-switch">
-                                        <input class="form-check-input" type="checkbox" id="dark-mode-toggle">
-                                        <label class="form-check-label" for="dark-mode-toggle">Dark Mode</label>
+                        
+                        <div class="card mt-3">
+                            <div class="card-header">
+                                <i class="fas fa-info-circle me-2"></i>Model Status
+                            </div>
+                            <div class="card-body">
+                                <div id="model-status">
+                                    <div class="text-center text-muted">
+                                        <i class="fas fa-cloud fa-2x mb-3"></i>
+                                        <p>No model loaded</p>
                                     </div>
                                 </div>
                             </div>
@@ -356,7 +902,60 @@
             </div>
         </div>
     </div>
+
+    <!-- Loading Modal -->
+    <div class="modal fade" id="loadingModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-body text-center">
+                    <div class="spinner-border text-primary mb-3" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p id="loading-message">Processing...</p>
+                </div>
+            </div>
+        </div>
+    </div>
     
+    <!-- Logs Modal -->
+    <div class="modal fade" id="logsModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-xl modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Training Logs</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <pre id="logs-content" class="bg-light p-3" style="max-height: 70vh; overflow-y: auto;"></pre>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-primary" id="copy-logs-btn">
+                        <i class="fas fa-copy me-2"></i>Copy to Clipboard
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Dashboard Modal -->
+    <div class="modal fade" id="dashboardModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-xl" style="max-width: 90%;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Training Dashboard</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body text-center">
+                    <img id="dashboard-image" src="" class="img-fluid" alt="Training Dashboard" style="max-width: 100%;">
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Loading Overlay -->
     <div id="loading-overlay" class="position-fixed top-0 start-0 w-100 h-100 bg-dark bg-opacity-50 d-flex justify-content-center align-items-center d-none" style="z-index: 1050;">
         <div class="card p-4">
@@ -387,14 +986,54 @@
             </div>
         </div>
     </div>
+
+    <!-- File Browser Modal -->
+    <div class="modal fade" id="file-browser-modal" tabindex="-1" aria-labelledby="file-browser-title" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="file-browser-title">Select Directory</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="d-flex align-items-center mb-3">
+                        <button type="button" class="btn btn-outline-secondary me-2" id="browser-up-btn" disabled>
+                            <i class="fas fa-arrow-up"></i> Up
+                        </button>
+                        <div class="flex-grow-1">
+                            <input type="text" class="form-control" id="browser-current-path" readonly>
+                        </div>
+                    </div>
+                    <div id="browser-loading" class="text-center d-none">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p class="mt-2">Loading directory contents...</p>
+                    </div>
+                    <div id="browser-content" class="border rounded" style="height: 400px; overflow-y: auto;">
+                        <!-- Directory contents will be loaded here -->
+                    </div>
+                    <div class="mt-3">
+                        <small class="text-muted">
+                            <i class="fas fa-info-circle"></i>
+                            Select a directory by clicking on it, then click "Select Directory" to choose it.
+                        </small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="browser-select-btn" disabled>
+                        <i class="fas fa-check"></i> Select Directory
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     
-    <!-- JavaScript -->
-    <script src="/static/js/services/api.js"></script>
-    <script src="/static/js/services/socket.js"></script>
-    <script src="/static/js/components/dashboard.js"></script>
-    <script src="/static/js/components/training.js"></script>
-    <script src="/static/js/components/models.js"></script>
-    <script src="/static/js/components/generation.js"></script>
-    <script src="/static/js/app.js"></script>
+    <!-- Custom JavaScript -->
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>
 </html> 

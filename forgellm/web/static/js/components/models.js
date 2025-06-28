@@ -1,539 +1,280 @@
 /**
- * Models Component
- * 
- * Handles model management, publishing, and details.
+ * Models component
  */
-
 class ModelsComponent {
     constructor() {
-        // Models list container
-        this.modelsContainer = document.getElementById('models-container');
-        this.noModelsMessage = document.getElementById('no-models-message');
-        this.modelsList = document.getElementById('models-list');
-        
-        // Model details container
-        this.modelDetailsContainer = document.getElementById('model-details-container');
-        this.modelDetailsContent = document.getElementById('model-details-content');
-        this.backToListBtn = document.getElementById('back-to-models-list');
-        
-        // Publish model form
-        this.publishModelForm = document.getElementById('publish-model-form');
-        this.publishModelBtn = document.getElementById('publish-model-btn');
-        
-        // Current model ID
-        this.currentModelId = null;
+        this.initialized = false;
     }
-    
+
     /**
-     * Initialize the models component
+     * Initialize the component
      */
     init() {
-        // Set up event listeners
-        this.setupEventListeners();
+        if (this.initialized) return;
+        this.initialized = true;
+        
+        // Initialize event listeners
+        this.initEventListeners();
         
         // Load models list
         this.loadModelsList();
     }
-    
+
     /**
-     * Set up event listeners
+     * Initialize event listeners
      */
-    setupEventListeners() {
-        // Back to list button
-        if (this.backToListBtn) {
-            this.backToListBtn.addEventListener('click', () => {
-                this.showModelsList();
-            });
-        }
-        
-        // Publish model button
-        if (this.publishModelBtn) {
-            this.publishModelBtn.addEventListener('click', (e) => {
+    initEventListeners() {
+        // Add event listeners for model loading form
+        const modelLoadForm = document.getElementById('model-load-form');
+        if (modelLoadForm) {
+            modelLoadForm.addEventListener('submit', (e) => {
                 e.preventDefault();
-                this.publishModel();
+                this.loadModel();
             });
         }
-        
-        // Listen for model details request
-        document.addEventListener('show-model-details', (event) => {
-            if (event.detail && event.detail.model) {
-                this.showModelDetails(event.detail.model);
-            }
-        });
+
+        // Add event listener for unload button
+        const unloadModelBtn = document.getElementById('unload-model-btn');
+        if (unloadModelBtn) {
+            unloadModelBtn.addEventListener('click', () => {
+                this.unloadModel();
+            });
+        }
     }
-    
+
     /**
      * Load models list
      */
     async loadModelsList() {
         try {
-            window.app.showLoading('Loading models...');
+            // Load all models
+            const response = await apiService.get('models');
+            const models = response.models || [];
             
-            // Get models from API
-            const response = await apiService.getCPTModels();
+            // Update models UI
+            this.updateModelsList(models);
             
-            window.app.hideLoading();
+            // Load CPT models
+            const cptResponse = await apiService.getCPTModels();
             
-            if (response.models && response.models.length > 0) {
-                this.renderModelsList(response.models);
-            } else {
-                this.showNoModelsMessage();
-            }
+            // Update CPT models UI
+            this.updateCPTModelsList(cptResponse.models || []);
+            
+            // Load IFT models
+            const iftResponse = await apiService.getIFTModels();
+            
+            // Update IFT models UI
+            this.updateIFTModelsList(iftResponse.models || []);
         } catch (error) {
-            window.app.hideLoading();
             console.error('Failed to load models:', error);
-            window.app.showAlert('Failed to load models', 'danger');
-            this.showNoModelsMessage();
         }
     }
-    
+
     /**
-     * Render models list
-     * 
-     * @param {Array} models - List of models
+     * Update models list UI
+     * @param {Array} models - All models
      */
-    renderModelsList(models) {
-        if (!this.modelsList) {
-            return;
-        }
+    updateModelsList(models) {
+        const modelSelect = document.getElementById('test-model-select');
+        if (!modelSelect) return;
         
-        // Clear existing content
-        this.modelsList.innerHTML = '';
+        // Clear existing options
+        modelSelect.innerHTML = '<option value="">Select model...</option>';
         
-        // Hide no models message
-        if (this.noModelsMessage) {
-            this.noModelsMessage.classList.add('d-none');
-        }
-        
-        // Show models list
-        this.modelsList.classList.remove('d-none');
-        
-        // Create table
-        const table = document.createElement('table');
-        table.className = 'table table-hover';
-        
-        // Create table header
-        const thead = document.createElement('thead');
-        thead.innerHTML = `
-            <tr>
-                <th>Name</th>
-                <th>Type</th>
-                <th>Checkpoint</th>
-                <th>Created</th>
-                <th>Actions</th>
-            </tr>
-        `;
-        table.appendChild(thead);
-        
-        // Create table body
-        const tbody = document.createElement('tbody');
-        
+        // Add models to select
         models.forEach(model => {
-            const tr = document.createElement('tr');
-            
-            // Format date
-            const createdDate = model.created_at ? formatUtil.formatDate(model.created_at) : 'N/A';
-            
-            // Determine model type
-            const modelType = model.is_lora ? 'LoRA' : 'Full';
-            
-            tr.innerHTML = `
-                <td>${formatUtil.formatModelName(model.name)}</td>
-                <td>${modelType}</td>
-                <td>${model.checkpoint || 'N/A'}</td>
-                <td>${createdDate}</td>
-                <td>
-                    <div class="btn-group btn-group-sm" role="group">
-                        <button type="button" class="btn btn-primary btn-details" data-model-id="${model.id}">
-                            <i class="bi bi-info-circle"></i> Details
-                        </button>
-                        <button type="button" class="btn btn-success btn-generate" data-model-id="${model.id}">
-                            <i class="bi bi-chat-dots"></i> Generate
-                        </button>
-                        <button type="button" class="btn btn-info text-white btn-publish" data-model-id="${model.id}">
-                            <i class="bi bi-cloud-upload"></i> Publish
-                        </button>
-                    </div>
-                </td>
-            `;
-            
-            // Add event listeners
-            const detailsBtn = tr.querySelector('.btn-details');
-            if (detailsBtn) {
-                detailsBtn.addEventListener('click', () => {
-                    this.showModelDetails(model.id);
-                });
-            }
-            
-            const generateBtn = tr.querySelector('.btn-generate');
-            if (generateBtn) {
-                generateBtn.addEventListener('click', () => {
-                    // Switch to generate view and load this model
-                    window.app.showView('generate');
-                    
-                    // Dispatch event to load model
-                    document.dispatchEvent(new CustomEvent('load-model', { 
-                        detail: { model: model.id } 
-                    }));
-                });
-            }
-            
-            const publishBtn = tr.querySelector('.btn-publish');
-            if (publishBtn) {
-                publishBtn.addEventListener('click', () => {
-                    this.prepareModelPublish(model);
-                });
-            }
-            
-            tbody.appendChild(tr);
+            const option = document.createElement('option');
+            option.value = model.id;
+            option.textContent = `${model.name} (${model.type})`;
+            modelSelect.appendChild(option);
         });
+    }
+
+    /**
+     * Update CPT models list UI
+     * @param {Array} models - CPT models
+     */
+    updateCPTModelsList(models) {
+        // Update CPT models list UI if needed
+        const adapterPath = document.getElementById('adapter-path');
+        if (!adapterPath) return;
         
-        table.appendChild(tbody);
-        this.modelsList.appendChild(table);
+        // Add CPT models to adapter select
+        models.forEach(model => {
+            const option = document.createElement('option');
+            option.value = model.path;
+            option.textContent = `CPT: ${model.name}`;
+            adapterPath.appendChild(option);
+        });
     }
-    
+
     /**
-     * Show no models message
+     * Update IFT models list UI
+     * @param {Array} models - IFT models
      */
-    showNoModelsMessage() {
-        if (this.noModelsMessage) {
-            this.noModelsMessage.classList.remove('d-none');
-        }
+    updateIFTModelsList(models) {
+        // Update IFT models list UI if needed
+        const adapterPath = document.getElementById('adapter-path');
+        if (!adapterPath) return;
         
-        if (this.modelsList) {
-            this.modelsList.classList.add('d-none');
-        }
+        // Add IFT models to adapter select
+        models.forEach(model => {
+            const option = document.createElement('option');
+            option.value = model.path;
+            option.textContent = `IFT: ${model.name}`;
+            adapterPath.appendChild(option);
+        });
     }
-    
+
     /**
-     * Show models list
+     * Load a model
      */
-    showModelsList() {
-        if (this.modelsContainer) {
-            this.modelsContainer.classList.remove('d-none');
-        }
+    async loadModel() {
+        const modelSelect = document.getElementById('test-model-select');
+        const adapterPath = document.getElementById('adapter-path');
+        const systemPrompt = document.getElementById('system-prompt');
+        const loadModelBtn = document.getElementById('load-model-btn');
+        const unloadModelBtn = document.getElementById('unload-model-btn');
+        const generateBtn = document.getElementById('generate-btn');
         
-        if (this.modelDetailsContainer) {
-            this.modelDetailsContainer.classList.add('d-none');
-        }
-    }
-    
-    /**
-     * Show model details
-     * 
-     * @param {string} modelId - Model ID
-     */
-    async showModelDetails(modelId) {
-        try {
-            window.app.showLoading('Loading model details...');
-            
-            // Get model details from API
-            const response = await apiService.getModelDetails(modelId);
-            
-            window.app.hideLoading();
-            
-            if (response.model) {
-                this.renderModelDetails(response.model);
-                
-                // Hide models list
-                if (this.modelsContainer) {
-                    this.modelsContainer.classList.add('d-none');
-                }
-                
-                // Show model details
-                if (this.modelDetailsContainer) {
-                    this.modelDetailsContainer.classList.remove('d-none');
-                }
-                
-                // Store current model ID
-                this.currentModelId = modelId;
-            } else {
-                window.app.showAlert('Model not found', 'danger');
-            }
-        } catch (error) {
-            window.app.hideLoading();
-            console.error('Failed to load model details:', error);
-            window.app.showAlert('Failed to load model details', 'danger');
-        }
-    }
-    
-    /**
-     * Render model details
-     * 
-     * @param {Object} model - Model data
-     */
-    renderModelDetails(model) {
-        if (!this.modelDetailsContent) {
+        if (!modelSelect || !adapterPath) return;
+        
+        const modelName = modelSelect.value;
+        const adapter = adapterPath.value;
+        const system = systemPrompt ? systemPrompt.value : '';
+        
+        if (!modelName) {
+            alert('Please select a model');
             return;
         }
         
-        // Clear existing content
-        this.modelDetailsContent.innerHTML = '';
-        
-        // Format date
-        const createdDate = model.created_at ? formatUtil.formatDate(model.created_at) : 'N/A';
-        
-        // Determine model type
-        const modelType = model.is_lora ? 'LoRA' : 'Full';
-        
-        // Create model info card
-        const infoCard = document.createElement('div');
-        infoCard.className = 'card mb-4';
-        infoCard.innerHTML = `
-            <div class="card-header">
-                <h5 class="mb-0">${formatUtil.formatModelName(model.name)}</h5>
-            </div>
-            <div class="card-body">
-                <div class="row">
-                    <div class="col-md-6">
-                        <div class="mb-2">
-                            <strong>Model Type:</strong> ${modelType}
-                        </div>
-                        <div class="mb-2">
-                            <strong>Checkpoint:</strong> ${model.checkpoint || 'N/A'}
-                        </div>
-                        <div class="mb-2">
-                            <strong>Iteration:</strong> ${formatUtil.formatNumber(model.iteration || 0)}
-                        </div>
-                        <div class="mb-2">
-                            <strong>Created:</strong> ${createdDate}
-                        </div>
-                    </div>
-                    <div class="col-md-6">
-                        <div class="mb-2">
-                            <strong>Training Loss:</strong> ${model.train_loss ? formatUtil.formatDecimal(model.train_loss, 4) : 'N/A'}
-                        </div>
-                        <div class="mb-2">
-                            <strong>Validation Loss:</strong> ${model.val_loss ? formatUtil.formatDecimal(model.val_loss, 4) : 'N/A'}
-                        </div>
-                        <div class="mb-2">
-                            <strong>Training Perplexity:</strong> ${model.train_perplexity ? formatUtil.formatDecimal(model.train_perplexity, 2) : 'N/A'}
-                        </div>
-                        <div class="mb-2">
-                            <strong>Validation Perplexity:</strong> ${model.val_perplexity ? formatUtil.formatDecimal(model.val_perplexity, 2) : 'N/A'}
-                        </div>
-                    </div>
-                </div>
-                <div class="mt-3">
-                    <button class="btn btn-success me-2" id="btn-generate-model">
-                        <i class="bi bi-chat-dots"></i> Generate
-                    </button>
-                    <button class="btn btn-info text-white me-2" id="btn-publish-model-details">
-                        <i class="bi bi-cloud-upload"></i> Publish
-                    </button>
-                    <button class="btn btn-danger" id="btn-delete-model">
-                        <i class="bi bi-trash"></i> Delete
-                    </button>
-                </div>
-            </div>
-        `;
-        
-        // Add event listeners
-        const generateBtn = infoCard.querySelector('#btn-generate-model');
-        if (generateBtn) {
-            generateBtn.addEventListener('click', () => {
-                // Switch to generate view and load this model
-                window.app.showView('generate');
+        try {
+            // Show loading overlay
+            document.getElementById('loading-overlay').classList.remove('d-none');
+            document.getElementById('loading-message').textContent = 'Loading model...';
+            
+            // Disable buttons
+            if (loadModelBtn) loadModelBtn.disabled = true;
+            
+            // Load model
+            const response = await apiService.loadModel(modelName, adapter);
+            
+            if (response.success) {
+                // Update UI
+                if (unloadModelBtn) unloadModelBtn.disabled = false;
+                if (generateBtn) generateBtn.disabled = false;
                 
-                // Dispatch event to load model
-                document.dispatchEvent(new CustomEvent('load-model', { 
-                    detail: { model: model.id } 
-                }));
-            });
+                // Update model status
+                this.updateModelStatus(modelName, adapter);
+                
+                // Show success message
+                console.log(`Model ${modelName} loaded successfully`);
+            } else {
+                // Show error message
+                alert(`Failed to load model: ${response.error}`);
+                
+                // Re-enable buttons
+                if (loadModelBtn) loadModelBtn.disabled = false;
+            }
+        } catch (error) {
+            console.error('Failed to load model:', error);
+            alert(`Failed to load model: ${error.message}`);
+            
+            // Re-enable buttons
+            if (loadModelBtn) loadModelBtn.disabled = false;
+        } finally {
+            // Hide loading overlay
+            document.getElementById('loading-overlay').classList.add('d-none');
         }
+    }
+
+    /**
+     * Unload the current model
+     */
+    async unloadModel() {
+        const loadModelBtn = document.getElementById('load-model-btn');
+        const unloadModelBtn = document.getElementById('unload-model-btn');
+        const generateBtn = document.getElementById('generate-btn');
         
-        const publishBtn = infoCard.querySelector('#btn-publish-model-details');
-        if (publishBtn) {
-            publishBtn.addEventListener('click', () => {
-                this.prepareModelPublish(model);
-            });
+        try {
+            // Show loading overlay
+            document.getElementById('loading-overlay').classList.remove('d-none');
+            document.getElementById('loading-message').textContent = 'Unloading model...';
+            
+            // Disable buttons
+            if (unloadModelBtn) unloadModelBtn.disabled = true;
+            
+            // Unload model
+            const response = await apiService.unloadModel();
+            
+            if (response.success) {
+                // Update UI
+                if (loadModelBtn) loadModelBtn.disabled = false;
+                if (generateBtn) generateBtn.disabled = true;
+                
+                // Update model status
+                this.updateModelStatus();
+                
+                // Show success message
+                console.log('Model unloaded successfully');
+            } else {
+                // Show error message
+                alert(`Failed to unload model: ${response.error}`);
+                
+                // Re-enable buttons
+                if (unloadModelBtn) unloadModelBtn.disabled = false;
+            }
+        } catch (error) {
+            console.error('Failed to unload model:', error);
+            alert(`Failed to unload model: ${error.message}`);
+            
+            // Re-enable buttons
+            if (unloadModelBtn) unloadModelBtn.disabled = false;
+        } finally {
+            // Hide loading overlay
+            document.getElementById('loading-overlay').classList.add('d-none');
         }
+    }
+
+    /**
+     * Update model status UI
+     * @param {string} modelName - Model name
+     * @param {string} adapterPath - Adapter path
+     */
+    updateModelStatus(modelName = null, adapterPath = null) {
+        const modelStatus = document.getElementById('model-status');
+        if (!modelStatus) return;
         
-        const deleteBtn = infoCard.querySelector('#btn-delete-model');
-        if (deleteBtn) {
-            deleteBtn.addEventListener('click', () => {
-                this.deleteModel(model.id);
-            });
-        }
-        
-        this.modelDetailsContent.appendChild(infoCard);
-        
-        // Create training metrics card if available
-        if (model.metrics && Object.keys(model.metrics).length > 0) {
-            const metricsCard = document.createElement('div');
-            metricsCard.className = 'card mb-4';
-            metricsCard.innerHTML = `
-                <div class="card-header">
-                    <h5 class="mb-0">Training Metrics</h5>
-                </div>
-                <div class="card-body">
-                    <div class="row">
-                        <div class="col-md-6">
-                            <div id="model-loss-chart" style="height: 300px;"></div>
-                        </div>
-                        <div class="col-md-6">
-                            <div id="model-perplexity-chart" style="height: 300px;"></div>
-                        </div>
+        if (modelName) {
+            // Model is loaded
+            modelStatus.innerHTML = `
+                <div class="d-flex align-items-center">
+                    <div class="status-indicator status-running me-2"></div>
+                    <div>
+                        <h5 class="mb-0">${modelName}</h5>
+                        <small class="text-muted">${adapterPath ? `Adapter: ${adapterPath}` : 'No adapter'}</small>
                     </div>
                 </div>
             `;
-            
-            this.modelDetailsContent.appendChild(metricsCard);
-            
-            // Create charts
-            setTimeout(() => {
-                this.createModelCharts(model.metrics);
-            }, 100);
+        } else {
+            // No model loaded
+            modelStatus.innerHTML = `
+                <div class="text-center text-muted">
+                    <i class="fas fa-cloud fa-2x mb-3"></i>
+                    <p>No model loaded</p>
+                </div>
+            `;
         }
     }
-    
+
     /**
-     * Create model charts
-     * 
-     * @param {Object} metrics - Model metrics
-     */
-    createModelCharts(metrics) {
-        if (!metrics) {
-            return;
-        }
-        
-        // Prepare data
-        const data = {
-            iterations: metrics.iterations || [],
-            trainLoss: metrics.train_loss || [],
-            valLoss: metrics.val_loss || [],
-            learningRate: metrics.learning_rate || [],
-            tokensPerSec: metrics.tokens_per_sec || [],
-            memoryUsage: metrics.memory_gb || []
-        };
-        
-        // Create loss chart
-        if (document.getElementById('model-loss-chart')) {
-            chartsUtil.createLossChart('model-loss-chart', data);
-        }
-        
-        // Create perplexity chart
-        if (document.getElementById('model-perplexity-chart')) {
-            chartsUtil.createPerplexityChart('model-perplexity-chart', data);
-        }
-    }
-    
-    /**
-     * Prepare model publish form
-     * 
-     * @param {Object} model - Model data
-     */
-    prepareModelPublish(model) {
-        // Show modal
-        const modal = new bootstrap.Modal(document.getElementById('publish-model-modal'));
-        modal.show();
-        
-        // Fill form fields
-        const nameInput = document.getElementById('publish-model-name');
-        if (nameInput) {
-            nameInput.value = model.name;
-        }
-        
-        const descriptionInput = document.getElementById('publish-model-description');
-        if (descriptionInput) {
-            descriptionInput.value = '';
-        }
-        
-        const modelIdInput = document.getElementById('publish-model-id');
-        if (modelIdInput) {
-            modelIdInput.value = model.id;
-        }
-    }
-    
-    /**
-     * Publish model
-     */
-    async publishModel() {
-        // Get form data
-        const modelId = document.getElementById('publish-model-id').value;
-        const name = document.getElementById('publish-model-name').value;
-        const description = document.getElementById('publish-model-description').value;
-        const includeReadme = document.getElementById('publish-model-readme').checked;
-        const includeMetrics = document.getElementById('publish-model-metrics').checked;
-        const includeDashboard = document.getElementById('publish-model-dashboard').checked;
-        
-        if (!modelId || !name) {
-            window.app.showAlert('Model ID and name are required', 'danger');
-            return;
-        }
-        
-        try {
-            window.app.showLoading('Publishing model...');
-            
-            // Publish model
-            const response = await apiService.publishModel(modelId, {
-                name,
-                description,
-                include_readme: includeReadme,
-                include_metrics: includeMetrics,
-                include_dashboard: includeDashboard
-            });
-            
-            window.app.hideLoading();
-            
-            // Close modal
-            const modal = bootstrap.Modal.getInstance(document.getElementById('publish-model-modal'));
-            if (modal) {
-                modal.hide();
-            }
-            
-            // Show success message
-            window.app.showAlert('Model published successfully!', 'success');
-            
-            // Reload models list
-            this.loadModelsList();
-            
-        } catch (error) {
-            window.app.hideLoading();
-            console.error('Failed to publish model:', error);
-            window.app.showAlert(`Failed to publish model: ${error.message}`, 'danger');
-        }
-    }
-    
-    /**
-     * Delete model
-     * 
-     * @param {string} modelId - Model ID
-     */
-    async deleteModel(modelId) {
-        if (!confirm('Are you sure you want to delete this model? This action cannot be undone.')) {
-            return;
-        }
-        
-        try {
-            window.app.showLoading('Deleting model...');
-            
-            // Delete model
-            await apiService.deleteModel(modelId);
-            
-            window.app.hideLoading();
-            
-            // Show success message
-            window.app.showAlert('Model deleted successfully', 'success');
-            
-            // Go back to models list
-            this.showModelsList();
-            
-            // Reload models list
-            this.loadModelsList();
-            
-        } catch (error) {
-            window.app.hideLoading();
-            console.error('Failed to delete model:', error);
-            window.app.showAlert(`Failed to delete model: ${error.message}`, 'danger');
-        }
-    }
-    
-    /**
-     * Called when the models view is activated
+     * Called when the models tab is activated
      */
     onActivate() {
-        // Reload models list
+        // Refresh models list
         this.loadModelsList();
     }
-} 
+}
+
+// Create a singleton instance
+const modelsComponent = new ModelsComponent(); 
