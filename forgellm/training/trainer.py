@@ -688,10 +688,8 @@ class ContinuedPretrainer:
         import glob
         from pathlib import Path
         
-        # Look for recent training directories in multiple locations
+        # Look for recent training directories
         possible_dirs = [
-            Path("forgellm/forgellm/models/cpt"),  # Nested forgellm directory
-            Path("forgellm/models/cpt"),           # Single forgellm directory  
             Path("models/cpt")                     # Direct models directory
         ]
         

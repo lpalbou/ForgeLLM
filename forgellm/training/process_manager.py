@@ -372,7 +372,7 @@ class TrainingProcessManager:
         if "model_name" not in clean_config:
             clean_config["model_name"] = config_dict.get("model", "microsoft/DialoGPT-medium")
         if "input_dir" not in clean_config:
-            clean_config["input_dir"] = config_dict.get("input_dir", "forgellm/dataset")
+            clean_config["input_dir"] = config_dict.get("input_dir", "dataset")
         if "output_dir" not in clean_config:
             clean_config["output_dir"] = config_dict.get("output_dir", "models")
         

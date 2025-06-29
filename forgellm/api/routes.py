@@ -639,10 +639,8 @@ def setup_api(app: Flask) -> Blueprint:
             import glob
             from pathlib import Path
             
-            # Look for training sessions in multiple locations
+            # Look for training sessions
             possible_dirs = [
-                Path("forgellm/forgellm/models/cpt"),
-                Path("forgellm/models/cpt"),
                 Path("models/cpt")
             ]
             
@@ -948,19 +946,21 @@ def setup_api(app: Flask) -> Blueprint:
             path = request.args.get('path', os.getcwd())
             
             # Security check: only allow browsing within the project directory and common directories
-            # Determine the actual project root by finding the directory containing 'forgellm' folder
+            # Determine the actual project root - prefer the forgellm directory if we're in it
             current_dir = os.path.abspath(os.getcwd())
             
-            # Look for the project root (directory containing forgellm folder)
-            project_root = current_dir
-            while project_root != os.path.dirname(project_root):  # Not at filesystem root
-                if os.path.exists(os.path.join(project_root, 'forgellm')) and os.path.isdir(os.path.join(project_root, 'forgellm')):
-                    break
-                project_root = os.path.dirname(project_root)
-            
-            # If we're inside the forgellm directory, use the parent as project root
-            if project_root.endswith('/forgellm') or project_root.endswith('\\forgellm'):
-                project_root = os.path.dirname(project_root)
+            # Check if we're already in the forgellm directory (contains forgellm package)
+            if os.path.exists(os.path.join(current_dir, 'forgellm', '__init__.py')):
+                project_root = current_dir
+            else:
+                # Look for the project root (directory containing forgellm folder)
+                project_root = current_dir
+                while project_root != os.path.dirname(project_root):  # Not at filesystem root
+                    if os.path.exists(os.path.join(project_root, 'forgellm')) and os.path.isdir(os.path.join(project_root, 'forgellm')):
+                        # If we found a directory containing forgellm, use the forgellm subdirectory as project root
+                        project_root = os.path.join(project_root, 'forgellm')
+                        break
+                    project_root = os.path.dirname(project_root)
             
             # Convert relative paths to absolute paths relative to project root
             if not os.path.isabs(path):

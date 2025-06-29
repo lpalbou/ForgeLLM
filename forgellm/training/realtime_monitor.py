@@ -47,8 +47,6 @@ class RealtimeTrainingMonitor:
     def _find_active_training_file(self) -> Optional[str]:
         """Find the most recent active training file"""
         possible_dirs = [
-            Path("forgellm/forgellm/models/cpt"),
-            Path("forgellm/models/cpt"),
             Path("models/cpt")
         ]
         

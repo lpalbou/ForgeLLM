@@ -24,6 +24,12 @@ logger = logging.getLogger(__name__)
 def main():
     """Main entry point for the web interface"""
     try:
+        # Ensure we're running from the correct directory (where this script is located)
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        if os.getcwd() != script_dir:
+            logger.info(f"Changing working directory from {os.getcwd()} to {script_dir}")
+            os.chdir(script_dir)
+        
         parser = argparse.ArgumentParser(description="ForgeLLM Web Interface")
         parser.add_argument("--host", type=str, default="0.0.0.0", help="Host to bind to")
         parser.add_argument("--port", type=int, default=5001, help="Port to bind to")

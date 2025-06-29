@@ -232,7 +232,7 @@ def create_default_configs():
     # Create default CPT config
     cpt_config_path = configs_dir / "cpt_default.yaml"
     if not cpt_config_path.exists():
-        cpt_config = TrainingConfig(model_name="mlx-community/gemma-3-4b-it-bf16", input_dir="forgellm/dataset")
+        cpt_config = TrainingConfig(model_name="mlx-community/gemma-3-4b-it-bf16", input_dir="dataset")
         cpt_config.save(str(cpt_config_path))
     
     # Create default IFT config

@@ -471,13 +471,25 @@ class ModelManager:
             logger.info(f"Found local path: {model_name}")
             return model_name
             
-        # Check if it's a published model
+        # Check if it's a published model (starts with "published/")
+        if model_name.startswith("published/"):
+            # Remove the "published/" prefix and look in HF cache
+            actual_model_name = model_name[10:]  # Remove "published/"
+            cache_root = Path.home() / '.cache' / 'huggingface' / 'hub'
+            candidate = cache_root / ('models--published--' + actual_model_name.replace('/', '--'))
+            if candidate.exists():
+                logger.info(f"Found published model in HF cache: {candidate}")
+                return str(candidate)
+            else:
+                logger.warning(f"Published model not found in cache: {candidate}")
+                
+        # Check if it's a regular published model in local published directory
         published_path = Path("published") / model_name
         if published_path.exists():
             logger.info(f"Found published model: {published_path}")
             return str(published_path)
             
-        # Check HuggingFace cache
+        # Check HuggingFace cache for regular models
         try:
             cache_root = Path.home() / '.cache' / 'huggingface' / 'hub'
             candidate = cache_root / ('models--' + model_name.replace('/', '--'))
