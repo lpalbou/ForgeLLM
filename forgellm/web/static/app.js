@@ -15,6 +15,9 @@ class TrainingInterface {
         this.conversationTokens = 0; // Track total tokens across entire conversation
         this.trainingStartTime = null; // Store training start time for timing calculations
         this.markdownEnabled = true; // Enable markdown rendering by default
+        this.lastRefreshTime = 0;    // Throttle dashboard refreshes
+        this.refreshThrottleMs = 2000; // Minimum 2 seconds between refreshes
+        this.lastCheckpointsUpdate = 0; // Track checkpoint updates
         
         this.init();
     }
@@ -51,30 +54,14 @@ class TrainingInterface {
     }
     
     initSocket() {
-        this.socket = io();
+        // DISABLED - Socket connections causing 404 errors and unnecessary with single update approach
+        console.log('🚫 Socket.IO connections DISABLED - using single API update approach');
         
-        this.socket.on('connect', () => {
-            console.log('Connected to server');
-            this.updateConnectionStatus(true);
-        });
+        // Simulate connection status as connected since we're using HTTP API
+        this.updateConnectionStatus(true);
         
-        this.socket.on('disconnect', () => {
-            console.log('Disconnected from server');
-            this.updateConnectionStatus(false);
-        });
-        
-        this.socket.on('training_update', (data) => {
-            this.updateTrainingMetrics(data);
-            this.updateCharts(data);
-            // Hide loading modal if training has actually started
-            if (data.current_iteration > 0) {
-                this.hideLoading();
-            }
-        });
-        
-        this.socket.on('training_finished', (data) => {
-            this.handleTrainingFinished(data);
-        });
+        // No socket initialization to prevent 404 errors
+        this.socket = null;
     }
     
     initEventListeners() {
@@ -230,7 +217,8 @@ class TrainingInterface {
         document.querySelectorAll('[data-bs-toggle="tab"]').forEach(tab => {
             tab.addEventListener('shown.bs.tab', (e) => {
                 if (e.target.id === 'monitoring-tab') {
-                    this.refreshDashboard();
+                    // Force a single update when switching to monitoring tab
+                    this.performSingleUpdate();
                 }
             });
         });
@@ -317,14 +305,70 @@ class TrainingInterface {
     }
     
     startPeriodicUpdates() {
+        // SINGLE consolidated update every 10 seconds
         this.updateInterval = setInterval(() => {
-            this.loadCheckpoints();
-            this.checkTrainingStatus(); // Check training status regularly
-            if (this.isTraining) {
-                this.socket.emit('request_update');
-                this.refreshDashboard(); // Refresh dashboard during training
+            console.log('🔄 Performing single consolidated update...');
+            this.performSingleUpdate();
+        }, 10000); // 10 seconds - ONE update only
+    }
+    
+    async performSingleUpdate() {
+        try {
+            // ONLY call the realtime dashboard API - it has everything we need
+            const response = await fetch('/api/dashboard/realtime');
+            const data = await response.json();
+            
+            console.log('📊 Single update received - active:', data.active);
+            
+            // Update training state
+            this.isTraining = data.active || false;
+            this.updateTrainingButtons(this.isTraining);
+            
+            if (data.active) {
+                // Update all metrics from single source
+                if (data.current_values) {
+                    this.updateTrainingMetrics({...data.current_values, config: data.config});
+                }
+                
+                // Update training status
+                this.updateTrainingStatus(data);
+                
+                // Render charts if available
+                if (data.charts) {
+                    this.renderCharts(data.charts);
+                }
+                
+                // Reset checkpoints flag when training is active
+                this.checkpointsResetDone = false;
+            } else {
+                // Handle inactive training
+                this.updateTrainingStatus({active: false});
+                
+                // Reset best checkpoints display when no training is active
+                if (!this.checkpointsResetDone) {
+                    const bestCheckpointsContainer = document.getElementById('best-checkpoints');
+                    if (bestCheckpointsContainer) {
+                        bestCheckpointsContainer.innerHTML = `
+                            <div class="text-center text-muted">
+                                <i class="fas fa-chart-line fa-2x mb-3"></i>
+                                <p>No training data available</p>
+                            </div>
+                        `;
+                    }
+                    this.checkpointsResetDone = true;
+                }
             }
-        }, 5000);
+            
+            // Load checkpoints/sessions ONLY every 60 seconds to reduce API calls further
+            if (Date.now() - (this.lastCheckpointsUpdate || 0) > 60000) { // Every 60 seconds
+                console.log('📁 Loading checkpoints (60s interval)...');
+                this.loadCheckpoints();
+                this.lastCheckpointsUpdate = Date.now();
+            }
+            
+        } catch (error) {
+            console.error('❌ Error in single update:', error);
+        }
     }
     
     updateConnectionStatus(connected) {
@@ -598,8 +642,8 @@ class TrainingInterface {
         
         if (!logFile) {
             // No session selected, show current training
-            console.log('📊 No session selected, refreshing current dashboard');
-            this.refreshDashboard();
+            console.log('📊 No session selected, performing single update');
+            this.performSingleUpdate();
             return;
         }
         
@@ -698,48 +742,10 @@ class TrainingInterface {
     }
     
     async checkTrainingStatus() {
-        try {
-            const response = await fetch('/api/training/status');
-            const data = await response.json();
-            
-            // Check if we're viewing historical data (a session is selected)
-            const isViewingHistorical = document.getElementById('training-session-select').value !== "";
-            
-            if (data.active) {
-                // If active is true, consider training as running
-                this.isTraining = true;
-                this.updateTrainingStatus(data);
-                this.updateTrainingButtons(this.isTraining);
-                
-                // If training is active, also refresh the dashboard
-                if (this.isTraining) {
-                    this.refreshDashboard();
-                }
-                // Reset the flag when training is active and we're not viewing historical data
-                if (!isViewingHistorical) {
-                    this.checkpointsResetDone = false;
-                }
-            } else {
-                this.isTraining = false;
-                this.updateTrainingButtons(false);
-                this.updateTrainingStatus(data);
-                
-                // Reset best checkpoints display when no training is active
-                // BUT ONLY if we're not viewing historical data
-                if (!this.checkpointsResetDone && !isViewingHistorical) {
-                    const bestCheckpointsContainer = document.getElementById('best-checkpoints');
-                    bestCheckpointsContainer.innerHTML = `
-                        <div class="text-center text-muted">
-                            <i class="fas fa-chart-line fa-2x mb-3"></i>
-                            <p>No training data available</p>
-                        </div>
-                    `;
-                    this.checkpointsResetDone = true;
-                }
-            }
-        } catch (error) {
-            console.error('Error checking training status:', error);
-        }
+        console.log('🚫 OLD checkTrainingStatus() called - redirecting to performSingleUpdate()');
+        // OLD METHOD DISABLED - all updates now go through performSingleUpdate()
+        // This prevents duplicate API calls and data conflicts
+        this.performSingleUpdate();
     }
     
     /**
@@ -916,7 +922,17 @@ class TrainingInterface {
             return;
         }
         
-        console.log('Updating training metrics with:', data);
+        console.log('📈 Updating training metrics with:', data);
+        
+        // Helper function to update element only if value changed
+        const updateElementIfChanged = (elementId, newValue) => {
+            const element = document.getElementById(elementId);
+            if (element && element.textContent !== newValue) {
+                element.textContent = newValue;
+                return true; // Updated
+            }
+            return false; // No change
+        };
         
         // Update metric cards with proper data extraction
         const formatValue = (value, decimals = 4) => {
@@ -924,40 +940,40 @@ class TrainingInterface {
             return typeof value === 'number' ? value.toFixed(decimals) : value;
         };
         
+        // Update metrics only if values changed
+        let updatedCount = 0;
+        
         // Update iteration
-        const currentIterationElement = document.getElementById('current-iteration');
-        if (currentIterationElement) {
-            currentIterationElement.textContent = data.current_iteration || '-';
+        if (updateElementIfChanged('current-iteration', data.iteration || '-')) {
+            updatedCount++;
         }
         
         // Update loss values
-        const trainLoss = document.getElementById('train-loss');
-        if (trainLoss) {
-            trainLoss.textContent = formatValue(data.train_loss);
+        if (updateElementIfChanged('train-loss', formatValue(data.train_loss))) {
+            updatedCount++;
         }
         
-        const valLoss = document.getElementById('val-loss');
-        if (valLoss) {
-            valLoss.textContent = formatValue(data.val_loss);
+        if (updateElementIfChanged('val-loss', formatValue(data.val_loss))) {
+            updatedCount++;
         }
         
         // Update perplexity
-        const perplexity = document.getElementById('perplexity');
-        if (perplexity) {
-            perplexity.textContent = formatValue(data.val_perplexity, 2) || 
-                                    formatValue(data.train_perplexity, 2) || '-';
+        const perplexityValue = formatValue(data.val_perplexity, 2) || 
+                               formatValue(data.train_perplexity, 2) || '-';
+        if (updateElementIfChanged('perplexity', perplexityValue)) {
+            updatedCount++;
         }
         
         // Update tokens per second
-        const tokensPerSec = document.getElementById('tokens-per-sec');
-        if (tokensPerSec) {
-            tokensPerSec.textContent = data.tokens_per_sec ? Math.round(data.tokens_per_sec) : '-';
+        const tokensPerSecValue = data.tokens_per_sec ? Math.round(data.tokens_per_sec).toString() : '-';
+        if (updateElementIfChanged('tokens-per-sec', tokensPerSecValue)) {
+            updatedCount++;
         }
         
         // Update trained tokens
-        const trainedTokens = document.getElementById('trained-tokens');
-        if (trainedTokens) {
-            trainedTokens.textContent = data.trained_tokens ? data.trained_tokens.toLocaleString() : '-';
+        const trainedTokensValue = data.trained_tokens ? data.trained_tokens.toLocaleString() : '-';
+        if (updateElementIfChanged('trained-tokens', trainedTokensValue)) {
+            updatedCount++;
         }
         
         // Update memory usage
@@ -993,8 +1009,8 @@ class TrainingInterface {
         }
         
         // Calculate epoch and progress
-        const iterationValue = data.current_iteration || 0;
-        const maxIterations = data.max_iterations || 500;
+        const iterationValue = data.iteration || 0;
+        const maxIterations = (data.config && data.config.max_iterations) || 500;
         const progress = maxIterations > 0 ? (iterationValue / maxIterations) * 100 : 0;
         
         // Update progress bar
@@ -1010,8 +1026,8 @@ class TrainingInterface {
             progressText.textContent = `${progress.toFixed(1)}%`;
         }
         
-        // Calculate epoch done (approximate)
-        const epochDone = data.training_progress ? (data.training_progress * 100).toFixed(2) : progress.toFixed(1);
+        // Update epoch - use calculated epoch from API
+        const epochDone = data.epoch !== undefined && data.epoch !== '-' ? data.epoch : (progress / 100).toFixed(2);
         const epochElement = document.getElementById('epoch-done');
         if (epochElement) {
             epochElement.textContent = epochDone;
@@ -1032,6 +1048,13 @@ class TrainingInterface {
         // Update best checkpoints
         if (data.best_checkpoints && data.best_checkpoints.length > 0) {
             this.updateBestCheckpoints(data.best_checkpoints);
+        }
+        
+        // Log update summary
+        if (updatedCount > 0) {
+            console.log(`✅ Updated ${updatedCount} metric elements`);
+        } else {
+            console.log('🔄 No metric changes detected');
         }
     }
     
@@ -1107,11 +1130,21 @@ class TrainingInterface {
     }
     
     async refreshDashboard() {
+        // Throttle dashboard refreshes to prevent excessive calls
+        const now = Date.now();
+        if (now - this.lastRefreshTime < this.refreshThrottleMs) {
+            console.log(`Dashboard refresh throttled (last refresh ${now - this.lastRefreshTime}ms ago)`);
+            return;
+        }
+        
+        this.lastRefreshTime = now;
+        
         try {
+            console.log('🔄 Refreshing dashboard...');
             const response = await fetch('/api/dashboard/realtime');
             const data = await response.json();
             
-            console.log('Dashboard data received:', data);
+            console.log('📊 Dashboard data received:', data);
             
             if (data.active) {
                 // Update training metrics with current values and config
@@ -1193,8 +1226,9 @@ class TrainingInterface {
         // Update charts with real-time data
         if (!data || data.error) return;
         
-        // Refresh the dashboard to get updated charts
-        this.refreshDashboard();
+        // Don't call refreshDashboard here - this creates a loop
+        // The data should already be processed in updateTrainingMetrics
+        console.log('Charts updated with real-time data');
     }
     
     async loadModel() {

@@ -22,7 +22,7 @@ class TrainingMonitor:
         self.current_training = None
         self.socketio = None
         self.last_update_time = 0
-        self.update_interval = 1.0  # Update interval in seconds
+        self.update_interval = 3.0  # Update interval in seconds (increased from 1.0)
     
     def set_socketio(self, socketio: SocketIO):
         """Set the Socket.IO instance"""
@@ -36,12 +36,16 @@ class TrainingMonitor:
     def update_training_data(self, training_data: Dict[str, Any]):
         """Update training data and emit if enough time has passed"""
         current_time = time.time()
+        time_since_last = current_time - self.last_update_time
         self.current_training = training_data
         
         # Only emit updates at most once per update_interval seconds
-        if current_time - self.last_update_time >= self.update_interval:
+        if time_since_last >= self.update_interval:
+            logger.info(f"🔄 Emitting training update (last update {time_since_last:.1f}s ago)")
             self.emit_update()
             self.last_update_time = current_time
+        else:
+            logger.debug(f"⏳ Throttling update (only {time_since_last:.1f}s since last, need {self.update_interval}s)")
     
     def emit_update(self):
         """Emit training update"""
@@ -139,6 +143,13 @@ class TrainingMonitor:
             except Exception as e:
                 logger.error(f"Error emitting training finished: {e}")
 
+    def start_background_updates(self):
+        """Start background updates - DISABLED to prevent API call spam"""
+        logger.info('🚫 Socket background updates DISABLED - using main app single update approach')
+        # Background updates disabled to prevent excessive API calls
+        # All updates now handled by main app.js performSingleUpdate() method
+        pass
+
 # Create singleton instance
 training_monitor = TrainingMonitor()
 
@@ -173,19 +184,23 @@ def setup_socketio(socketio: SocketIO, app=None):
     @socketio.on('request_update')
     def handle_request_update():
         """Handle request for update"""
-        logger.info('Client requested update')
+        logger.info('🔌 Client requested update')
         if training_monitor.current_training:
+            logger.info('📤 Sending cached training data')
             emit('training_update', training_monitor.current_training)
         else:
             # Get training status from app
             if app and hasattr(app, 'trainer'):
                 trainer = app.trainer
                 if trainer.is_training_active():
+                    logger.info('📊 Getting fresh training status')
                     status = trainer.get_training_status()
                     emit('training_update', status)
                 else:
+                    logger.info('⏹️ Training not active')
                     emit('training_update', {'active': False})
             else:
+                logger.info('❌ No trainer available')
                 emit('training_update', {'active': False})
     
     @socketio.on('check_training_status')

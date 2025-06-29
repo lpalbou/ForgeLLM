@@ -260,52 +260,7 @@
             font-weight: 600 !important;
         }
 
-        /* Model Configuration specific styling */
-        .col-lg-4 .card-header {
-            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%) !important;
-        }
 
-        /* Form controls in model config */
-        .form-control, .form-select {
-            border-radius: 8px !important;
-            border: 1px solid #e5e5ea !important;
-            padding: 10px 14px !important;
-            font-size: 14px !important;
-            transition: all 0.2s ease !important;
-        }
-
-        .form-control:focus, .form-select:focus {
-            border-color: #4facfe !important;
-            box-shadow: 0 0 0 3px rgba(79, 172, 254, 0.1) !important;
-        }
-
-        .btn-primary {
-            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%) !important;
-            border: none !important;
-            border-radius: 8px !important;
-            padding: 10px 20px !important;
-            font-weight: 500 !important;
-            transition: all 0.2s ease !important;
-        }
-
-        .btn-primary:hover {
-            transform: translateY(-1px) !important;
-            box-shadow: 0 4px 12px rgba(79, 172, 254, 0.4) !important;
-        }
-
-        .btn-danger {
-            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%) !important;
-            border: none !important;
-            border-radius: 8px !important;
-            padding: 10px 20px !important;
-            font-weight: 500 !important;
-            transition: all 0.2s ease !important;
-        }
-
-        .btn-danger:hover {
-            transform: translateY(-1px) !important;
-            box-shadow: 0 4px 12px rgba(255, 107, 107, 0.4) !important;
-        }
 
         .card-body {
             border-radius: 0 0 12px 12px !important;
@@ -1397,6 +1352,6 @@
     <script src="{{ url_for('static', filename='js/utils/marked.min.js') }}"></script>
     
     <!-- Custom JavaScript -->
-    <script src="{{ url_for('static', filename='app.js') }}"></script>
+    <script src="{{ url_for('static', filename='app.js') }}?v={{ cache_buster }}"></script>
 </body>
 </html> 

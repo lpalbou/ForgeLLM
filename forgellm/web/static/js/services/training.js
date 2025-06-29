@@ -225,25 +225,12 @@ const trainingService = {
     
     /**
      * Start polling for training updates
+     * DISABLED - Now using single consolidated update in main app
      */
     startPolling() {
-        // Stop any existing polling
-        this.stopPolling();
-        
-        // Start new polling interval
-        this.pollingInterval = setInterval(() => {
-            this.refreshDashboard()
-                .then(data => {
-                    if (data) {
-                        // Check if training is still active
-                        const summary = data.summary;
-                        if (summary && summary.current_iteration >= summary.max_iterations) {
-                            this.handleTrainingFinished(data);
-                        }
-                    }
-                })
-                .catch(error => console.error('Polling error:', error));
-        }, 5000); // Poll every 5 seconds
+        console.log('🚫 Training service polling disabled - using main app single update');
+        // Polling is now handled by the main app's performSingleUpdate()
+        // This prevents duplicate API calls
     },
     
     /**
@@ -352,7 +339,7 @@ const trainingService = {
             document.dispatchEvent(new CustomEvent('training-finished', { detail: data }));
         });
         
-        // Request initial training update
-        socket.emit('request_training_update');
+        // Request initial training update - DISABLED to prevent 404 errors
+        console.log('🚫 Socket emit disabled - using main app single update approach');
     }
 }; 

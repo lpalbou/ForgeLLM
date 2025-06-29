@@ -484,17 +484,203 @@ def setup_api(app: Flask) -> Blueprint:
 
     @bp.route('/dashboard/realtime', methods=['GET'])
     def get_realtime_dashboard_data():
-        """Get real-time dashboard data using the new monitoring system."""
+        """Get real-time dashboard data with direct, efficient logic."""
         try:
-            from ..training.realtime_monitor import get_realtime_monitor
+            # Simple, direct approach - no background monitoring needed
+            import psutil
+            import glob
+            import json
+            import os
+            import time
+            from pathlib import Path
+            from datetime import datetime
             
-            # Get real-time monitor
-            monitor = get_realtime_monitor()
+            # 1. Check if MLX training is actually running (lightweight check)
+            mlx_running = False
+            active_training_file = None
             
-            # Get dashboard data
-            data = monitor.get_dashboard_data()
+            try:
+                for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+                    try:
+                        if proc.info['cmdline']:
+                            cmdline = ' '.join(proc.info['cmdline'])
+                            if any(pattern in cmdline for pattern in [
+                                'mlx_lm.lora', 'mlx_lm.fuse', 'mlx-lm', 'python -m mlx_lm'
+                            ]):
+                                mlx_running = True
+                                logger.info(f"Active MLX training detected: PID {proc.info['pid']}")
+                                break
+                    except (psutil.NoSuchProcess, psutil.AccessDenied):
+                        continue
+            except Exception as e:
+                logger.warning(f"Error checking MLX processes: {e}")
             
-            return jsonify({'success': True, **data})
+            # 2. If no MLX running, return inactive status immediately
+            if not mlx_running:
+                return jsonify({
+                    'success': True,
+                    'active': False,
+                    'current_values': None,
+                    'message': 'No active training detected'
+                })
+            
+            # 3. MLX is running - find the active training file
+            possible_dirs = [Path("models/cpt")]
+            all_log_files = []
+            
+            for models_dir in possible_dirs:
+                if models_dir.exists():
+                    pattern = str(models_dir / "*" / "CPT_*.json")
+                    log_files = glob.glob(pattern)
+                    all_log_files.extend(log_files)
+            
+            # Find the most recent active training file
+            most_recent = None
+            most_recent_time = 0
+            
+            for log_file in all_log_files:
+                try:
+                    mtime = os.path.getmtime(log_file)
+                    # Only consider files modified in the last 10 minutes
+                    if time.time() - mtime < 600:
+                        try:
+                            with open(log_file, 'r') as f:
+                                data = json.load(f)
+                                # File should not have end_time to be considered active
+                                if data.get('end_time') is None and mtime > most_recent_time:
+                                    most_recent_time = mtime
+                                    most_recent = log_file
+                        except:
+                            continue
+                except Exception:
+                    continue
+            
+            if not most_recent:
+                return jsonify({
+                    'success': True,
+                    'active': False,
+                    'current_values': None,
+                    'message': 'MLX running but no active training file found'
+                })
+            
+            # 4. Read the active training data
+            try:
+                with open(most_recent, 'r') as f:
+                    training_data = json.load(f)
+                
+                if not training_data.get('metrics'):
+                    return jsonify({
+                        'success': True,
+                        'active': False,
+                        'current_values': None,
+                        'message': 'No metrics found in training file'
+                    })
+                
+                # 5. Extract current values from latest metrics
+                latest_metrics = training_data['metrics'][-1]
+                config = training_data.get('config', {})
+                
+                def format_numeric_value(value, max_decimals=3):
+                    """Format numeric values with max precision and handle special cases"""
+                    if value is None:
+                        return None
+                    if isinstance(value, str):
+                        return value
+                    if isinstance(value, (int, float)):
+                        if isinstance(value, int) or value == int(value):
+                            return int(value)  # Keep integers as integers
+                        else:
+                            # Round to max_decimals and remove trailing zeros
+                            rounded = round(value, max_decimals)
+                            return float(f"{rounded:.{max_decimals}f}".rstrip('0').rstrip('.'))
+                    return value
+                
+                # Calculate epoch correctly using trained_tokens vs dataset_total_tokens
+                epoch_value = latest_metrics.get('epoch')
+                if epoch_value is None or epoch_value == '-':
+                    # CORRECT epoch calculation: trained_tokens / dataset_total_tokens
+                    trained_tokens = latest_metrics.get('trained_tokens', 0)
+                    dataset_total_tokens = config.get('dataset_total_tokens', 0)
+                    
+                    if dataset_total_tokens > 0 and trained_tokens > 0:
+                        epoch_fraction = trained_tokens / dataset_total_tokens
+                        epoch_value = format_numeric_value(epoch_fraction, 3)
+                    else:
+                        epoch_value = 0.0
+                else:
+                    epoch_value = format_numeric_value(epoch_value, 3)
+                
+                # Include ALL available fields with proper formatting
+                current_values = {}
+                core_fields = [
+                    'iteration', 'epoch', 'train_loss', 'val_loss', 
+                    'train_perplexity', 'val_perplexity', 'learning_rate',
+                    'tokens_per_sec', 'trained_tokens', 'peak_memory_gb',
+                    'iterations_per_sec', 'warmup_steps', 'lr_decay', 'weight_decay'
+                ]
+                
+                for field in core_fields:
+                    if field == 'epoch':
+                        current_values[field] = epoch_value
+                    elif field in latest_metrics:
+                        value = latest_metrics[field]
+                        # Apply formatting to numeric fields
+                        if field in ['train_loss', 'val_loss', 'train_perplexity', 'val_perplexity', 
+                                   'learning_rate', 'tokens_per_sec', 'peak_memory_gb', 'iterations_per_sec']:
+                            current_values[field] = format_numeric_value(value, 3)
+                        else:
+                            current_values[field] = value
+                    else:
+                        if field in ['val_loss', 'val_perplexity']:
+                            current_values[field] = None
+                        elif field in ['warmup_steps', 'lr_decay', 'weight_decay']:
+                            current_values[field] = '-'
+                        else:
+                            current_values[field] = latest_metrics.get(field, 0)
+                
+                # Add any additional fields with formatting
+                for key, value in latest_metrics.items():
+                    if key not in current_values:
+                        # Apply formatting to numeric fields we might have missed
+                        if isinstance(value, (int, float)) and key not in ['iteration', 'trained_tokens']:
+                            current_values[key] = format_numeric_value(value, 3)
+                        else:
+                            current_values[key] = value
+                
+                # 6. Generate charts if needed
+                charts = None
+                try:
+                    from ..training.dashboard import generate_web_chart_data
+                    chart_data = {'metrics': training_data['metrics']}
+                    charts = generate_web_chart_data(chart_data)
+                except Exception as e:
+                    logger.warning(f"Error generating charts: {e}")
+                
+                # Return data with both current_values and individual fields for UI compatibility
+                response_data = {
+                    'success': True,
+                    'active': True,
+                    'current_values': current_values,
+                    'config': config,
+                    'charts': charts,
+                    'training_file': most_recent,
+                    'last_update': datetime.now().isoformat()
+                }
+                
+                # Add individual fields at top level for UI compatibility
+                response_data.update(current_values)
+                
+                return jsonify(response_data)
+                
+            except Exception as e:
+                logger.error(f"Error reading training file {most_recent}: {e}")
+                return jsonify({
+                    'success': True,
+                    'active': False,
+                    'current_values': None,
+                    'message': f'Error reading training data: {e}'
+                })
+            
         except Exception as e:
             logger.error(f"Error getting real-time dashboard data: {e}")
             return jsonify({'success': False, 'error': str(e)}), 500

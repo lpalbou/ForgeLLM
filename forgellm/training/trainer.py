@@ -593,9 +593,9 @@ class ContinuedPretrainer:
                                 try:
                                     training_data = json.load(f)
                                     
-                                    # Update training monitor with data
-                                    if training_monitor:
-                                        training_monitor.update_training_data(training_data)
+                                    # Socket updates disabled to prevent API call spam
+                                    # if training_monitor:
+                                    #     training_monitor.update_training_data(training_data)
                                 except json.JSONDecodeError:
                                     # File might be partially written, ignore
                                     pass
@@ -612,8 +612,9 @@ class ContinuedPretrainer:
                         try:
                             with open(self._log_file_path, 'r') as f:
                                 training_data = json.load(f)
-                                if training_monitor:
-                                    training_monitor.emit_finished(training_data)
+                                # Socket updates disabled to prevent API call spam
+                                # if training_monitor:
+                                #     training_monitor.emit_finished(training_data)
                         except Exception as e:
                             logger.warning(f"Error reading final training log file: {e}")
                     
@@ -679,24 +680,58 @@ class ContinuedPretrainer:
         
         return False
     
+    def _check_mlx_processes_running(self):
+        """Check if any MLX training processes are actually running
+        
+        Returns:
+            bool: True if MLX training processes are found, False otherwise
+        """
+        import psutil
+        
+        try:
+            for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+                try:
+                    if proc.info['cmdline']:
+                        cmdline = ' '.join(proc.info['cmdline'])
+                        # Look for actual MLX training commands
+                        if any(pattern in cmdline for pattern in [
+                            'mlx_lm.lora',      # MLX LoRA training
+                            'mlx_lm.fuse',      # MLX model fusion
+                            'mlx-lm',           # MLX-LM package calls
+                            'mlx_lm',           # MLX-LM package calls
+                        ]):
+                            logger.info(f"Found active MLX process: PID {proc.info['pid']}, CMD: {cmdline}")
+                            return True
+                except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                    continue
+        except Exception as e:
+            logger.warning(f"Error checking MLX processes: {e}")
+        
+        return False
+
     def _find_active_training_log(self):
-        """Find the most recent active training log file
+        """Find the most recent training log file that corresponds to actual running MLX processes
         
         Returns:
             str: Path to active training log file, or None if not found
         """
+        # FIRST: Check if any MLX processes are actually running
+        if not self._check_mlx_processes_running():
+            logger.info("No MLX processes running - no active training")
+            return None
+        
         import glob
         from pathlib import Path
+        from datetime import datetime
         
         # Look for recent training directories
         possible_dirs = [
-            Path("models/cpt")                     # Direct models directory
+            Path("models/cpt")
         ]
         
         all_log_files = []
         
-        # Find all CPT log files from today across all possible directories
-        from datetime import datetime
+        # Find all CPT log files from today
         today = datetime.now().strftime("%Y-%m-%d")
         
         for models_dir in possible_dirs:
@@ -706,13 +741,19 @@ class ContinuedPretrainer:
                 log_files = glob.glob(log_pattern)
                 all_log_files.extend(log_files)
                 
-                # Also include any recent files as fallback
+                # Also include recent files (last 2 hours) as fallback
                 if not log_files:
                     log_pattern = str(models_dir / "*" / "CPT_*.json")
                     recent_files = glob.glob(log_pattern)
+                    # Filter to only very recent files
+                    import time
+                    current_time = time.time()
+                    recent_files = [f for f in recent_files 
+                                  if current_time - os.path.getmtime(f) < 7200]  # 2 hours
                     all_log_files.extend(recent_files)
         
         if not all_log_files:
+            logger.info("No recent training log files found")
             return None
         
         # Find the most recent log file that indicates active training
@@ -724,52 +765,82 @@ class ContinuedPretrainer:
                 with open(log_file, 'r') as f:
                     data = json.load(f)
                     
-                # Check if training is still active (no end_time)
+                # Only consider files without end_time AND with recent activity
                 if data.get('end_time') is None:
-                    # Get the modification time
                     mtime = os.path.getmtime(log_file)
                     if mtime > most_recent_time:
                         most_recent_time = mtime
                         most_recent = log_file
-            except Exception:
+                        logger.info(f"Found potential active training log: {log_file}")
+            except Exception as e:
+                logger.warning(f"Error reading log file {log_file}: {e}")
                 continue
+        
+        if most_recent:
+            logger.info(f"Selected active training log: {most_recent}")
+        else:
+            logger.info("No active training logs found despite MLX processes running")
         
         return most_recent
 
     def get_training_status(self):
-        """Get training status
+        """Get training status with robust MLX process checking
         
         Returns:
             dict: Training status
         """
-        # First check if we have our own active training
+        # STEP 1: Check if we have our own active training process
+        own_training_active = self.is_training_active()
+        
+        # STEP 2: Check if ANY MLX processes are running (most important check)
+        mlx_processes_running = self._check_mlx_processes_running()
+        
+        # STEP 3: Determine if training is active
+        # Training is only active if:
+        # - We have our own active process, OR
+        # - There are MLX processes running
+        training_active = own_training_active or mlx_processes_running
+        
+        logger.info(f"Training status check: own_active={own_training_active}, mlx_running={mlx_processes_running}, final_active={training_active}")
+        
         status = {
-            "active": self.is_training_active()
+            "active": training_active
         }
         
         log_file_to_read = None
         
-        # Add log file path if available from our own training
-        if self._log_file_path:
+        # STEP 4: Find log file to read
+        if self._log_file_path and own_training_active:
+            # Use our own log file if we have active training
             status["log_file"] = self._log_file_path
             log_file_to_read = self._log_file_path
-        else:
-            # Try to find active training from other processes
+            logger.info(f"Using own training log: {self._log_file_path}")
+        elif mlx_processes_running:
+            # Look for active training from other processes only if MLX is running
             active_log = self._find_active_training_log()
             if active_log:
                 log_file_to_read = active_log
                 status["log_file"] = active_log
-                status["active"] = True  # We found an active training
+                logger.info(f"Using external training log: {active_log}")
         
-        # Read the log file if we found one
-        if log_file_to_read and os.path.exists(log_file_to_read):
+        # STEP 5: Read the log file if we found one and training is active
+        if log_file_to_read and os.path.exists(log_file_to_read) and training_active:
             try:
                 if os.path.getsize(log_file_to_read) > 0:
                     with open(log_file_to_read, 'r') as f:
                         training_data = json.load(f)
                         status.update(training_data)
+                        logger.info(f"Loaded training data from: {log_file_to_read}")
             except Exception as e:
                 logger.warning(f"Error reading training log file: {e}")
+        
+        # STEP 6: If no training is active, ensure we return a clean inactive status
+        if not training_active:
+            status = {
+                "active": False,
+                "message": "No active training detected"
+            }
+            logger.info("No active training - returning inactive status")
         
         return status
     

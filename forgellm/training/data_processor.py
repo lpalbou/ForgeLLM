@@ -161,7 +161,7 @@ class DocumentProcessor:
                 else:
                     valid_chunks.append(chunk)
                     
-        logger.info(f"Created {len(valid_chunks)} chunks with max ~{target_length} words each")
+        logger.debug(f"Created {len(valid_chunks)} chunks with max ~{target_length} words each")
         return valid_chunks
 
 
@@ -276,7 +276,7 @@ class PretrainingDataProcessor:
                 domain_text_chunks.extend(chunks)
                 total_tokens += sum(len(chunk.split()) for chunk in chunks)
                 
-        logger.info(f"Processed {len(domain_text_chunks)} domain text chunks with ~{total_tokens:,} tokens")
+        logger.debug(f"Processed {len(domain_text_chunks)} domain text chunks with ~{total_tokens:,} tokens")
         
         # Apply data mixture strategy
         all_text_chunks = self.mixture_processor.mix_domain_and_general_data(domain_text_chunks)

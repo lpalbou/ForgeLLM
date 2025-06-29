@@ -164,12 +164,12 @@ class TrainingInterface {
 
     /**
      * Start periodic updates
+     * DISABLED - Now using main app single consolidated update
      */
     startPeriodicUpdates() {
-        // Check training status every 5 seconds
-        setInterval(() => {
-            this.checkTrainingStatus();
-        }, 5000);
+        console.log('🚫 js/app.js periodic updates DISABLED - using main app single update');
+        // Periodic updates now handled by main app.js performSingleUpdate()
+        // This prevents duplicate API calls
     }
 
     /**
@@ -189,21 +189,12 @@ class TrainingInterface {
 
     /**
      * Check training status
+     * DISABLED - Now handled by main app.js performSingleUpdate()
      */
     async checkTrainingStatus() {
-        try {
-            const response = await apiService.getTrainingStatus();
-            
-            // Update UI
-            this.updateTrainingButtons(response.active);
-            
-            // Update training status
-            if (response.active) {
-                this.updateTrainingStatus(response);
-            }
-        } catch (error) {
-            console.error('Failed to check training status:', error);
-        }
+        console.log('🚫 js/app.js checkTrainingStatus DISABLED - using main app single update');
+        // Training status now handled by main app.js performSingleUpdate()
+        // This prevents duplicate API calls
     }
 
     /**

@@ -346,12 +346,12 @@ class TrainingMetricsLogger:
             """Watchdog thread to detect if the reader thread is stuck"""
             while not stop_event.is_set():
                 # Wait for the watchdog event with timeout
-                if not watchdog_event.wait(timeout=30):
+                if not watchdog_event.wait(timeout=90):
                     # Watchdog event not set within timeout, reader might be stuck
-                    self.logger.warning("Watchdog: Reader thread might be stuck, no output for 30 seconds")
+                    self.logger.warning("Watchdog: Reader thread might be stuck, no output for 90 seconds")
                     
                     # Put a warning message in the queue
-                    output_queue.put("Warning: No output for 30 seconds, reader might be stuck")
+                    output_queue.put("Warning: No output for 90 seconds, reader might be stuck")
                 
                 # Reset the watchdog event
                 watchdog_event.clear()

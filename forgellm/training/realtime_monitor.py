@@ -44,8 +44,42 @@ class RealtimeTrainingMonitor:
             self._monitor_thread.join(timeout=5)
         logger.info("Real-time training monitor stopped")
         
+    def _check_mlx_processes_running(self):
+        """Check if any MLX training processes are actually running
+        
+        Returns:
+            bool: True if MLX training processes are found, False otherwise
+        """
+        import psutil
+        
+        try:
+            for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+                try:
+                    if proc.info['cmdline']:
+                        cmdline = ' '.join(proc.info['cmdline'])
+                        # Look for actual MLX training commands
+                        if any(pattern in cmdline for pattern in [
+                            'mlx_lm.lora',      # MLX LoRA training
+                            'mlx_lm.fuse',      # MLX model fusion
+                            'mlx-lm',           # MLX-LM package calls
+                            'mlx_lm',           # MLX-LM package calls
+                        ]):
+                            logger.info(f"RealtimeMonitor: Found active MLX process: PID {proc.info['pid']}")
+                            return True
+                except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                    continue
+        except Exception as e:
+            logger.warning(f"Error checking MLX processes: {e}")
+        
+        return False
+
     def _find_active_training_file(self) -> Optional[str]:
         """Find the most recent active training file"""
+        # FIRST: Check if any MLX processes are actually running
+        if not self._check_mlx_processes_running():
+            logger.info("RealtimeMonitor: No MLX processes running - no active training")
+            return None
+        
         possible_dirs = [
             Path("models/cpt")
         ]
@@ -60,6 +94,7 @@ class RealtimeTrainingMonitor:
                 all_log_files.extend(log_files)
         
         if not all_log_files:
+            logger.info("RealtimeMonitor: No training log files found")
             return None
         
         # Find the most recent file that's actively being updated
@@ -68,16 +103,28 @@ class RealtimeTrainingMonitor:
         
         for log_file in all_log_files:
             try:
-                # Check modification time
+                # Check modification time - only consider very recent files (last 10 minutes)
                 mtime = os.path.getmtime(log_file)
                 
-                # Only consider files modified in the last hour as potentially active
-                if time.time() - mtime < 3600:
-                    if mtime > most_recent_time:
-                        most_recent_time = mtime
-                        most_recent = log_file
+                if time.time() - mtime < 600:  # 10 minutes
+                    # Also check if the file doesn't have an end_time
+                    try:
+                        with open(log_file, 'r') as f:
+                            data = json.load(f)
+                            if data.get('end_time') is None:
+                                if mtime > most_recent_time:
+                                    most_recent_time = mtime
+                                    most_recent = log_file
+                                    logger.info(f"RealtimeMonitor: Found potential active training: {log_file}")
+                    except:
+                        continue
             except Exception:
                 continue
+        
+        if most_recent:
+            logger.info(f"RealtimeMonitor: Selected active training file: {most_recent}")
+        else:
+            logger.info("RealtimeMonitor: No active training files found despite MLX processes")
         
         return most_recent
     
@@ -98,9 +145,26 @@ class RealtimeTrainingMonitor:
             return None
     
     def _monitor_loop(self):
-        """Main monitoring loop"""
+        """Main monitoring loop - optimized to reduce unnecessary work"""
         while self._is_monitoring:
             try:
+                # SMART MONITORING: Check MLX processes first (lightweight)
+                mlx_running = self._check_mlx_processes_running()
+                
+                if not mlx_running:
+                    # No MLX processes - sleep longer and skip file operations
+                    with self._lock:
+                        self._last_metrics = None
+                        self._current_training_file = None
+                        self._last_update = None
+                    
+                    # Sleep much longer when no training is active
+                    time.sleep(10)  # 10 seconds when inactive
+                    continue
+                
+                # MLX is running - do full monitoring
+                logger.info("RealtimeMonitor: MLX processes detected - full monitoring active")
+                
                 # Find current active training file
                 active_file = self._find_active_training_file()
                 
@@ -118,33 +182,41 @@ class RealtimeTrainingMonitor:
                             self._last_metrics = data['metrics']
                             self._last_update = datetime.now()
                 
-                # Sleep for a short interval
-                time.sleep(2)  # Check every 2 seconds
+                # Sleep shorter when training is active
+                time.sleep(3)  # 3 seconds when training is active
                 
             except Exception as e:
                 logger.error(f"Error in monitoring loop: {e}")
-                time.sleep(5)  # Wait longer on error
+                time.sleep(10)  # Wait longer on error
     
     def get_current_metrics(self) -> Dict[str, Any]:
-        """Get current training metrics"""
+        """Get current training metrics - optimized to avoid redundant checks"""
         with self._lock:
-            if not self._last_metrics:
+            # Use cached state from monitor loop instead of redundant MLX check
+            has_metrics = bool(self._last_metrics)
+            has_recent_update = (
+                self._last_update and 
+                datetime.now() - self._last_update < timedelta(minutes=2)
+            )
+            
+            # Training is active if we have recent metrics (monitor loop handles MLX checking)
+            is_active = has_metrics and has_recent_update
+            
+            if not is_active:
+                logger.info(f"RealtimeMonitor: Training inactive - metrics={has_metrics}, recent_update={has_recent_update}")
                 return {
                     'active': False,
                     'metrics': [],
-                    'last_update': None
+                    'last_update': None,
+                    'message': 'No active training detected'
                 }
             
-            # Check if data is recent (updated within last 30 seconds)
-            is_active = (
-                self._last_update and 
-                datetime.now() - self._last_update < timedelta(seconds=30)
-            )
+            logger.info(f"RealtimeMonitor: Training active - using cached metrics")
             
             return {
-                'active': is_active,
+                'active': True,
                 'metrics': self._last_metrics.copy(),
-                'last_update': self._last_update.isoformat() if self._last_update else None,
+                'last_update': self._last_update.isoformat(),
                 'training_file': self._current_training_file
             }
     
@@ -188,21 +260,39 @@ class RealtimeTrainingMonitor:
         except Exception as e:
             logger.warning(f"Error generating charts: {e}")
         
-        # Add current values for display
+        # Add current values for display - INCLUDE ALL AVAILABLE FIELDS
         if current_data['metrics']:
             latest = current_data['metrics'][-1]
-            current_data['current_values'] = {
-                'iteration': latest.get('iteration', 0),
-                'train_loss': latest.get('train_loss'),
-                'val_loss': latest.get('val_loss'),
-                'train_perplexity': latest.get('train_perplexity'),
-                'val_perplexity': latest.get('val_perplexity'),
-                'learning_rate': latest.get('learning_rate'),
-                'tokens_per_sec': latest.get('tokens_per_sec'),
-                'trained_tokens': latest.get('trained_tokens'),
-                'peak_memory_gb': latest.get('peak_memory_gb'),
-                'iterations_per_sec': latest.get('iterations_per_sec')
-            }
+            
+            # Extract ALL fields from the latest metrics, not just a subset
+            current_values = {}
+            
+            # Core training metrics (always include)
+            core_fields = [
+                'iteration', 'epoch', 'train_loss', 'val_loss', 
+                'train_perplexity', 'val_perplexity', 'learning_rate',
+                'tokens_per_sec', 'trained_tokens', 'peak_memory_gb',
+                'iterations_per_sec', 'warmup_steps', 'lr_decay', 'weight_decay'
+            ]
+            
+            for field in core_fields:
+                if field in latest:
+                    current_values[field] = latest[field]
+                else:
+                    # Set appropriate default values for missing fields
+                    if field in ['val_loss', 'val_perplexity']:
+                        current_values[field] = None  # These are only available every N iterations
+                    elif field in ['epoch', 'warmup_steps', 'lr_decay', 'weight_decay']:
+                        current_values[field] = '-'  # These might not always be present
+                    else:
+                        current_values[field] = latest.get(field, 0)
+            
+            # Add any additional fields that might be present
+            for key, value in latest.items():
+                if key not in current_values:
+                    current_values[key] = value
+            
+            current_data['current_values'] = current_values
         
         return current_data
 

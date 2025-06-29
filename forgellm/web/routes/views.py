@@ -4,6 +4,7 @@ Web routes for ForgeLLM web interface.
 
 import os
 import glob
+import time
 from pathlib import Path
 import logging
 from flask import Blueprint, render_template, send_from_directory, current_app
@@ -17,7 +18,10 @@ bp = Blueprint('views', __name__)
 @bp.route('/')
 def index():
     """Render the main index page"""
-    return render_template('index.html')
+    # Add cache buster to force JavaScript reload after changes
+    # Force cache bust to reload updated JavaScript
+    cache_buster = 1751221786
+    return render_template('index.html', cache_buster=cache_buster)
 
 @bp.route('/static/<path:path>')
 def serve_static(path):

@@ -16,40 +16,19 @@ class SocketService {
 
     /**
      * Initialize the Socket.IO connection
+     * DISABLED - Preventing 404 errors by using HTTP API approach instead
      */
     init() {
-        // Connect to the Socket.IO server
-        this.socket = io();
-
-        // Set up event handlers
-        this.socket.on('connect', () => {
-            console.log('Socket.IO connected');
-            this.connected = true;
+        console.log('🚫 Socket.IO connection DISABLED - using HTTP API single update approach');
+        
+        // Simulate connected state for compatibility
+        this.connected = true;
+        this.socket = null;
+        
+        // Trigger connect callbacks for compatibility
+        setTimeout(() => {
             this._triggerCallbacks('connect');
-        });
-
-        this.socket.on('disconnect', () => {
-            console.log('Socket.IO disconnected');
-            this.connected = false;
-            this._triggerCallbacks('disconnect');
-        });
-
-        this.socket.on('connected', (data) => {
-            console.log('Server connection acknowledged: ', data);
-        });
-
-        this.socket.on('training_update', (data) => {
-            this._triggerCallbacks('training_update', data);
-        });
-
-        this.socket.on('training_finished', (data) => {
-            this._triggerCallbacks('training_finished', data);
-        });
-
-        this.socket.on('error', (data) => {
-            console.error('Socket error:', data);
-            this._triggerCallbacks('error', data);
-        });
+        }, 100);
     }
 
     /**
@@ -92,49 +71,44 @@ class SocketService {
 
     /**
      * Request a training update from the server
+     * DISABLED - Using HTTP API approach instead
      */
     requestUpdate() {
-        if (this.connected) {
-            this.socket.emit('request_update');
-        }
+        console.log('🚫 Socket requestUpdate disabled - using HTTP API');
     }
 
     /**
      * Check training status
+     * DISABLED - Using HTTP API approach instead
      */
     checkTrainingStatus() {
-        if (this.connected) {
-            this.socket.emit('check_training_status');
-        }
+        console.log('🚫 Socket checkTrainingStatus disabled - using HTTP API');
     }
 
     /**
      * Load a training log file
+     * DISABLED - Using HTTP API approach instead
      * @param {string} logFile - Path to the log file
      */
     loadTrainingLog(logFile) {
-        if (this.connected) {
-            this.socket.emit('load_training_log', { log_file: logFile });
-        }
+        console.log('🚫 Socket loadTrainingLog disabled - using HTTP API');
     }
 
     /**
      * Start text generation
+     * DISABLED - Using HTTP API approach instead
      * @param {object} params - Generation parameters
      */
     startGeneration(params) {
-        if (this.connected) {
-            this.socket.emit('start_generation', params);
-        }
+        console.log('🚫 Socket startGeneration disabled - using HTTP API');
     }
 
     /**
      * Stop text generation
+     * DISABLED - Using HTTP API approach instead
      */
     stopGeneration() {
-        if (this.connected) {
-            this.socket.emit('stop_generation');
-        }
+        console.log('🚫 Socket stopGeneration disabled - using HTTP API');
     }
 }
 

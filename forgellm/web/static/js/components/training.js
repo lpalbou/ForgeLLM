@@ -28,25 +28,12 @@ class TrainingComponent {
     }
 
     /**
-     * Check training status
+     * Check training status - DISABLED to prevent duplicate API calls
      */
     async checkTrainingStatus() {
-        try {
-            const response = await apiService.getTrainingStatus();
-            
-            // Update training status UI
-            this.updateTrainingStatus(response);
-        } catch (error) {
-            console.error('Failed to check training status:', error);
-        }
-    }
-
-    /**
-     * Update training status UI
-     * @param {object} data - Training status data
-     */
-    updateTrainingStatus(data) {
-        // Update training status UI
+        console.log('🚫 TrainingComponent checkTrainingStatus DISABLED - using main app single update');
+        // Training status now handled by main app.js performSingleUpdate()
+        // This prevents duplicate API calls
     }
 
     /**
@@ -62,8 +49,8 @@ class TrainingComponent {
             
             // Update UI
             if (response.success) {
-                // Training started successfully
-                this.checkTrainingStatus();
+                // Training started successfully - NO longer calling checkTrainingStatus()
+                console.log('✅ Training started - status updates handled by main app');
             } else {
                 // Training failed to start
                 console.error('Failed to start training:', response.error);
@@ -82,8 +69,8 @@ class TrainingComponent {
             
             // Update UI
             if (response.success) {
-                // Training stopped successfully
-                this.checkTrainingStatus();
+                // Training stopped successfully - NO longer calling checkTrainingStatus()
+                console.log('✅ Training stopped - status updates handled by main app');
             } else {
                 // Training failed to stop
                 console.error('Failed to stop training:', response.error);
@@ -103,11 +90,12 @@ class TrainingComponent {
     }
 
     /**
-     * Called when the training tab is activated
+     * Called when the training tab is activated - DISABLED to prevent duplicate API calls
      */
     onActivate() {
-        // Check training status
-        this.checkTrainingStatus();
+        console.log('🚫 TrainingComponent onActivate DISABLED - using main app single update');
+        // Training status now handled by main app.js performSingleUpdate()
+        // This prevents duplicate API calls
     }
 }
 

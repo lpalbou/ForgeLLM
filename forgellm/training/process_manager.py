@@ -129,13 +129,14 @@ class TrainingProcessManager:
                     # Parse training data
                     training_data = self._parse_training_data(log_file)
                     
-                    # Emit update via Socket.IO (if available)
-                    try:
-                        from ..web.services.socket_service import training_monitor
-                        if training_monitor:
-                            training_monitor.update_training_data(training_data)
-                    except ImportError:
-                        pass  # Socket.IO not available
+                    # Socket updates disabled to prevent API call spam
+                    # All updates now handled by main app.js performSingleUpdate() method
+                    # try:
+                    #     from ..web.services.socket_service import training_monitor
+                    #     if training_monitor:
+                    #         training_monitor.update_training_data(training_data)
+                    # except ImportError:
+                    #     pass  # Socket.IO not available
                     
                     # Check if training has completed
                     if training_data.get("status") == "completed":
@@ -159,13 +160,13 @@ class TrainingProcessManager:
                 if log_file and Path(log_file).exists():
                     final_data = self._parse_training_data(log_file)
                     
-                    # Emit final update via Socket.IO (if available)
-                    try:
-                        from ..web.services.socket_service import training_monitor
-                        if training_monitor:
-                            training_monitor.emit_finished(final_data)
-                    except ImportError:
-                        pass  # Socket.IO not available
+                    # Socket updates disabled to prevent API call spam
+                    # try:
+                    #     from ..web.services.socket_service import training_monitor
+                    #     if training_monitor:
+                    #         training_monitor.emit_finished(final_data)
+                    # except ImportError:
+                    #     pass  # Socket.IO not available
                         
             except Exception as e:
                 logger.error(f"Error getting final training data: {e}")
