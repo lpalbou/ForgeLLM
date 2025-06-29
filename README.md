@@ -198,6 +198,23 @@ ForgeLLM uses a clean separation:
 
 This allows you to use just the CLI for testing, or the full web interface for training.
 
+## Documentation
+
+### 📚 Comprehensive Guides
+
+- **[Getting Started](docs/getting_started.md)**: Complete setup and first training session
+- **[Architecture](docs/architecture.md)**: System design and component overview
+- **[Data Flow](docs/data_flow.md)**: How data moves through the system
+- **[API Reference](docs/api_reference.md)**: Complete REST API and CLI documentation
+- **[CPT Best Practices](docs/cpt.md)**: Advanced continued pre-training techniques
+
+### 🔧 Technical Documentation
+
+- **Architecture**: Multi-process design with model server separation
+- **Training Pipeline**: Real-time monitoring with automatic checkpoint management
+- **Model Publishing**: LoRA to full model conversion with comprehensive documentation
+- **Error Recovery**: Robust error handling and automatic recovery mechanisms
+
 ## Contributing
 
 Contributions welcome! Please submit pull requests.
