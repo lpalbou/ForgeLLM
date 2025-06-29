@@ -224,6 +224,12 @@ class RealtimeTrainingMonitor:
         """Get data formatted for dashboard display"""
         current_data = self.get_current_metrics()
         
+        # ALWAYS try to get config from most recent training session
+        # even when no training is currently active
+        most_recent_config = self._get_most_recent_config()
+        if most_recent_config:
+            current_data['config'] = most_recent_config
+        
         if not current_data['metrics']:
             return current_data
         

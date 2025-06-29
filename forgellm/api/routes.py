@@ -590,9 +590,14 @@ def setup_api(app: Flask) -> Blueprint:
                         if isinstance(value, int) or value == int(value):
                             return int(value)  # Keep integers as integers
                         else:
-                            # Round to max_decimals and remove trailing zeros
-                            rounded = round(value, max_decimals)
-                            return float(f"{rounded:.{max_decimals}f}".rstrip('0').rstrip('.'))
+                            # For very small numbers (like learning rates), preserve more precision
+                            if abs(value) < 0.001 and value != 0:
+                                # Use scientific notation or more decimal places for small values
+                                return float(f"{value:.6g}")  # 6 significant digits
+                            else:
+                                # Round to max_decimals and remove trailing zeros
+                                rounded = round(value, max_decimals)
+                                return float(f"{rounded:.{max_decimals}f}".rstrip('0').rstrip('.'))
                     return value
                 
                 # Calculate epoch correctly using trained_tokens vs dataset_total_tokens
@@ -609,6 +614,32 @@ def setup_api(app: Flask) -> Blueprint:
                         epoch_value = 0.0
                 else:
                     epoch_value = format_numeric_value(epoch_value, 3)
+                
+                # Calculate elapsed time and ETA
+                elapsed_minutes = None
+                eta_minutes = None
+                
+                try:
+                    # Get start time from training data
+                    start_time_str = training_data.get('start_time')
+                    if start_time_str:
+                        from datetime import datetime
+                        start_time = datetime.fromisoformat(start_time_str.replace('Z', '+00:00'))
+                        current_time = datetime.now(start_time.tzinfo) if start_time.tzinfo else datetime.now()
+                        elapsed_seconds = (current_time - start_time).total_seconds()
+                        elapsed_minutes = elapsed_seconds / 60
+                        
+                        # Calculate ETA based on progress
+                        current_iteration = latest_metrics.get('iteration', 0)
+                        max_iterations = config.get('max_iterations', 300)
+                        
+                        if current_iteration > 0 and max_iterations > current_iteration:
+                            progress_fraction = current_iteration / max_iterations
+                            if progress_fraction > 0:
+                                total_estimated_minutes = elapsed_minutes / progress_fraction
+                                eta_minutes = total_estimated_minutes - elapsed_minutes
+                except Exception as e:
+                    logger.debug(f"Error calculating time estimates: {e}")
                 
                 # Include ALL available fields with proper formatting
                 current_values = {}
@@ -631,21 +662,38 @@ def setup_api(app: Flask) -> Blueprint:
                         else:
                             current_values[field] = value
                     else:
-                        if field in ['val_loss', 'val_perplexity']:
+                        # Handle missing fields - use config values where appropriate
+                        if field == 'learning_rate':
+                            # Use learning_rate from latest metrics first, then config
+                            lr_value = latest_metrics.get('learning_rate')
+                            if lr_value is None:
+                                lr_value = config.get('learning_rate')
+                            current_values[field] = format_numeric_value(lr_value, 3)
+                        elif field == 'warmup_steps':
+                            ws_value = latest_metrics.get('warmup_steps')
+                            if ws_value is None:
+                                ws_value = config.get('warmup_steps', '-')
+                            current_values[field] = ws_value
+                        elif field == 'lr_decay':
+                            ld_value = latest_metrics.get('lr_decay')
+                            if ld_value is None:
+                                ld_value = config.get('lr_decay_factor', '-')
+                            current_values[field] = ld_value
+                        elif field == 'weight_decay':
+                            wd_value = latest_metrics.get('weight_decay')
+                            if wd_value is None:
+                                wd_value = config.get('weight_decay', '-')
+                            current_values[field] = wd_value
+                        elif field in ['val_loss', 'val_perplexity']:
                             current_values[field] = None
-                        elif field in ['warmup_steps', 'lr_decay', 'weight_decay']:
-                            current_values[field] = '-'
                         else:
                             current_values[field] = latest_metrics.get(field, 0)
                 
-                # Add any additional fields with formatting
-                for key, value in latest_metrics.items():
-                    if key not in current_values:
-                        # Apply formatting to numeric fields we might have missed
-                        if isinstance(value, (int, float)) and key not in ['iteration', 'trained_tokens']:
-                            current_values[key] = format_numeric_value(value, 3)
-                        else:
-                            current_values[key] = value
+                # Add time estimates
+                if elapsed_minutes is not None:
+                    current_values['elapsed_minutes'] = format_numeric_value(elapsed_minutes, 1)
+                if eta_minutes is not None:
+                    current_values['eta_minutes'] = format_numeric_value(eta_minutes, 1)
                 
                 # 6. Generate charts if needed
                 charts = None
@@ -664,6 +712,7 @@ def setup_api(app: Flask) -> Blueprint:
                     'config': config,
                     'charts': charts,
                     'training_file': most_recent,
+                    'start_time': training_data.get('start_time'),
                     'last_update': datetime.now().isoformat()
                 }
                 

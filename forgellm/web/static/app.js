@@ -327,7 +327,18 @@ class TrainingInterface {
             if (data.active) {
                 // Update all metrics from single source
                 if (data.current_values) {
-                    this.updateTrainingMetrics({...data.current_values, config: data.config});
+                    // Ensure config is properly passed without being overridden by current_values
+                    const metricsData = {
+                        ...data.current_values,
+                        config: data.config
+                    };
+                    // Remove any config fields from current_values that might override the config object
+                    delete metricsData.learning_rate;
+                    delete metricsData.warmup_steps;
+                    delete metricsData.lr_decay;
+                    delete metricsData.weight_decay;
+                    
+                    this.updateTrainingMetrics(metricsData);
                 }
                 
                 // Update training status
@@ -953,14 +964,16 @@ class TrainingInterface {
             updatedCount++;
         }
         
-        if (updateElementIfChanged('val-loss', formatValue(data.val_loss))) {
+        // Update val-loss - only if not "-" (keep existing value when waiting for validation)
+        const valLossValue = formatValue(data.val_loss);
+        if (valLossValue !== '-' && updateElementIfChanged('val-loss', valLossValue)) {
             updatedCount++;
         }
         
-        // Update perplexity
+        // Update perplexity - only if not "-" (keep existing value when waiting for validation)
         const perplexityValue = formatValue(data.val_perplexity, 2) || 
                                formatValue(data.train_perplexity, 2) || '-';
-        if (updateElementIfChanged('perplexity', perplexityValue)) {
+        if (perplexityValue !== '-' && updateElementIfChanged('perplexity', perplexityValue)) {
             updatedCount++;
         }
         
@@ -982,30 +995,31 @@ class TrainingInterface {
             memoryUsage.textContent = formatValue(data.peak_memory_gb, 1);
         }
         
-        // Update learning rate
-        const learningRate = document.getElementById('learning-rate');
-        if (learningRate) {
-            learningRate.textContent = data.learning_rate ? 
-                (typeof data.learning_rate === 'number' ? data.learning_rate.toExponential(2) : data.learning_rate) : 
-                '-';
+        // DIRECT CONFIG VALUE UPDATES - Simple and direct approach
+        
+        // Learning Rate: ALWAYS from config.learning_rate
+        const learningRateElement = document.getElementById('learning-rate');
+        if (learningRateElement && data.config && data.config.learning_rate !== undefined) {
+            const lrValue = data.config.learning_rate;
+            learningRateElement.textContent = typeof lrValue === 'number' ? lrValue.toExponential(2) : lrValue;
         }
         
-        // Update warmup steps
-        const warmupSteps = document.getElementById('warmup-steps');
-        if (warmupSteps) {
-            warmupSteps.textContent = data.warmup_steps || (data.config && data.config.warmup_steps) || '-';
+        // Warmup Steps: ALWAYS from config.warmup_steps
+        const warmupStepsElement = document.getElementById('warmup-steps');
+        if (warmupStepsElement && data.config && data.config.warmup_steps !== undefined) {
+            warmupStepsElement.textContent = data.config.warmup_steps;
         }
         
-        // Update LR decay factor
-        const lrDecayFactor = document.getElementById('lr-decay-factor');
-        if (lrDecayFactor) {
-            lrDecayFactor.textContent = data.lr_decay_factor || (data.config && data.config.lr_decay_factor) || '-';
+        // LR Decay Factor: ALWAYS from config.lr_decay_factor
+        const lrDecayElement = document.getElementById('lr-decay-factor');
+        if (lrDecayElement && data.config && data.config.lr_decay_factor !== undefined) {
+            lrDecayElement.textContent = data.config.lr_decay_factor;
         }
         
-        // Update weight decay
-        const weightDecay = document.getElementById('weight-decay');
-        if (weightDecay) {
-            weightDecay.textContent = data.weight_decay || (data.config && data.config.weight_decay) || '-';
+        // Weight Decay: ALWAYS from config.weight_decay
+        const weightDecayElement = document.getElementById('weight-decay');
+        if (weightDecayElement && data.config && data.config.weight_decay !== undefined) {
+            weightDecayElement.textContent = data.config.weight_decay;
         }
         
         // Calculate epoch and progress
@@ -1149,7 +1163,18 @@ class TrainingInterface {
             if (data.active) {
                 // Update training metrics with current values and config
                 if (data.current_values) {
-                    this.updateTrainingMetrics({...data.current_values, config: data.config});
+                    // Ensure config is properly passed without being overridden by current_values
+                    const metricsData = {
+                        ...data.current_values,
+                        config: data.config
+                    };
+                    // Remove any config fields from current_values that might override the config object
+                    delete metricsData.learning_rate;
+                    delete metricsData.warmup_steps;
+                    delete metricsData.lr_decay;
+                    delete metricsData.weight_decay;
+                    
+                    this.updateTrainingMetrics(metricsData);
                 }
                 
                 // Update training status
