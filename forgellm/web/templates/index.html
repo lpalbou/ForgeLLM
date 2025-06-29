@@ -196,6 +196,338 @@
             overflow-y: auto;
         }
 
+        /* iPhone-like chat styling */
+        .chat-user {
+            background: linear-gradient(135deg, #007AFF, #5AC8FA) !important;
+            color: white !important;
+            border-radius: 20px 20px 6px 20px !important;
+            margin: 6px 0 6px auto !important;
+            max-width: 70% !important;
+            padding: 14px 18px !important;
+            border: none !important;
+            box-shadow: 0 2px 8px rgba(0, 122, 255, 0.2) !important;
+            font-size: 15px !important;
+            line-height: 1.45 !important;
+            word-wrap: break-word !important;
+            font-weight: 400 !important;
+        }
+
+        .chat-assistant {
+            background: white !important;
+            color: #1c1c1e !important;
+            border-radius: 20px 20px 20px 6px !important;
+            margin: 6px auto 6px 0 !important;
+            max-width: 80% !important;
+            padding: 14px 18px !important;
+            border: 1px solid #e5e5ea !important;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08) !important;
+            font-size: 15px !important;
+            line-height: 1.45 !important;
+            word-wrap: break-word !important;
+            font-weight: 400 !important;
+        }
+
+        /* Chat container styling */
+        #chat-history {
+            background: linear-gradient(to bottom, #f8f9fa, #ffffff) !important;
+            padding: 20px 16px !important;
+            border-radius: 0 !important;
+        }
+
+        #chat-history .list-group-item:first-child {
+            border-top-left-radius: 0 !important;
+            border-top-right-radius: 0 !important;
+        }
+
+        #chat-history .list-group-item:last-child {
+            border-bottom-left-radius: 0 !important;
+            border-bottom-right-radius: 0 !important;
+        }
+
+        /* Improve the Generation Output card */
+        .card {
+            border-radius: 12px !important;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08) !important;
+            border: 1px solid #e5e5ea !important;
+        }
+
+        .card-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+            color: white !important;
+            border-radius: 12px 12px 0 0 !important;
+            border-bottom: none !important;
+            padding: 16px 20px !important;
+            font-weight: 600 !important;
+        }
+
+        /* Model Configuration specific styling */
+        .col-lg-4 .card-header {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%) !important;
+        }
+
+        /* Form controls in model config */
+        .form-control, .form-select {
+            border-radius: 8px !important;
+            border: 1px solid #e5e5ea !important;
+            padding: 10px 14px !important;
+            font-size: 14px !important;
+            transition: all 0.2s ease !important;
+        }
+
+        .form-control:focus, .form-select:focus {
+            border-color: #4facfe !important;
+            box-shadow: 0 0 0 3px rgba(79, 172, 254, 0.1) !important;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%) !important;
+            border: none !important;
+            border-radius: 8px !important;
+            padding: 10px 20px !important;
+            font-weight: 500 !important;
+            transition: all 0.2s ease !important;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-1px) !important;
+            box-shadow: 0 4px 12px rgba(79, 172, 254, 0.4) !important;
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%) !important;
+            border: none !important;
+            border-radius: 8px !important;
+            padding: 10px 20px !important;
+            font-weight: 500 !important;
+            transition: all 0.2s ease !important;
+        }
+
+        .btn-danger:hover {
+            transform: translateY(-1px) !important;
+            box-shadow: 0 4px 12px rgba(255, 107, 107, 0.4) !important;
+        }
+
+        .card-body {
+            border-radius: 0 0 12px 12px !important;
+        }
+
+        /* Chat input styling */
+        #chat-input-container {
+            background: white !important;
+            border-top: 1px solid #E5E5EA !important;
+            padding: 16px 20px !important;
+        }
+
+        #chat-input {
+            border-radius: 24px !important;
+            border: 2px solid #e5e5ea !important;
+            padding: 12px 18px !important;
+            font-size: 15px !important;
+            background: #f8f9fa !important;
+            transition: all 0.2s ease !important;
+            resize: none !important;
+        }
+
+        #chat-input:focus {
+            border-color: #007AFF !important;
+            box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.1) !important;
+            background: white !important;
+            outline: none !important;
+        }
+
+        #send-message-btn {
+            border-radius: 50% !important;
+            width: 44px !important;
+            height: 44px !important;
+            margin-left: 10px !important;
+            background: linear-gradient(135deg, #007AFF, #5AC8FA) !important;
+            border: none !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            transition: all 0.2s ease !important;
+            box-shadow: 0 2px 8px rgba(0, 122, 255, 0.3) !important;
+        }
+
+        #send-message-btn:hover {
+            background: linear-gradient(135deg, #0056CC, #4A9EE8) !important;
+            transform: translateY(-1px) !important;
+            box-shadow: 0 4px 12px rgba(0, 122, 255, 0.4) !important;
+        }
+
+        #send-message-btn:disabled {
+            background: #C7C7CC !important;
+            transform: none !important;
+            box-shadow: none !important;
+        }
+
+        /* Toolbar styling */
+        .btn-group .btn {
+            border-radius: 8px !important;
+            margin-right: 6px !important;
+            font-size: 13px !important;
+            padding: 6px 12px !important;
+            font-weight: 500 !important;
+            transition: all 0.2s ease !important;
+        }
+
+        .btn-outline-secondary:hover {
+            background: #6c757d !important;
+            border-color: #6c757d !important;
+            transform: translateY(-1px) !important;
+        }
+
+        .btn-outline-primary:hover {
+            background: #007AFF !important;
+            border-color: #007AFF !important;
+            transform: translateY(-1px) !important;
+        }
+
+        .btn-outline-success:hover {
+            background: #28a745 !important;
+            border-color: #28a745 !important;
+            transform: translateY(-1px) !important;
+        }
+
+        /* Markdown content in chat messages */
+        .chat-assistant h1, .chat-assistant h2, .chat-assistant h3, 
+        .chat-assistant h4, .chat-assistant h5, .chat-assistant h6 {
+            margin-top: 18px !important;
+            margin-bottom: 10px !important;
+            font-weight: 700 !important;
+            color: #2c3e50 !important;
+        }
+
+        .chat-assistant h1:first-child, .chat-assistant h2:first-child, 
+        .chat-assistant h3:first-child, .chat-assistant h4:first-child, 
+        .chat-assistant h5:first-child, .chat-assistant h6:first-child {
+            margin-top: 0 !important;
+        }
+
+        .chat-assistant h1 { font-size: 20px !important; }
+        .chat-assistant h2 { font-size: 18px !important; }
+        .chat-assistant h3 { font-size: 16px !important; }
+
+        .chat-assistant p {
+            margin-bottom: 14px !important;
+            color: #1c1c1e !important;
+        }
+
+        .chat-assistant p:last-child {
+            margin-bottom: 0 !important;
+        }
+
+        .chat-assistant ul, .chat-assistant ol {
+            margin: 10px 0 !important;
+            padding-left: 22px !important;
+        }
+
+        .chat-assistant li {
+            margin-bottom: 6px !important;
+            color: #1c1c1e !important;
+        }
+
+        .chat-assistant code {
+            background: #f1f3f4 !important;
+            color: #d73a49 !important;
+            padding: 3px 8px !important;
+            border-radius: 6px !important;
+            font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace !important;
+            font-size: 13px !important;
+            font-weight: 500 !important;
+        }
+
+        .chat-assistant pre {
+            background: #f8f9fa !important;
+            border: 1px solid #e9ecef !important;
+            padding: 16px !important;
+            border-radius: 10px !important;
+            margin: 16px 0 !important;
+            overflow-x: auto !important;
+        }
+
+        .chat-assistant pre code {
+            background: none !important;
+            color: #24292e !important;
+            padding: 0 !important;
+            font-weight: 400 !important;
+        }
+
+        .chat-assistant blockquote {
+            border-left: 4px solid #007AFF !important;
+            background: #f8f9ff !important;
+            padding: 12px 16px !important;
+            margin: 16px 0 !important;
+            border-radius: 0 8px 8px 0 !important;
+            color: #495057 !important;
+            font-style: italic !important;
+        }
+
+        .chat-assistant strong {
+            color: #2c3e50 !important;
+            font-weight: 600 !important;
+        }
+
+        .chat-assistant em {
+            color: #6c757d !important;
+        }
+
+        /* Welcome message styling */
+        #chat-welcome {
+            background: rgba(255, 255, 255, 0.8) !important;
+            border-radius: 16px !important;
+            padding: 40px 20px !important;
+            margin: 20px !important;
+            backdrop-filter: blur(10px) !important;
+            border: 1px solid rgba(229, 229, 234, 0.5) !important;
+        }
+
+        #chat-welcome i {
+            opacity: 0.6 !important;
+        }
+
+        #chat-welcome p {
+            color: #8e8e93 !important;
+            font-size: 16px !important;
+            margin: 0 !important;
+            font-weight: 400 !important;
+        }
+
+        /* Stats display */
+        #chat-stats {
+            background: rgba(255, 255, 255, 0.9) !important;
+            padding: 8px 12px !important;
+            border-radius: 8px !important;
+            font-size: 12px !important;
+            color: #6c757d !important;
+            border: 1px solid rgba(229, 229, 234, 0.5) !important;
+        }
+
+        /* Toolbar container */
+        .d-flex.justify-content-between.align-items-center.px-3.py-2.border-bottom {
+            background: rgba(248, 249, 250, 0.95) !important;
+            backdrop-filter: blur(10px) !important;
+            border-bottom: 1px solid #e5e5ea !important;
+        }
+
+        /* Scrollbar styling for chat */
+        #chat-history::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        #chat-history::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        #chat-history::-webkit-scrollbar-thumb {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 3px;
+        }
+
+        #chat-history::-webkit-scrollbar-thumb:hover {
+            background: rgba(0, 0, 0, 0.3);
+        }
+
         .mt-4 {
             max-width: 85%;
         }
@@ -759,7 +1091,7 @@
             <!-- Testing Tab -->
             <div class="tab-pane fade" id="testing" role="tabpanel">
                 <div class="row">
-                    <div class="col-lg-6">
+                    <div class="col-lg-4">
                         <div class="card">
                             <div class="card-header">
                                 <i class="fas fa-cogs me-2"></i>Model Configuration
@@ -872,7 +1204,7 @@
                         </div>
                     </div>
                     
-                    <div class="col-lg-6">
+                    <div class="col-lg-8">
                         <div class="card">
                             <div class="card-header">
                                 <i class="fas fa-terminal me-2"></i>Generation Output
@@ -887,11 +1219,8 @@
                                         <button id="toggle-chat-btn" class="btn btn-sm btn-outline-secondary" data-bs-toggle="tooltip" title="Toggle chat history for context (on by default)">
                                             <i class="fas fa-book-open"></i> History: On
                                         </button>
-                                        <button id="toggle-markdown-btn" class="btn btn-sm btn-outline-primary" data-bs-toggle="tooltip" title="Toggle markdown rendering (on by default)">
+                                        <button id="toggle-markdown-btn" class="btn btn-sm btn-outline-primary d-none" data-bs-toggle="tooltip" title="Toggle markdown rendering (on by default)">
                                             <i class="fab fa-markdown"></i> Markdown: On
-                                        </button>
-                                        <button id="force-markdown-btn" class="btn btn-sm btn-outline-info" data-bs-toggle="tooltip" title="Force markdown rendering for all responses">
-                                            <i class="fas fa-magic"></i> Force MD
                                         </button>
                                         <button id="save-chat-btn" class="btn btn-sm btn-outline-primary" disabled data-bs-toggle="tooltip" title="Saves conversation with model metadata">
                                             <i class="fas fa-save"></i> Save History <i class="fas fa-tag small"></i>
@@ -904,8 +1233,12 @@
                                 </div>
 
                                 <!-- Chat history -->
-                                <div id="chat-history" class="list-group overflow-auto" style="height:55vh;">
-                                    <!-- Content will be populated dynamically -->
+                                <div id="chat-history" class="list-group overflow-auto" style="height:60vh;">
+                                    <!-- Welcome message when no chat history -->
+                                    <div class="d-flex flex-column align-items-center justify-content-center h-100 text-muted" id="chat-welcome">
+                                        <i class="fas fa-robot fa-3x mb-3" style="color: #C7C7CC;"></i>
+                                        <p class="text-center">Model ready! Type a message below to start the conversation.</p>
+                                    </div>
                                 </div>
                                 
                                 <!-- Chat input (appears when model is loaded) -->

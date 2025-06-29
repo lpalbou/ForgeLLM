@@ -1872,6 +1872,12 @@ class TrainingInterface {
         console.log('📋 History array:', historyArray);
         console.log('🤖 Model type:', isBaseModel ? 'BASE' : 'INSTRUCT');
 
+        // Hide welcome message when first message is sent
+        const welcomeMsg = document.getElementById('chat-welcome');
+        if (welcomeMsg) {
+            welcomeMsg.style.display = 'none';
+        }
+        
         // USER bubble
         const userBubble = document.createElement('div');
         userBubble.className = 'list-group-item chat-user';
@@ -2016,7 +2022,7 @@ class TrainingInterface {
             console.log(`🎯 Final completion (${completion.length} chars): "${completion.substring(0, 100)}..."`);
             
             // Apply markdown rendering after streaming is complete
-            this.renderMarkdownContent(botBubble, completion, this.forceMarkdown);
+            this.renderMarkdownContent(botBubble, completion, false);
             
             // Enable save button
             document.getElementById('save-chat-btn').disabled = false;
@@ -2042,7 +2048,7 @@ class TrainingInterface {
             console.log('🔍 Raw completion:', completion.substring(0, 100) + '...');
             
             // Apply markdown rendering for non-streaming response
-            this.renderMarkdownContent(botBubble, completion, this.forceMarkdown);
+            this.renderMarkdownContent(botBubble, completion, false);
             
             // Enable save button as soon as we have at least one answer
             document.getElementById('save-chat-btn').disabled = false;
@@ -2671,7 +2677,6 @@ class TrainingInterface {
         const clearBtn = document.getElementById('clear-chat-btn');
         const toggleBtn = document.getElementById('toggle-chat-btn');
         const markdownToggleBtn = document.getElementById('toggle-markdown-btn');
-        const forceMarkdownBtn = document.getElementById('force-markdown-btn');
         const saveBtn = document.getElementById('save-chat-btn');
 
         // Initialize tooltips
@@ -2687,22 +2692,21 @@ class TrainingInterface {
         // State flags
         this.chatHidden = false;
         this.markdownEnabled = true; // Markdown enabled by default
-        this.forceMarkdown = false; // Force markdown disabled by default
 
         clearBtn.addEventListener('click', () => {
             const chatHistory = document.getElementById('chat-history');
             if (this.modelLoaded) {
                 chatHistory.innerHTML = `
-                    <div class="text-center text-muted mt-3 mb-3">
-                        <i class="fas fa-robot fa-2x mb-3"></i>
-                        <p>Model ready! Type a message below to start the conversation.</p>
+                    <div class="d-flex flex-column align-items-center justify-content-center h-100 text-muted" id="chat-welcome">
+                        <i class="fas fa-robot fa-3x mb-3" style="color: #C7C7CC;"></i>
+                        <p class="text-center">Model ready! Type a message below to start the conversation.</p>
                     </div>
                 `;
             } else {
                 chatHistory.innerHTML = `
-                    <div class="text-center text-muted mt-5">
-                        <i class="fas fa-cloud fa-2x mb-3"></i>
-                        <p>Load a model to start generating text</p>
+                    <div class="d-flex flex-column align-items-center justify-content-center h-100 text-muted" id="chat-welcome">
+                        <i class="fas fa-cloud fa-3x mb-3" style="color: #C7C7CC;"></i>
+                        <p class="text-center">Load a model to start generating text</p>
                     </div>
                 `;
             }
@@ -2748,18 +2752,6 @@ class TrainingInterface {
             
             this.showAlert(`Markdown rendering ${this.markdownEnabled ? 'enabled' : 'disabled'}`, 'info');
         });
-
-        forceMarkdownBtn.addEventListener('click', () => {
-            this.forceMarkdown = !this.forceMarkdown;
-            forceMarkdownBtn.innerHTML = this.forceMarkdown ? 
-                '<i class="fas fa-magic"></i> Force MD: On' : 
-                '<i class="fas fa-magic"></i> Force MD: Off';
-            
-            // Re-render all assistant messages with new setting
-            this.refreshChatRendering();
-            
-            this.showAlert(`Force Markdown ${this.forceMarkdown ? 'enabled' : 'disabled'}`, 'info');
-        });
     }
 
     /**
@@ -2772,7 +2764,7 @@ class TrainingInterface {
         assistantBubbles.forEach(bubble => {
             const rawText = bubble.getAttribute('data-raw-text');
             if (rawText) {
-                this.renderMarkdownContent(bubble, rawText, this.forceMarkdown);
+                this.renderMarkdownContent(bubble, rawText, false);
             }
         });
     }
@@ -2944,6 +2936,12 @@ class TrainingInterface {
             const chatHistory = document.getElementById('chat-history');
             chatHistory.innerHTML = '';
 
+            // Hide welcome message when loading history
+            const welcomeMsg = document.getElementById('chat-welcome');
+            if (welcomeMsg) {
+                welcomeMsg.style.display = 'none';
+            }
+
             // Load system prompt from message structure (new format)
             let systemPrompt = '';
             const systemMessage = historyData.messages.find(msg => msg.role === 'system');
@@ -2998,7 +2996,7 @@ class TrainingInterface {
                     
                     // Handle markdown for assistant messages
                     if (message.role === 'assistant') {
-                        this.renderMarkdownContent(bubble, message.content, this.forceMarkdown);
+                        this.renderMarkdownContent(bubble, message.content, false);
                     } else {
                         bubble.innerText = message.content;
                     }
