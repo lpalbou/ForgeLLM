@@ -410,25 +410,34 @@ def load_model(model_name, adapter_path=None):
         # Convert published model names to actual local paths
         actual_model_path = model_name
         if model_name.startswith('published/'):
-            # Convert published/model_name/timestamp to actual cache path
+            # Convert published/model_name to actual cache path
             from pathlib import Path
             cache_path = Path.home() / '.cache' / 'huggingface' / 'hub'
             
-            # Extract the model parts
-            published_parts = model_name.replace('published/', '').split('/')
+            # Remove the "published/" prefix
+            published_model_name = model_name.replace('published/', '')
+            
+            # Handle different published model name formats
+            published_parts = published_model_name.split('/')
             if len(published_parts) >= 2:
+                # Format: published/model_part/timestamp_part
                 model_part = published_parts[0]
                 timestamp_part = published_parts[1]
-                
-                # Look for the actual directory
                 expected_dir = f"models--published--{model_part}--{timestamp_part}"
-                actual_path = cache_path / expected_dir
-                
-                if actual_path.exists():
-                    actual_model_path = str(actual_path)
-                    logger.info(f"Converted published model path: {model_name} -> {actual_model_path}")
-                else:
-                    logger.warning(f"Published model directory not found: {actual_path}")
+            else:
+                # Format: published/full_model_name (single part)
+                expected_dir = f"models--published--{published_model_name}"
+            
+            actual_path = cache_path / expected_dir
+            
+            if actual_path.exists():
+                actual_model_path = str(actual_path)
+                logger.info(f"Converted published model path: {model_name} -> {actual_model_path}")
+            else:
+                # For published models, if not found in cache, it's an error - never try to download from HF
+                error_msg = f"Published model directory not found: {actual_path}. Published models must be local only."
+                logger.error(error_msg)
+                raise FileNotFoundError(error_msg)
         
         # Unload previous model first to free memory
         if MODEL is not None:

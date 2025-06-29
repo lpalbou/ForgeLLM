@@ -481,7 +481,10 @@ class ModelManager:
                 logger.info(f"Found published model in HF cache: {candidate}")
                 return str(candidate)
             else:
-                logger.warning(f"Published model not found in cache: {candidate}")
+                # For published models, if not found in cache, it's an error - never try to download from HF
+                error_msg = f"Published model not found in local cache: {candidate}. Published models must be local only."
+                logger.error(error_msg)
+                raise FileNotFoundError(error_msg)
                 
         # Check if it's a regular published model in local published directory
         published_path = Path("published") / model_name
