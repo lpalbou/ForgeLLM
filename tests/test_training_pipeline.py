@@ -28,7 +28,7 @@ def test_start_training():
     # Create a minimal configuration for testing
     config = TrainingConfig(
         model_name="mlx-community/gemma-3-1b-it-4bit",  # Small model for testing
-        input_dir="mnemosyne",
+        input_dir="dataset",
         output_dir="models/test_training",
         batch_size=1,  # Small batch size for testing
         learning_rate=5e-6,

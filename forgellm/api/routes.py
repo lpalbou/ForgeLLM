@@ -854,8 +854,8 @@ def setup_api(app: Flask) -> Blueprint:
             from pathlib import Path
             import re
             
-            # Get directory from query parameters (default to 'mnemosyne')
-            dir_param = request.args.get('dir', 'mnemosyne')
+            # Get directory from query parameters (default to 'dataset')
+            dir_param = request.args.get('dir', 'dataset')
             dataset_dir = Path(dir_param)
             
             # Check if directory exists

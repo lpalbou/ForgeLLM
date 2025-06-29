@@ -164,7 +164,7 @@ const trainingService = {
      * @param {string} directory Dataset directory
      * @returns {Promise<Object>} Dataset information
      */
-    async getDatasetInfo(directory = 'mnemosyne') {
+    async getDatasetInfo(directory = 'dataset') {
         try {
             const response = await apiService.get('dataset/info', { dir: directory });
             return response.data;

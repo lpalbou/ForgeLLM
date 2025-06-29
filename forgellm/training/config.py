@@ -151,7 +151,7 @@ class InstructTuningConfig:
     min_lr_ratio: float = 0.1
     
     # Data configuration
-    mnemosyne_ratio: float = 0.1  # Ratio of Mnemosyne conversations in training data
+    dataset_ratio: float = 0.1  # Ratio of dataset conversations in training data
     max_train_examples: int = 10000
     max_val_examples: int = 1000
     

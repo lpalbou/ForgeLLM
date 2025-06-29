@@ -100,7 +100,7 @@ class ApiService {
      * @param {string} dir - Dataset directory
      * @returns {Promise<object>} - Response data
      */
-    async getDatasetInfo(dir = 'mnemosyne') {
+    async getDatasetInfo(dir = 'dataset') {
         return this.get('dataset/info', { dir });
     }
 

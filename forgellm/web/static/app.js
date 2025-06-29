@@ -2979,12 +2979,12 @@ class TrainingInterface {
         // Smart path handling for better user experience
         if (!currentPath.startsWith('/')) {
             // For relative paths, try to use them directly (API will resolve them)
-            // If it's a known relative path like 'mnemosyne' or 'models', use it as-is
+            // If it's a known relative path like 'dataset' or 'models', use it as-is
             // Otherwise, start from current working directory
             if (currentPath === '.' || currentPath === '') {
                 currentPath = '.';
             }
-            // Keep relative paths like 'mnemosyne', 'models' as they are
+            // Keep relative paths like 'dataset', 'models' as they are
             // The API will resolve them relative to the project root
         }
         

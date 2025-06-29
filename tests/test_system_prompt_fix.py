@@ -24,7 +24,7 @@ def test_system_prompt_handling():
         "history": [
             {
                 "role": "system",
-                "content": "I am Mnemosyne, a memory-enhanced AI"
+                "content": "I am John, a memory-enhanced AI"
             },
             {
                 "role": "user",

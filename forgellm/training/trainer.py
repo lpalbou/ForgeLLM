@@ -289,7 +289,7 @@ class ContinuedPretrainer:
             training_command = ' '.join(cmd)
             
             # Create descriptive model name for logging (similar to IFT pattern)
-            model_name_for_logging = f"mnemosyne_cpt_{self.config.model_name.split('/')[-1]}"
+            model_name_for_logging = f"dataset_cpt_{self.config.model_name.split('/')[-1]}"
             
             # Import our metrics logger
             from .metrics_logger import create_training_logger

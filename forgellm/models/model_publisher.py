@@ -271,7 +271,7 @@ tags:
 - mlx
 - forgellm
 - continued-pretraining
-- mnemosyne
+- dataset
 license: mit
 ---
 
@@ -436,7 +436,7 @@ If you use this model in your research, please cite:
 ```bibtex
 @software{{forgellm2025,
   title={{ForgeLLM: A Comprehensive Toolkit for Language Model Training}},
-  author={{Mnemosyne Team}},
+  author={{Laurent-Philippe Albou}},
   year={{2025}},
   url={{https://github.com/lpalbou/ForgeLLM}},
   note={{Version {self._get_forgellm_version()}}}
@@ -473,7 +473,7 @@ This model is released under the MIT License. The base model `{base_model}` foll
             "library_name": "mlx",
             "pipeline_tag": "text-generation",
             "base_model": base_model,
-            "tags": ["mlx", "forgellm", "continued-pretraining", "mnemosyne"],
+            "tags": ["mlx", "forgellm", "continued-pretraining", "dataset"],
             "license": "mit",
             "training_details": {
                 "training_type": training_data.get("training_type"),

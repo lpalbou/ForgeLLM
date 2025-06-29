@@ -19,7 +19,7 @@ def test_gemma_system_prompt():
         "history": [
             {
                 "role": "system",
-                "content": "I am Mnemosyne, a memory-enhanced AI assistant. I remember our conversations and learn from them."
+                "content": "I am John, a memory-enhanced AI assistant. I remember our conversations and learn from them."
             },
             {
                 "role": "user",
@@ -56,9 +56,9 @@ def test_gemma_system_prompt():
                 print(f"✅ Generated response: {generated_text}")
                 print(f"⏱️  Generation time: {result.get('generation_time', 0):.2f}s")
                 
-                # Check if the response shows awareness of being Mnemosyne
-                if "mnemosyne" in generated_text.lower() or "memory" in generated_text.lower():
-                    print("🎯 SUCCESS: Model shows awareness of system prompt (Mnemosyne identity)!")
+                # Check if the response shows awareness of being John
+                if "John" in generated_text.lower() or "memory" in generated_text.lower():
+                    print("🎯 SUCCESS: Model shows awareness of system prompt (John identity)!")
                 elif "gemma" in generated_text.lower():
                     print("⚠️  PARTIAL: Model still identifies as Gemma, but system prompt was processed")
                 else:

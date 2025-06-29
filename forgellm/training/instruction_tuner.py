@@ -99,7 +99,7 @@ class InstructionDataProcessor:
         general_instructions = self.load_general_instruction_data()
         
         # Combine datasets with the specified ratio
-        mnemosyne_count = int(self.config.max_train_examples * self.config.mnemosyne_ratio)
+        mnemosyne_count = int(self.config.max_train_examples * self.config.dataset_ratio)
         general_count = self.config.max_train_examples - mnemosyne_count
         
         # Sample from each dataset

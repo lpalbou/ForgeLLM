@@ -67,7 +67,7 @@ def setup_train_command(parser):
     
     # Standard arguments (will be overridden by config file if provided)
     parser.add_argument("--model-name", type=str, help="Model name or path")
-    parser.add_argument("--input-dir", type=str, help="Input directory containing documents", default="mnemosyne")
+    parser.add_argument("--input-dir", type=str, help="Input directory containing documents", default="dataset")
     parser.add_argument("--output-dir", type=str, help="Output directory for checkpoints", default="models")
     parser.add_argument("--data-dir", type=str, help="Directory for processed training data", default="data/pretraining")
     parser.add_argument("--batch-size", type=int, help="Training batch size", default=4)
@@ -116,7 +116,7 @@ def setup_generate_command(parser):
 
 def setup_dataset_command(parser):
     """Set up dataset command arguments."""
-    parser.add_argument("--input-dir", type=str, help="Input directory containing documents", default="mnemosyne")
+    parser.add_argument("--input-dir", type=str, help="Input directory containing documents", default="dataset")
     
     parser.set_defaults(func=run_dataset_command)
 
@@ -158,7 +158,7 @@ def setup_instruction_tuning_command(parser):
     parser.add_argument("--warmup-steps", type=int, help="Learning rate warmup steps", default=50)
     parser.add_argument("--lr-schedule", type=str, choices=["cosine", "linear", "constant"], help="Learning rate schedule", default="cosine")
     parser.add_argument("--min-lr-ratio", type=float, help="Minimum LR as ratio of max LR", default=0.1)
-    parser.add_argument("--mnemosyne-ratio", type=float, help="Ratio of Mnemosyne conversations", default=0.1)
+    parser.add_argument("--dataset-ratio", type=float, help="Ratio of dataset used", default=0.1)
     parser.add_argument("--max-train-examples", type=int, help="Maximum training examples", default=10000)
     parser.add_argument("--max-val-examples", type=int, help="Maximum validation examples", default=1000)
     parser.add_argument("--seed", type=int, help="Random seed", default=42)
@@ -409,7 +409,7 @@ def run_export_config(args):
     try:
         # Create config based on type
         if args.type == "cpt":
-            config = TrainingConfig(model_name="mlx-community/gemma-3-4b-it-bf16", input_dir="mnemosyne")
+            config = TrainingConfig(model_name="mlx-community/gemma-3-4b-it-bf16", input_dir="dataset")
         else:  # ift
             config = InstructTuningConfig(
                 base_model_path="models/cpt/latest",
