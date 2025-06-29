@@ -355,7 +355,7 @@ This published model uses **checkpoint {checkpoint_iteration}** selected based o
 ### Software Stack
 - **ForgeLLM**: {self._get_forgellm_version()} ([GitHub](https://github.com/lpalbou/ForgeLLM) | [PyPI](https://pypi.org/project/forgellm/))
 - **MLX-LM**: Latest compatible version ([GitHub](https://github.com/ml-explore/mlx-lm) | [PyPI](https://pypi.org/project/mlx-lm/))
-- **MLX**: Apple's machine learning framework
+- **MLX**: Apple's machine learning framework ([GitHub](https://github.com/ml-explore/mlx) | [Documentation](https://ml-explore.github.io/mlx/build/html/index.html))
 - **Platform**: Apple Silicon (Metal Performance Shaders)
 
 ### Model Architecture
@@ -425,6 +425,7 @@ See `reproducibility_config.yaml` in this repository for the exact configuration
 ## 🙏 Acknowledgments
 
 This model was created using:
+- **[MLX](https://github.com/ml-explore/mlx)**: Apple's machine learning framework for Apple Silicon ([Documentation](https://ml-explore.github.io/mlx/build/html/index.html))
 - **[MLX-LM](https://github.com/ml-explore/mlx-lm)**: Apple's MLX-based LLM training and inference library
 - **[ForgeLLM](https://github.com/lpalbou/ForgeLLM)**: Comprehensive toolkit for continued pre-training and fine-tuning
 
@@ -663,7 +664,7 @@ No checkpoint analysis available - this may indicate insufficient validation dat
             val_loss = f"{cp.get('val_loss', 0):.4f}" if cp.get('val_loss') else "N/A"
             train_loss = f"{cp.get('train_loss', 0):.4f}" if cp.get('train_loss') else "N/A"
             perplexity = f"{cp.get('val_perplexity', 0):.2f}" if cp.get('val_perplexity') else "N/A"
-            reason = cp.get('selection_reason', 'Multi-criteria analysis')[:50] + "..." if len(cp.get('selection_reason', '')) > 50 else cp.get('selection_reason', 'Multi-criteria analysis')
+            reason = cp.get('selection_reason', 'Multi-criteria analysis')
             
             table += f"| {i} | {iteration} | {val_loss} | {train_loss} | {perplexity} | {reason} |\n"
         

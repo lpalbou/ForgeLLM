@@ -113,9 +113,9 @@ class DashboardGenerator:
                 val_iterations.append(i)
                 val_loss_filtered.append(loss)
         
-        # Calculate perplexity
-        train_ppl = [np.exp(loss) if loss and loss < 20 else float('nan') for loss in train_loss_filtered]
-        val_ppl = [np.exp(loss) if loss and loss < 20 else float('nan') for loss in val_loss_filtered]
+        # Calculate perplexity with 3 decimal precision
+        train_ppl = [round(np.exp(loss), 3) if loss and loss < 20 else float('nan') for loss in train_loss_filtered]
+        val_ppl = [round(np.exp(loss), 3) if loss and loss < 20 else float('nan') for loss in val_loss_filtered]
         
         # Plot 1: Training and Validation Loss
         ax1 = self.fig.add_subplot(gs[0, :2])
@@ -154,9 +154,10 @@ class DashboardGenerator:
         self._add_config_summary(ax9, config, metrics)
         
         # Add title
-        model_name = config.get('model', 'Unknown Model')
+        model_name = data.get('model_name') or config.get('model', 'Unknown Model')
         if '/' in model_name:
             model_name = model_name.split('/')[-1]
+        self._model_name = model_name  # Store for config summary
         self.fig.suptitle(f'Training Dashboard: {model_name}', fontsize=16)
         
         # Adjust layout
@@ -199,9 +200,9 @@ class DashboardGenerator:
     
     def _create_perplexity_visualization(self, ax, iterations, train_ppl, val_iterations, val_ppl):
         """Create perplexity visualization"""
-        ax.plot(iterations, train_ppl, 'b-', label='Train PPL')
+        ax.plot(iterations, train_ppl, 'b-', label='Train Perplexity')
         if val_iterations:
-            ax.plot(val_iterations, val_ppl, 'r-', label='Validation PPL')
+            ax.plot(val_iterations, val_ppl, 'r-', label='Validation Perplexity')
         ax.set_title('Perplexity', fontsize=14)
         ax.set_xlabel('Iterations', fontsize=12)
         ax.set_ylabel('Perplexity', fontsize=12)
@@ -428,8 +429,8 @@ class DashboardGenerator:
         """Add configuration summary to the dashboard"""
         ax.axis('off')
         
-        # Prepare text
-        model_name = config.get('model', 'Unknown Model')
+        # Prepare text - look for model_name in parent data first
+        model_name = getattr(self, '_model_name', None) or config.get('model', 'Unknown Model')
         batch_size = config.get('batch_size', 'N/A')
         learning_rate = config.get('learning_rate', 'N/A')
         max_iterations = config.get('max_iterations', 'N/A')
@@ -446,13 +447,13 @@ class DashboardGenerator:
         current_iteration = latest_metrics.get('iteration', 0)
         latest_train_loss = latest_metrics.get('train_loss', 'N/A')
         if latest_train_loss != 'N/A':
-            latest_train_ppl = math.exp(latest_train_loss) if latest_train_loss < 20 else 'N/A'
+            latest_train_ppl = round(math.exp(latest_train_loss), 3) if latest_train_loss < 20 else 'N/A'
         else:
             latest_train_ppl = 'N/A'
             
         latest_val_loss = latest_metrics.get('val_loss', 'N/A')
         if latest_val_loss != 'N/A':
-            latest_val_ppl = math.exp(latest_val_loss) if latest_val_loss < 20 else 'N/A'
+            latest_val_ppl = round(math.exp(latest_val_loss), 3) if latest_val_loss < 20 else 'N/A'
         else:
             latest_val_ppl = 'N/A'
         
@@ -469,7 +470,7 @@ class DashboardGenerator:
             best_val_loss = 'N/A'
             best_val_ppl = 'N/A'
         else:
-            best_val_ppl = math.exp(best_val_loss) if best_val_loss < 20 else 'N/A'
+            best_val_ppl = round(math.exp(best_val_loss), 3) if best_val_loss < 20 else 'N/A'
         
         # Calculate training time
         training_time = 'N/A'
@@ -502,9 +503,9 @@ class DashboardGenerator:
             f"Training Progress:\n"
             f"- Current Iteration: {current_iteration} / {max_iterations}\n"
             f"- Training Time: {training_time}\n"
-            f"- Latest Train Loss: {latest_train_loss} (PPL: {latest_train_ppl})\n"
-            f"- Latest Val Loss: {latest_val_loss} (PPL: {latest_val_ppl})\n"
-            f"- Best Val Loss: {best_val_loss} (PPL: {best_val_ppl}, iteration {best_iteration})"
+            f"- Latest Train Loss: {latest_train_loss} (Perplexity: {latest_train_ppl})\n"
+            f"- Latest Val Loss: {latest_val_loss} (Perplexity: {latest_val_ppl})\n"
+            f"- Best Val Loss: {best_val_loss} (Perplexity: {best_val_ppl}, iteration {best_iteration})"
         )
         
         # Add summary text with nice formatting
