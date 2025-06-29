@@ -127,13 +127,13 @@ ForgeLLM works with different model types:
 
 You can verify your downloaded models appear in ForgeLLM by:
 
-1. Starting the web interface: `python forgellm_web.py`
+1. Starting the web interface: `forgellm web`
 2. Going to the Testing tab
 3. Checking the model dropdown - your downloaded models should appear
 
 Or using the CLI:
 ```bash
-python forgellm_cli.py model list
+forgellm cli model list
 ```
 
 ### Storage Requirements
@@ -147,33 +147,89 @@ Make sure you have sufficient disk space before downloading large models.
 
 ## Usage
 
-### Starting the Web Interface
+ForgeLLM provides multiple ways to interact with the system:
+
+### Unified Command Interface
+
+After installation, you can use the main `forgellm` command with subcommands:
 
 ```bash
-python forgellm_web.py
+# Show all available commands
+forgellm --help
+
+# Start the web interface
+forgellm web --port 5002
+
+# Start the model server
+forgellm server --port 5001
+
+# Use the CLI for model operations
+forgellm cli model test --model mlx-community/gemma-3-1b-it-bf16 --prompt "Tell me about continued pre-training"
 ```
 
-This will start the web interface at http://localhost:5000.
+### Direct Command Access
 
-### Command Line Interface
+You can also access each component directly:
 
-ForgeLLM also provides a command-line interface for various operations:
+```bash
+# Web interface
+forgellm-web --port 5002
+
+# Model server
+forgellm-server --port 5001
+
+# Command-line interface
+forgellm-cli model test --model mlx-community/gemma-3-1b-it-bf16 --prompt "Tell me about continued pre-training"
+```
+
+### Python Module Interface
+
+Use the package as a Python module:
+
+```bash
+# Main interface
+python -m forgellm web --port 5002
+python -m forgellm server --port 5001
+python -m forgellm cli --help
+```
+
+### Common Usage Examples
+
+#### Starting the Web Interface
+
+```bash
+# Default settings (localhost:5002)
+forgellm web
+
+# Custom host and port
+forgellm web --host 0.0.0.0 --port 8080 --debug
+```
+
+The web interface will be available at http://localhost:5002 (or your custom port).
+
+#### Command Line Operations
 
 ```bash
 # Load and test a model
-python forgellm_cli.py model test --model mlx-community/gemma-3-1b-it-bf16 --prompt "Tell me about continued pre-training"
+forgellm cli model test --model mlx-community/gemma-3-1b-it-bf16 --prompt "Tell me about continued pre-training"
 
 # Start continued pre-training
-python forgellm_cli.py train --model-name mlx-community/gemma-3-1b-it-bf16 --input-dir data/corpus --output-dir models/cpt --batch-size 4 --learning-rate 5e-6 --max-iterations 1000
+forgellm cli train --model-name mlx-community/gemma-3-1b-it-bf16 --input-dir dataset/corpus --output-dir models/cpt --batch-size 4 --learning-rate 5e-6 --max-iterations 1000
+
+# Interactive chat mode
+forgellm cli generate --model mlx-community/gemma-3-1b-it-bf16
+
+# Get model architecture information
+forgellm cli info --model mlx-community/gemma-3-1b-it-bf16 --show-example
 ```
 
-### Using the Model Server Directly
+#### Model Server API
 
-You can also use the model server directly for model loading and inference:
+Start the server and use HTTP API:
 
 ```bash
 # Start the model server
-python model_server.py --host localhost --port 5001
+forgellm server --host localhost --port 5001
 
 # Load a model (using curl)
 curl -X POST -H "Content-Type: application/json" -d '{"model_name": "mlx-community/gemma-3-1b-it-bf16"}' http://localhost:5001/api/model/load

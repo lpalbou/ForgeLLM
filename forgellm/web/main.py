@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
-ForgeLLM - Web Interface
+ForgeLLM - Web Interface Entry Point
+
+This module provides the main entry point for the ForgeLLM web interface,
+including argument parsing and proper working directory management.
 """
 
 import argparse
@@ -25,14 +28,15 @@ def main():
     """Main entry point for the web interface"""
     try:
         # Ensure we're running from the correct directory (where this script is located)
-        script_dir = os.path.dirname(os.path.abspath(__file__))
+        # This is important for proper file resolution in the web interface
+        script_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         if os.getcwd() != script_dir:
             logger.info(f"Changing working directory from {os.getcwd()} to {script_dir}")
             os.chdir(script_dir)
         
         parser = argparse.ArgumentParser(description="ForgeLLM Web Interface")
         parser.add_argument("--host", type=str, default="0.0.0.0", help="Host to bind to")
-        parser.add_argument("--port", type=int, default=5001, help="Port to bind to")
+        parser.add_argument("--port", type=int, default=5002, help="Port to bind to")
         parser.add_argument("--debug", action="store_true", help="Enable debug mode")
         parser.add_argument("--static-folder", type=str, help="Path to static folder")
         parser.add_argument("--template-folder", type=str, help="Path to template folder")
@@ -44,7 +48,7 @@ def main():
         template_folder = args.template_folder
         
         # Import the run_web_interface function
-        from forgellm.web.run import run_web_interface
+        from .run import run_web_interface
         
         # Run the web interface
         run_web_interface(

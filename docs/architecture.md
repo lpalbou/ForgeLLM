@@ -4,6 +4,45 @@
 
 ForgeLLM is designed as a modular system for continued pre-training and instruction fine-tuning of large language models. The architecture is built around several key components that work together to provide a complete solution for model training, evaluation, and inference.
 
+## Updated Architecture
+```mermaid
+graph TD
+    A["🎯 ForgeLLM Project Structure"] --> B["📦 Package Code"]
+    A --> C["📁 Data Directories"]
+    A --> D["📄 Configuration Files"]
+    
+    B --> E["forgellm/"]
+    E --> F["__main__.py<br/>🔥 python -m forgellm"]
+    E --> G["cli/<br/>📱 Command Line Interface"]
+    E --> H["server/<br/>🖥️ Model Server"]
+    E --> I["web/<br/>🌐 Web Interface"]
+    E --> J["api/<br/>🔌 API Routes"]
+    E --> K["models/<br/>🤖 Model Management"]
+    E --> L["training/<br/>🚀 Training Pipeline"]
+    E --> M["utils/<br/>🛠️ Utilities"]
+    
+    G --> G1["main.py<br/>forgellm-cli entry point"]
+    H --> H1["main.py<br/>forgellm-server entry point"]
+    I --> I1["main.py<br/>forgellm-web entry point"]
+    
+    C --> N["models/<br/>📂 Trained Models"]
+    C --> O["dataset/<br/>📂 Training Datasets"]
+    C --> P["data/<br/>📂 Processed Data"]
+    
+    D --> Q["pyproject.toml<br/>⚙️ Package Configuration"]
+    D --> R["README.md<br/>📖 Documentation"]
+    D --> S["LICENSE<br/>⚖️ License"]
+    
+    style A fill:#e1f5fe
+    style B fill:#f3e5f5
+    style C fill:#e8f5e8
+    style D fill:#fff3e0
+    style F fill:#ffcdd2
+    style G1 fill:#ffcdd2
+    style H1 fill:#ffcdd2
+    style I1 fill:#ffcdd2
+```
+
 ## System Components
 
 ```

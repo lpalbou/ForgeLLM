@@ -57,7 +57,9 @@ dev = [
 
 [project.scripts]
 forgellm = "forgellm.__main__:main"
-forgellm-web = "forgellm.web.run:main"
+forgellm-cli = "forgellm.cli.main:main"
+forgellm-server = "forgellm.server.main:main"
+forgellm-web = "forgellm.web.main:main"
 
 [tool.setuptools]
 include-package-data = true
