@@ -242,13 +242,9 @@ class ModelPublisher:
         
         # Get best checkpoints analysis
         try:
-            training_json_path = self._find_training_json(checkpoint_path.parent)
-            if training_json_path:
-                best_checkpoints = identify_best_checkpoints(str(training_json_path))
-                if isinstance(best_checkpoints, str):
-                    # If function returns error string, create empty list
-                    best_checkpoints = []
-            else:
+            best_checkpoints = identify_best_checkpoints(training_data, 3)
+            if isinstance(best_checkpoints, str):
+                # If function returns error string, create empty list
                 best_checkpoints = []
         except Exception as e:
             logger.warning(f"Failed to identify best checkpoints: {e}")
@@ -260,6 +256,9 @@ class ModelPublisher:
         
         # Calculate training statistics
         training_stats = self._calculate_training_statistics(metrics, config)
+        
+        # Calculate checkpoint-specific stats
+        checkpoint_stats = self._calculate_checkpoint_training_stats(checkpoint_iteration, config, training_data)
         
         # Get dataset information
         dataset_info = self._analyze_dataset_information(config, training_data)
@@ -310,6 +309,14 @@ This published model uses **checkpoint {checkpoint_iteration}** selected based o
 
 {self._format_checkpoint_rationale(checkpoint_metrics, best_checkpoints, checkpoint_iteration)}
 
+### Training Progress at This Checkpoint
+| Metric | Value |
+|--------|-------|
+| **Tokens per Iteration** | {checkpoint_stats['tokens_per_iteration']:,} |
+| **Total Tokens Trained** | {checkpoint_stats['total_tokens_trained']:,} |
+| **Epochs Completed** | {checkpoint_stats['epochs_completed']:.2f} |
+| **Training Progress** | {(checkpoint_iteration / config.get('max_iterations', checkpoint_iteration) * 100):.1f}% |
+
 ### Best Checkpoints Analysis
 
 {self._format_best_checkpoints_table(best_checkpoints)}
@@ -331,6 +338,7 @@ This published model uses **checkpoint {checkpoint_iteration}** selected based o
 | **Optimizer** | {config.get('optimizer', 'adamw')} | Optimization algorithm |
 | **Weight Decay** | {config.get('weight_decay', 'N/A')} | L2 regularization strength |
 | **LR Schedule** | {config.get('lr_schedule', 'cosine_decay')} | Learning rate scheduling |
+| **LR Decay Factor** | {config.get('lr_decay_factor', 'N/A')} | Learning rate decay multiplier |
 | **Gradient Checkpointing** | {config.get('grad_checkpoint', False)} | Memory optimization technique |
 | **Early Stopping** | {config.get('enable_early_stopping', False)} | Automatic training termination |
 
@@ -346,7 +354,7 @@ This published model uses **checkpoint {checkpoint_iteration}** selected based o
 
 ### Software Stack
 - **ForgeLLM**: {self._get_forgellm_version()} ([GitHub](https://github.com/lpalbou/ForgeLLM) | [PyPI](https://pypi.org/project/forgellm/))
-- **MLX-LM**: Latest compatible version
+- **MLX-LM**: Latest compatible version ([GitHub](https://github.com/ml-explore/mlx-lm) | [PyPI](https://pypi.org/project/mlx-lm/))
 - **MLX**: Apple's machine learning framework
 - **Platform**: Apple Silicon (Metal Performance Shaders)
 
@@ -413,6 +421,12 @@ To reproduce this training:
    ```
 
 See `reproducibility_config.yaml` in this repository for the exact configuration used.
+
+## 🙏 Acknowledgments
+
+This model was created using:
+- **[MLX-LM](https://github.com/ml-explore/mlx-lm)**: Apple's MLX-based LLM training and inference library
+- **[ForgeLLM](https://github.com/lpalbou/ForgeLLM)**: Comprehensive toolkit for continued pre-training and fine-tuning
 
 ## 📖 Citation
 
@@ -599,29 +613,59 @@ This model is released under the MIT License. The base model `{base_model}` foll
             rationale += f"- **Perplexity**: {checkpoint_metrics['val_perplexity']:.2f}\n"
         
         # Check if this is among the best checkpoints
-        is_best = any(cp.get("iteration") == checkpoint_iteration for cp in best_checkpoints)
-        if is_best:
-            rationale += "- **Status**: ✅ Among top 3 best checkpoints based on validation loss\n"
+        checkpoint_rank = None
+        for i, cp in enumerate(best_checkpoints[:3], 1):
+            if cp.get("iteration") == checkpoint_iteration:
+                checkpoint_rank = i
+                break
+        
+        if checkpoint_rank:
+            rationale += f"- **Status**: ✅ Rank #{checkpoint_rank} among top 3 best checkpoints\n"
         else:
             rationale += "- **Status**: ⚠️ Custom selection (not in top 3 best checkpoints)\n"
         
         return rationale
     
+    def _calculate_checkpoint_training_stats(self, checkpoint_iteration: int, config: Dict, training_data: Dict) -> Dict:
+        """Calculate training statistics specific to this checkpoint"""
+        batch_size = config.get('batch_size', 1)
+        max_seq_length = config.get('max_seq_length', 1024)
+        dataset_total_tokens = config.get('dataset_total_tokens', 0)
+        
+        # Calculate tokens trained up to this checkpoint
+        tokens_per_iteration = batch_size * max_seq_length
+        total_tokens_trained = checkpoint_iteration * tokens_per_iteration
+        
+        # Calculate epochs (if we have dataset size)
+        epochs_completed = 0
+        if dataset_total_tokens > 0:
+            epochs_completed = total_tokens_trained / dataset_total_tokens
+        
+        return {
+            'tokens_per_iteration': tokens_per_iteration,
+            'total_tokens_trained': total_tokens_trained,
+            'epochs_completed': epochs_completed,
+            'checkpoint_iteration': checkpoint_iteration
+        }
+    
     def _format_best_checkpoints_table(self, best_checkpoints: List[Dict]) -> str:
         """Format best checkpoints table"""
         if not best_checkpoints:
-            return "No checkpoint analysis available."
+            return """*Comprehensive multi-criteria checkpoint selection methodology using validation loss, generalization gap, loss stability, and convergence trends to identify optimal model states.*
+
+No checkpoint analysis available - this may indicate insufficient validation data or analysis errors."""
         
-        table = "| Rank | Iteration | Val Loss | Train Loss | Perplexity |\n"
-        table += "|------|-----------|----------|------------|------------|\n"
+        table = "| Rank | Iteration | Val Loss | Train Loss | Perplexity | Selection Reason |\n"
+        table += "|------|-----------|----------|------------|------------|------------------|\n"
         
         for i, cp in enumerate(best_checkpoints[:3], 1):
             iteration = cp.get("iteration", "N/A")
             val_loss = f"{cp.get('val_loss', 0):.4f}" if cp.get('val_loss') else "N/A"
             train_loss = f"{cp.get('train_loss', 0):.4f}" if cp.get('train_loss') else "N/A"
             perplexity = f"{cp.get('val_perplexity', 0):.2f}" if cp.get('val_perplexity') else "N/A"
+            reason = cp.get('selection_reason', 'Multi-criteria analysis')[:50] + "..." if len(cp.get('selection_reason', '')) > 50 else cp.get('selection_reason', 'Multi-criteria analysis')
             
-            table += f"| {i} | {iteration} | {val_loss} | {train_loss} | {perplexity} |\n"
+            table += f"| {i} | {iteration} | {val_loss} | {train_loss} | {perplexity} | {reason} |\n"
         
         return table
     
@@ -637,19 +681,33 @@ This model is released under the MIT License. The base model `{base_model}` foll
     
     def _format_dataset_information(self, dataset_info: Dict, config: Dict) -> str:
         """Format dataset information section"""
+        val_split = dataset_info.get('validation_split', 0.1)
+        total_tokens = dataset_info.get('total_tokens', 0)
+        val_tokens = int(total_tokens * val_split) if total_tokens > 0 else 0
+        train_tokens = total_tokens - val_tokens if total_tokens > 0 else 0
+        val_batches = config.get('val_batches', 'N/A')
+        
         info = f"""### Dataset Overview
 | Property | Value |
 |----------|-------|
 | **Source Directory** | `{dataset_info.get('input_dir', 'N/A')}` |
 | **Data Directory** | `{dataset_info.get('data_dir', 'N/A')}` |
-| **Total Tokens** | {dataset_info.get('total_tokens', 0):,} |
+| **Total Tokens** | {total_tokens:,} |
 | **Max Tokens/File** | {dataset_info.get('max_tokens_per_file', 'N/A'):,} |
-| **Validation Split** | {dataset_info.get('validation_split', 0.1)*100:.1f}% |
 
-### Data Processing
-- **Sequence Length**: {config.get('max_seq_length', 'N/A')} tokens
-- **Data Mixture Ratio**: {config.get('data_mixture_ratio', 'N/A')}
-- **Validation Batches**: {config.get('val_batches', 'N/A')}"""
+### Training Data Configuration
+| Parameter | Value |
+|-----------|-------|
+| **Training Tokens** | {train_tokens:,} ({(1-val_split)*100:.1f}% of dataset) |
+| **Sequence Length** | {config.get('max_seq_length', 'N/A')} tokens |
+| **Data Mixture Ratio** | {config.get('data_mixture_ratio', 'N/A')} |
+
+### Validation Data Configuration  
+| Parameter | Value |
+|-----------|-------|
+| **Validation Tokens** | {val_tokens:,} ({val_split*100:.1f}% of dataset) |
+| **Validation Batches** | {val_batches} |
+| **Validation Frequency** | Every {config.get('steps_per_eval', 'N/A')} training steps |"""
         
         return info
     
