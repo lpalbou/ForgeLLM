@@ -10,6 +10,10 @@ interface with subcommands for different functionality.
 import sys
 import argparse
 import logging
+import subprocess
+import time
+import signal
+import os
 
 # Configure logging
 logging.basicConfig(
@@ -28,15 +32,22 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  forgellm cli --help                  # Show CLI help
-  forgellm server --port 5001          # Start model server
-  forgellm web --port 5002             # Start web interface
+  forgellm start                       # Start both model server and web interface
+  forgellm cli generate --model <model> # Interactive chat with a model
+  forgellm server --port 5001          # Start model server only
+  forgellm web --port 5002             # Start web interface only
   
-  python -m forgellm cli --help        # Alternative invocation
+  python -m forgellm start             # Alternative invocation
         """
     )
     
     subparsers = parser.add_subparsers(dest='command', help='Available commands')
+    
+    # Start command - launch both servers
+    start_parser = subparsers.add_parser('start', help='Start both model server and web interface')
+    start_parser.add_argument('--server-port', type=int, default=5001, help='Model server port')
+    start_parser.add_argument('--web-port', type=int, default=5002, help='Web interface port')
+    start_parser.add_argument('--host', default='localhost', help='Host to bind to')
     
     # CLI subcommand - allow unknown args to be forwarded
     cli_parser = subparsers.add_parser('cli', help='Command-line interface for model operations')
@@ -55,6 +66,14 @@ Examples:
     web_parser.add_argument('--port', type=int, default=5002, help='Port to bind to')
     web_parser.add_argument('--debug', action='store_true', help='Enable debug mode')
     
+    # Special handling for CLI command to preserve all arguments
+    if len(sys.argv) > 1 and sys.argv[1] == 'cli':
+        from .cli.main import main as cli_main
+        # Forward everything after 'cli' to the CLI
+        cli_args = sys.argv[2:] if len(sys.argv) > 2 else ['--help']
+        sys.argv = ['forgellm-cli'] + cli_args
+        return cli_main()
+    
     args, unknown_args = parser.parse_known_args()
     
     if not args.command:
@@ -62,12 +81,8 @@ Examples:
         return 0
     
     try:
-        if args.command == 'cli':
-            from .cli.main import main as cli_main
-            # Forward the CLI arguments (both parsed and unknown)
-            all_cli_args = args.cli_args + unknown_args
-            sys.argv = ['forgellm-cli'] + all_cli_args
-            return cli_main()
+        if args.command == 'start':
+            return start_both_servers(args)
                 
         elif args.command == 'server':
             from .server.main import main as server_main
@@ -105,6 +120,97 @@ Examples:
     except Exception as e:
         logger.error(f"Error: {e}")
         return 1
+
+
+def start_both_servers(args):
+    """Start both model server and web interface."""
+    processes = []
+    
+    def signal_handler(signum, frame):
+        logger.info("Shutting down servers...")
+        for proc in processes:
+            try:
+                proc.terminate()
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+        sys.exit(0)
+    
+    # Register signal handlers
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+    
+    try:
+        logger.info(f"Starting ForgeLLM servers...")
+        logger.info(f"Model Server: http://{args.host}:{args.server_port}")
+        logger.info(f"Web Interface: http://{args.host}:{args.web_port}")
+        
+        # Start model server
+        server_cmd = [
+            sys.executable, '-m', 'forgellm', 'server',
+            '--host', args.host,
+            '--port', str(args.server_port)
+        ]
+        
+        logger.info("Starting model server...")
+        server_proc = subprocess.Popen(server_cmd)
+        processes.append(server_proc)
+        
+        # Wait a moment for server to start
+        time.sleep(2)
+        
+        # Start web interface
+        web_cmd = [
+            sys.executable, '-m', 'forgellm', 'web',
+            '--host', args.host,
+            '--port', str(args.web_port)
+        ]
+        
+        logger.info("Starting web interface...")
+        web_proc = subprocess.Popen(web_cmd)
+        processes.append(web_proc)
+        
+        # Wait a moment for web to start
+        time.sleep(2)
+        
+        logger.info("✅ Both servers started successfully!")
+        logger.info(f"🌐 Open your browser to: http://{args.host}:{args.web_port}")
+        logger.info("📋 Press Ctrl+C to stop both servers")
+        
+        # Wait for processes
+        try:
+            while True:
+                # Check if any process has died
+                for proc in processes[:]:
+                    if proc.poll() is not None:
+                        logger.error(f"Process {proc.pid} has died")
+                        # Kill all processes and exit
+                        for p in processes:
+                            try:
+                                p.terminate()
+                            except:
+                                pass
+                        return 1
+                
+                time.sleep(1)
+                
+        except KeyboardInterrupt:
+            pass
+        
+    except Exception as e:
+        logger.error(f"Error starting servers: {e}")
+        return 1
+    
+    finally:
+        # Clean up processes
+        for proc in processes:
+            try:
+                proc.terminate()
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+    
+    return 0
 
 
 if __name__ == "__main__":

@@ -1,283 +1,196 @@
 # ForgeLLM
 
-ForgeLLM is a comprehensive platform for continued pre-training and instruction fine-tuning of large language models using MLX.
+ForgeLLM is a comprehensive platform for continued pre-training and instruction fine-tuning of large language models using MLX on Apple Silicon.
 
-## Features
+## What ForgeLLM Does
 
-- **Continued Pre-training (CPT)**: Train models on your own data to improve domain-specific knowledge
-- **Instruction Fine-Tuning (IFT)**: Fine-tune models to follow instructions better
-- **Real-time Monitoring**: Track training progress with comprehensive dashboards
-- **Checkpoint Management**: Save and compare multiple checkpoints to select the best model
-- **Model Testing**: Test models with various prompts and compare their outputs
-- **Web Interface**: User-friendly interface for all operations
+- **🚀 Training**: Continued pre-training (CPT) and instruction fine-tuning (IFT) via web interface
+- **💬 Chat & Testing**: Interactive chat with models and adapters via CLI or web
+- **📊 Monitoring**: Real-time training dashboards and checkpoint management
+- **📦 Publishing**: Convert and publish trained models with comprehensive documentation
 
-## Architecture
+## Quick Start
 
-ForgeLLM uses a modular architecture with separate components:
+### 1. Installation
 
-1. **Web Server**: Flask-based web interface and API
-2. **Model Server**: Separate process for model loading and inference
-3. **Training Pipeline**: Components for continued pre-training and instruction fine-tuning
-4. **Dashboard Generator**: Tools for visualizing training progress
-
-For more details, see [Model Server Architecture](docs/MODEL_SERVER_ARCHITECTURE.md).
-
-## Installation
-
-### Prerequisites
-
-- Python 3.9+
-- MLX (for Apple Silicon Macs)
-- 16GB+ RAM recommended
-
-### Setup
-
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/yourusername/forgellm.git
-   cd forgellm
-   ```
-
-2. Create and activate a virtual environment:
-   ```bash
-   python -m venv .venv
-   source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-   ```
-
-3. Install dependencies:
-   ```bash
-   pip install -e .
-   ```
-
-## Downloading Models
-
-Before you can train or test models, you need to download them to your local cache. ForgeLLM uses the HuggingFace Hub to download and cache models locally.
-
-### Prerequisites
-
-Install the HuggingFace CLI:
 ```bash
+git clone https://github.com/yourusername/forgellm.git
+cd forgellm
+pip install -e .
+```
+
+### 2. Download Models
+
+```bash
+# Install HuggingFace CLI
 pip install huggingface_hub
+
+# Download a model (examples)
+huggingface-cli download mlx-community/gemma-3-1b-it-bf16     # Small model
+huggingface-cli download mlx-community/Qwen3-4B-bf16         # Medium model
 ```
 
-### Recommended Models
+### 3. Start ForgeLLM
 
-We recommend starting with these models for different use cases:
-
-#### Small Models (1-2B parameters) - Good for testing and quick experiments
 ```bash
-# Qwen3 1.7B - Excellent small model for continued pre-training
-huggingface-cli download Qwen/Qwen3-1.7B
+# Start both servers (recommended)
+forgellm start
 
-# Gemma 3 1B - Google's efficient small model
-huggingface-cli download mlx-community/gemma-3-1b-pt-bf16
-huggingface-cli download mlx-community/gemma-3-1b-it-bf16
-
-# Qwen2.5 1.5B - Another excellent small option
-huggingface-cli download mlx-community/Qwen23-1.7B-bf16
+# Opens web interface at http://localhost:5002
+# Model server runs at http://localhost:5001
 ```
 
-#### Medium Models (3-4B parameters) - Good balance of performance and speed
-```bash
-# Qwen3 4B - Excellent for continued pre-training
-huggingface-cli download mlx-community/Qwen3-4B-bf16
-
-# Gemma 3 4B - Larger Gemma model
-huggingface-cli download mlx-community/gemma-3-4b-pt-bf16
-huggingface-cli download mlx-community/gemma-3-4b-it-bf16
-
-# Qwen2.5 3B - Good instruction-following model
-huggingface-cli download mlx-community/Qwen2.5-3B-Instruct-4bit
-```
-
-#### Large Models (7-8B parameters) - Best performance, requires more memory
-```bash
-# Qwen3 8B - High-performance model
-huggingface-cli download mlx-community/Qwen3-8B-bf16
-
-# Llama 3.1 8B - Meta's flagship model
-huggingface-cli download mlx-community/Meta-Llama-3.1-8B-bf16
-huggingface-cli download mlx-community/Meta-Llama-3.1-8B-Instruct-bf16
-
-# Qwen2.5 7B - Latest Qwen model
-huggingface-cli download mlx-community/Qwen2.5-7B-Instruct-4bit
-```
-
-### Model Storage and Cache
-
-All downloaded models are stored in your local HuggingFace cache directory:
-- **macOS/Linux**: `~/.cache/huggingface/hub/`
-- **Windows**: `%USERPROFILE%\.cache\huggingface\hub\`
-
-This is where ForgeLLM looks for models during:
-- **Training**: Base models for continued pre-training or instruction fine-tuning
-- **Testing**: Loading models for text generation and evaluation
-- **Published Models**: Your trained CPT models are also stored here with a `published/` prefix
-
-### Model Types
-
-ForgeLLM works with different model types:
-
-- **Base Models** (e.g., `Qwen3-4B-bf16`): Pre-trained models good for continued pre-training
-- **Instruct Models** (e.g., `Qwen3-4B-it-bf16`): Fine-tuned for instruction following
-- **Quantized Models** (e.g., `4bit`, `8bit`): Smaller memory footprint, slightly lower quality
-- **BF16 Models**: Full precision, best quality but larger memory usage
-
-### Verifying Downloads
-
-You can verify your downloaded models appear in ForgeLLM by:
-
-1. Starting the web interface: `forgellm web`
-2. Going to the Testing tab
-3. Checking the model dropdown - your downloaded models should appear
-
-Or using the CLI:
-```bash
-forgellm cli model list
-```
-
-### Storage Requirements
-
-Typical storage requirements per model:
-- **1-2B models**: 2-4 GB
-- **3-4B models**: 6-8 GB  
-- **7-8B models**: 14-16 GB
-
-Make sure you have sufficient disk space before downloading large models.
+That's it! 🎉
 
 ## Usage
 
-ForgeLLM provides multiple ways to interact with the system:
+### Web Interface (Recommended)
 
-### Unified Command Interface
-
-After installation, you can use the main `forgellm` command with subcommands:
+The web interface provides everything you need:
 
 ```bash
-# Show all available commands
-forgellm --help
-
-# Start the web interface
-forgellm web --port 5002
-
-# Start the model server
-forgellm server --port 5001
-
-# Use the CLI for model operations
-forgellm cli model test --model mlx-community/gemma-3-1b-it-bf16 --prompt "Tell me about continued pre-training"
+forgellm start                    # Start both servers
+# or
+forgellm web --port 5002         # Web interface only
+forgellm server --port 5001      # Model server only (separate terminal)
 ```
 
-### Direct Command Access
+**Web Interface Features:**
+- **Training Tab**: Configure and start CPT/IFT training
+- **Monitoring Tab**: View training progress and dashboards  
+- **Testing Tab**: Chat with models and test different prompts
 
-You can also access each component directly:
+### Command Line Interface
 
-```bash
-# Web interface
-forgellm-web --port 5002
-
-# Model server
-forgellm-server --port 5001
-
-# Command-line interface
-forgellm-cli model test --model mlx-community/gemma-3-1b-it-bf16 --prompt "Tell me about continued pre-training"
-```
-
-### Python Module Interface
-
-Use the package as a Python module:
+The CLI is perfect for quick model testing and interactive chat:
 
 ```bash
-# Main interface
-python -m forgellm web --port 5002
-python -m forgellm server --port 5001
-python -m forgellm cli --help
-```
-
-### Common Usage Examples
-
-#### Starting the Web Interface
-
-```bash
-# Default settings (localhost:5002)
-forgellm web
-
-# Custom host and port
-forgellm web --host 0.0.0.0 --port 8080 --debug
-```
-
-The web interface will be available at http://localhost:5002 (or your custom port).
-
-#### Command Line Operations
-
-```bash
-# Load and test a model
-forgellm cli model test --model mlx-community/gemma-3-1b-it-bf16 --prompt "Tell me about continued pre-training"
-
-# Start continued pre-training
-forgellm cli train --model-name mlx-community/gemma-3-1b-it-bf16 --input-dir dataset/corpus --output-dir models/cpt --batch-size 4 --learning-rate 5e-6 --max-iterations 1000
-
-# Interactive chat mode
+# Interactive chat with a model (REPL mode)
 forgellm cli generate --model mlx-community/gemma-3-1b-it-bf16
 
-# Get model architecture information
-forgellm cli info --model mlx-community/gemma-3-1b-it-bf16 --show-example
+# Single prompt test
+forgellm cli generate --model mlx-community/gemma-3-1b-it-bf16 --prompt "Hello, how are you?"
+
+# Get model architecture info
+forgellm cli info --model mlx-community/gemma-3-1b-it-bf16
+
+# Test with an adapter (your trained model)
+forgellm cli generate --model mlx-community/Qwen3-4B-bf16 --adapter-path models/cpt/my_trained_model
 ```
 
-#### Model Server API
+**REPL Mode Commands:**
+- Type normally to chat
+- `/help` - Show available commands
+- `/q` or `/exit` - Quit
+- `/stats` - Show session statistics
+- `/system [prompt]` - Set/show system prompt
 
-Start the server and use HTTP API:
+## Model Downloads
+
+ForgeLLM works with MLX-compatible models from HuggingFace. All models are cached locally in `~/.cache/huggingface/hub/`.
+
+### Recommended Models
+
+**Small Models (1-2B) - Good for testing:**
+```bash
+huggingface-cli download mlx-community/gemma-3-1b-it-bf16
+huggingface-cli download mlx-community/gemma-3-1b-pt-bf16
+```
+
+**Medium Models (3-4B) - Good balance:**
+```bash
+huggingface-cli download mlx-community/Qwen3-4B-bf16
+huggingface-cli download mlx-community/gemma-3-4b-it-bf16
+```
+
+**Large Models (7-8B) - Best quality:**
+```bash
+huggingface-cli download mlx-community/Qwen3-8B-bf16
+huggingface-cli download mlx-community/Meta-Llama-3.1-8B-Instruct-bf16
+```
+
+### Model Types
+
+- **Base Models** (`-bf16`, `-pt-`): For continued pre-training
+- **Instruct Models** (`-it-`, `-Instruct-`): For chat and instruction following
+- **Quantized Models** (`-4bit`, `-8bit`): Smaller memory usage
+
+## Training Your Own Models
+
+1. **Prepare Data**: Place text files in `dataset/` directory
+2. **Start Web Interface**: `forgellm start`
+3. **Training Tab**: Configure model, data, and parameters
+4. **Monitor**: Watch progress in real-time
+5. **Publish**: Convert best checkpoints to full models
+
+Training is currently only available through the web interface.
+
+## Directory Structure
+
+```
+forgellm/
+├── dataset/          # Your training data (text files)
+├── models/           # Trained model outputs
+│   ├── cpt/         # Continued pre-training models
+│   └── ift/         # Instruction fine-tuning models
+└── data/            # Processed training data
+```
+
+## Commands Reference
+
+### Main Commands
 
 ```bash
-# Start the model server
-forgellm server --host localhost --port 5001
-
-# Load a model (using curl)
-curl -X POST -H "Content-Type: application/json" -d '{"model_name": "mlx-community/gemma-3-1b-it-bf16"}' http://localhost:5001/api/model/load
-
-# Check model status
-curl http://localhost:5001/api/model/status
-
-# Generate text
-curl -X POST -H "Content-Type: application/json" -d '{"prompt": "Tell me about continued pre-training", "max_tokens": 100}' http://localhost:5001/api/model/generate
+forgellm start                    # Start both servers (recommended)
+forgellm web [--port 5002]       # Web interface only
+forgellm server [--port 5001]    # Model server only
+forgellm cli <command>            # Command-line operations
 ```
 
-## Web Interface Guide
+### CLI Commands
 
-The web interface has three main tabs:
+```bash
+# Interactive chat (REPL mode)
+forgellm cli generate --model <model>
 
-### 1. Training
+# Single prompt
+forgellm cli generate --model <model> --prompt "Your question"
 
-Configure and start training jobs:
-- Select a model
-- Configure training parameters
-- Monitor training progress in real-time
-- View and select checkpoints
+# Model information
+forgellm cli info --model <model>
 
-### 2. Monitoring
+# Test with adapter
+forgellm cli generate --model <model> --adapter-path <path>
+```
 
-Monitor active and completed training jobs:
-- View training metrics (loss, perplexity, etc.)
-- See learning rate schedule
-- Track training speed
-- Identify best checkpoints
+## Requirements
 
-### 3. Testing
+- **Hardware**: Apple Silicon Mac (M1/M2/M3/M4)
+- **Memory**: 16GB+ RAM recommended
+- **Storage**: 5-20GB per model
+- **Python**: 3.9+
+- **MLX**: Automatically installed
 
-Test and compare models:
-- Load base models or fine-tuned models
-- Generate text with custom prompts
-- Adjust generation parameters
-- Compare outputs from different models
+## Architecture
+
+ForgeLLM uses a clean separation:
+
+- **Model Server** (`forgellm server`): Handles model loading and inference
+- **Web Server** (`forgellm web`): Provides UI and training coordination
+- **CLI** (`forgellm cli`): Direct model interaction and testing
+
+This allows you to use just the CLI for testing, or the full web interface for training.
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions welcome! Please submit pull requests.
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+MIT License - see LICENSE file.
 
-## Acknowledgements
+## Acknowledgments
 
-- MLX team for the MLX framework
-- Hugging Face for model weights and tokenizers 
+- **ForgeLLM Team**: Continued pre-training platform
+- **[MLX-LM](https://github.com/ml-explore/mlx-lm)**: Apple's MLX framework for LLMs
+- **[MLX](https://github.com/ml-explore/mlx)**: Apple's machine learning framework 
