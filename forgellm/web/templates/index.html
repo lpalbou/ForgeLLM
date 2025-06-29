@@ -195,6 +195,10 @@
             max-height: 400px;
             overflow-y: auto;
         }
+
+        .mt-4 {
+            max-width: 85%;
+        }
         
         /* Chat input auto-resize */
         #chat-input {
@@ -832,8 +836,8 @@
                                         <div class="row g-2">
                                             <div class="col-md-6">
                                                 <div class="form-check form-switch">
-                                                    <input class="form-check-input" type="checkbox" id="streaming-toggle" checked>
-                                                    <label class="form-check-label" for="streaming-toggle">
+                                                                                    <input class="form-check-input" type="checkbox" id="streaming-toggle">
+                                <label class="form-check-label" for="streaming-toggle">
                                                         <i class="fas fa-stream me-1"></i>Real-time Streaming
                                                     </label>
                                                 </div>
@@ -881,7 +885,7 @@
                                             <i class="fas fa-upload"></i> Load History
                                         </button>
                                     </div>
-                                    <small id="chat-stats" class="text-muted"></small>
+                                    <small id="chat-stats" class="text-muted text-end" style="text-align: right; line-height: 1.2;"></small>
                                 </div>
 
                                 <!-- Chat history -->

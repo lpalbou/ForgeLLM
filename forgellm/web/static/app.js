@@ -12,6 +12,7 @@ class TrainingInterface {
         this.currentTokenCount = 0;  // Track total token count for the current conversation
         this.promptTokens = 0;       // Track prompt tokens
         this.completionTokens = 0;   // Track completion tokens
+        this.conversationTokens = 0; // Track total tokens across entire conversation
         this.trainingStartTime = null; // Store training start time for timing calculations
         
         this.init();
@@ -372,7 +373,8 @@ class TrainingInterface {
                     'instruct', 'chat', 'sft', 'dpo', 'rlhf', 
                     'assistant', 'alpaca', 'vicuna', 'wizard', 'orca',
                     'dolphin', 'openhermes', 'airoboros', 'nous',
-                    'claude', 'gpt', 'turbo', 'dialogue', 'conversation'
+                    'claude', 'gpt', 'turbo', 'dialogue', 'conversation',
+                    '_it_', '-it-'  // Add explicit patterns for _it_ and -it-
                 ];
                 const specialPatterns = ['it']; // 'it' needs word boundary checking
                 const basePatterns = [
@@ -1210,9 +1212,12 @@ class TrainingInterface {
                     </div>
                 `;
                 
-                // Reset token count
+                // Reset all token counters
                 this.currentTokenCount = 0;
-                document.getElementById('chat-stats').textContent = `Tokens: ${this.currentTokenCount}`;
+                this.promptTokens = 0;
+                this.completionTokens = 0;
+                this.conversationTokens = 0;
+                this.updateChatStats();
                 
                 // Enable chat buttons
                 document.getElementById('clear-chat-btn').disabled = false;
@@ -1681,6 +1686,9 @@ class TrainingInterface {
         userBubble.innerText = prompt;
         chatHistory.appendChild(userBubble);
         
+        // Update stats immediately after user prompt is added
+        this.updateChatStats();
+        
         // ASSISTANT placeholder bubble
         const botBubble = document.createElement('div');
         botBubble.className = 'list-group-item chat-assistant';
@@ -1737,37 +1745,8 @@ class TrainingInterface {
                 chatInput.focus();
             }
             
-            // Update stats with turn count and detailed token counts
-            const turns = chatHistory.querySelectorAll('.list-group-item').length / 2; // user+bot pairs
-            
-            // Format token information with prompt and completion details
-            let tokenInfo = '';
-            if (this.currentTokenCount) {
-                tokenInfo = ` | ${this.currentTokenCount} tokens`;
-                if (this.promptTokens && this.completionTokens) {
-                    tokenInfo += ` (${this.promptTokens} prompt, ${this.completionTokens} completion)`;
-                }
-            }
-            
-            const contextWindow = parseInt(document.getElementById('max-kv-size').value);
-            const tokenPercentage = this.currentTokenCount && contextWindow ? 
-                ` [${Math.round((this.currentTokenCount / contextWindow) * 100)}%]` : '';
-            
-            document.getElementById('chat-stats').innerText = 
-                `${turns} turn${turns !== 1 ? 's' : ''}${tokenInfo}${tokenPercentage}`;
-            
-            // Visual indicator for token usage
-            const chatStats = document.getElementById('chat-stats');
-            chatStats.classList.remove('text-warning', 'text-danger');
-            
-            if (this.currentTokenCount && contextWindow) {
-                const tokenRatio = this.currentTokenCount / contextWindow;
-                if (tokenRatio > 0.9) {
-                    chatStats.classList.add('text-danger');
-                } else if (tokenRatio > 0.7) {
-                    chatStats.classList.add('text-warning');
-                }
-            }
+            // Update stats after generation is complete
+            this.updateChatStats();
         }
     }
     
@@ -1806,20 +1785,31 @@ class TrainingInterface {
                             
                             if (data.type === 'chunk') {
                                 completion += data.text;
-                                // Update the bubble with streaming text
-                                if (this.isMarkdown(completion)) {
-                                    botBubble.innerHTML = this.formatMarkdown(completion);
-                                    botBubble.setAttribute('data-raw-text', completion);
-                                } else {
-                                    botBubble.innerText = completion;
-                                }
+                                // Removed excessive chunk logging for cleaner console output
+                                
+                                // For streaming, always use plain text to avoid markdown processing issues
+                                // Markdown will be applied at the end
+                                botBubble.innerText = completion;
+                                botBubble.setAttribute('data-raw-text', completion);
                                 
                                 // Auto-scroll to bottom
                                 const chatHistory = document.getElementById('chat-history');
                                 chatHistory.scrollTop = chatHistory.scrollHeight;
                             } else if (data.type === 'complete') {
-                                // Generation complete
+                                // Generation complete - capture token counts
                                 console.log(`🎉 Streaming generation completed in ${data.generation_time?.toFixed(2)}s`);
+                                
+                                // Update token counts from server response
+                                if (data.prompt_tokens && data.completion_tokens) {
+                                    this.promptTokens = data.prompt_tokens;
+                                    this.completionTokens = data.completion_tokens;
+                                    this.currentTokenCount = data.total_tokens;
+                                    
+                                    // Add to conversation total
+                                    this.conversationTokens += this.currentTokenCount;
+                                    
+                                    console.log(`📊 Tokens: ${this.promptTokens} prompt + ${this.completionTokens} completion = ${this.currentTokenCount} total (conversation: ${this.conversationTokens})`);
+                                }
                                 break;
                             }
                         } catch (e) {
@@ -1831,22 +1821,18 @@ class TrainingInterface {
             
             // Clean up the final completion
             completion = this.cleanCompletion(completion);
+            console.log(`🎯 Final completion (${completion.length} chars): "${completion.substring(0, 100)}..."`);
             
-            // Update final result
-            if (this.isMarkdown(completion)) {
-                botBubble.innerHTML = this.formatMarkdown(completion);
-                botBubble.setAttribute('data-raw-text', completion);
-            } else {
-                botBubble.innerText = completion;
-            }
+            // Always use plain text - markdown disabled
+            console.log(`📝 Using plain text (markdown disabled)`);
+            botBubble.innerText = completion;
+            botBubble.setAttribute('data-raw-text', completion);
             
             // Enable save button
             document.getElementById('save-chat-btn').disabled = false;
             
-            // Note: Token counts not available in streaming mode
-            this.currentTokenCount = 0;
-            this.promptTokens = 0;
-            this.completionTokens = 0;
+            // Update stats display
+            this.updateChatStats();
             
         } catch (error) {
             console.error('Streaming error:', error);
@@ -1863,24 +1849,25 @@ class TrainingInterface {
             // Clean and process the completion
             let completion = this.cleanCompletion(data.completion);
             
-            // Check if the response appears to be markdown
-            if (this.isMarkdown(completion)) {
-                // Format as markdown
-                botBubble.innerHTML = this.formatMarkdown(completion);
-                // Store raw text as a data attribute for history
-                botBubble.setAttribute('data-raw-text', completion);
-            } else {
-                // Plain text
-                botBubble.innerText = completion;
-            }
+            console.log('🔍 Raw completion:', completion.substring(0, 100) + '...');
+            
+            // Always use plain text - markdown disabled
+            console.log('📝 Using plain text (markdown disabled)');
+            botBubble.innerText = completion;
+            botBubble.setAttribute('data-raw-text', completion);
             
             // Enable save button as soon as we have at least one answer
             document.getElementById('save-chat-btn').disabled = false;
             
             // Update token counts with detailed information
-            this.currentTokenCount = data.token_count || 0;
             this.promptTokens = data.prompt_tokens || 0;
             this.completionTokens = data.completion_tokens || 0;
+            this.currentTokenCount = data.total_tokens || (this.promptTokens + this.completionTokens);
+            
+            // Add to conversation total
+            this.conversationTokens += this.currentTokenCount;
+            
+            console.log(`📊 Tokens: ${this.promptTokens} prompt + ${this.completionTokens} completion = ${this.currentTokenCount} total (conversation: ${this.conversationTokens})`);
         } else {
             botBubble.classList.remove('chat-assistant');
             botBubble.classList.add('list-group-item-danger');
@@ -1896,6 +1883,46 @@ class TrainingInterface {
             .replace(/<\/s>/g, '')
             .replace(/<\/S>/g, '')
             .replace(/<end_of_turn>/g, '');
+    }
+    
+    updateChatStats() {
+        const chatHistory = document.getElementById('chat-history');
+        const turns = chatHistory.querySelectorAll('.list-group-item').length / 2; // user+bot pairs
+        
+        // Format token information with conversation total
+        let statsHtml = '';
+        if (this.conversationTokens > 0) {
+            const contextWindow = parseInt(document.getElementById('max-kv-size').value);
+            const tokenPercentage = contextWindow ? 
+                ` [${Math.round((this.conversationTokens / contextWindow) * 100)}%]` : '';
+            
+            statsHtml = `${turns} turn${turns !== 1 ? 's' : ''} | ${this.conversationTokens} tokens${tokenPercentage}`;
+            
+            // Add breakdown if we have prompt/completion details
+            if (this.promptTokens && this.completionTokens) {
+                statsHtml += `<br><i style="font-size: 0.85em;">(prompt: ${this.promptTokens}, completion: ${this.completionTokens})</i>`;
+            }
+        } else {
+            statsHtml = `${turns} turn${turns !== 1 ? 's' : ''}`;
+        }
+        
+        const chatStats = document.getElementById('chat-stats');
+        chatStats.innerHTML = statsHtml;
+        
+        // Visual indicator for token usage (based on conversation total)
+        chatStats.classList.remove('text-warning', 'text-danger');
+        
+        if (this.conversationTokens) {
+            const contextWindow = parseInt(document.getElementById('max-kv-size').value);
+            if (contextWindow) {
+                const tokenRatio = this.conversationTokens / contextWindow;
+                if (tokenRatio > 0.9) {
+                    chatStats.classList.add('text-danger');
+                } else if (tokenRatio > 0.7) {
+                    chatStats.classList.add('text-warning');
+                }
+            }
+        }
     }
     
 
@@ -2479,6 +2506,12 @@ class TrainingInterface {
             this.chatInitialized = false;
             document.getElementById('clear-chat-btn').disabled = true;
             document.getElementById('save-chat-btn').disabled = true;
+            
+            // Reset all token counters
+            this.currentTokenCount = 0;
+            this.promptTokens = 0;
+            this.completionTokens = 0;
+            this.conversationTokens = 0;
             document.getElementById('chat-stats').innerText = '';
         });
 
@@ -3110,7 +3143,8 @@ class TrainingInterface {
                     'instruct', 'chat', 'sft', 'dpo', 'rlhf', 
                     'assistant', 'alpaca', 'vicuna', 'wizard', 'orca',
                     'dolphin', 'openhermes', 'airoboros', 'nous',
-                    'claude', 'gpt', 'turbo', 'dialogue', 'conversation'
+                    'claude', 'gpt', 'turbo', 'dialogue', 'conversation',
+                    '_it_', '-it-'  // Add explicit patterns for _it_ and -it-
                 ];
                 
                 // Special patterns that need word boundary checking

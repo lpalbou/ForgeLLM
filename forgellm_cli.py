@@ -12,12 +12,26 @@ import json
 from datetime import datetime
 from pathlib import Path
 
+# Add the project root to the path for imports
+current_dir = os.path.dirname(os.path.abspath(__file__))
+if current_dir not in sys.path:
+    sys.path.insert(0, current_dir)
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+# Import our model architecture manager
+try:
+    from forgellm.utils.model_architectures import get_model_architecture_manager
+    ARCHITECTURE_MANAGER = get_model_architecture_manager()
+    logger.info("Successfully loaded ModelArchitectureManager for CLI")
+except ImportError as e:
+    logger.warning(f"Could not import ModelArchitectureManager: {e}")
+    ARCHITECTURE_MANAGER = None
 
 def main():
     """Main entry point for the CLI."""
@@ -62,6 +76,11 @@ def main():
     generate_parser.add_argument('--max-tokens', type=int, default=100, help='Maximum tokens to generate')
     generate_parser.add_argument('--temperature', type=float, default=0.7, help='Temperature for sampling')
     
+    # Info command for model architecture information
+    info_parser = subparsers.add_parser('info', help='Get information about model architecture and formatting')
+    info_parser.add_argument('--model', required=True, help='Model name or path to analyze')
+    info_parser.add_argument('--show-example', action='store_true', help='Show example formatted prompt')
+    
     args = parser.parse_args()
     
     if args.command == 'model':
@@ -100,6 +119,8 @@ def main():
                 args.max_tokens,
                 args.temperature
             )
+    elif args.command == 'info':
+        show_model_info(args.model, args.show_example)
     else:
         parser.print_help()
 
@@ -145,6 +166,28 @@ def test_model(model_name, adapter_path=None, prompt="Hello, how are you?", max_
         model, tokenizer = load(model_name, adapter_path=adapter_path)
         logger.info("Model loaded successfully")
         
+        # Format prompt using WEB UI LOGIC (copy exact formatting from app.js)
+        final_prompt = prompt  # Default fallback
+        
+        if ARCHITECTURE_MANAGER:
+            # Detect if this is a BASE model (copy logic from web UI)
+            is_base_model = not ARCHITECTURE_MANAGER.is_instruct_model(model_name)
+            architecture = ARCHITECTURE_MANAGER.detect_architecture(model_name)
+            
+            logger.info(f"Model {model_name} detected as: {architecture} ({'BASE' if is_base_model else 'INSTRUCT'})")
+            
+            if is_base_model:
+                # BASE MODEL: Use prompt as-is (no chat template formatting)
+                final_prompt = prompt
+                logger.debug("Using BASE model formatting (prompt as-is)")
+            else:
+                # INSTRUCT MODEL: Use proper message formatting for chat template
+                messages = [{"role": "user", "content": prompt}]
+                final_prompt = ARCHITECTURE_MANAGER.format_messages(messages, model_name)
+                logger.debug(f"Using {architecture} INSTRUCT formatting")
+        else:
+            logger.warning("Using fallback formatting (no ModelArchitectureManager)")
+        
         # Generate text
         start_time = time.time()
         
@@ -152,13 +195,13 @@ def test_model(model_name, adapter_path=None, prompt="Hello, how are you?", max_
         sampler = make_sampler(temp=temperature)
         
         # SOTA CLI streaming: Real-time character-by-character output
-        logger.info(f"Generating with prompt: '{prompt}' (streaming to terminal)")
+        logger.info(f"Generating with formatted prompt (streaming to terminal)")
         print("\n" + "="*50 + "\nGENERATED OUTPUT:\n" + "="*50)
         
         for chunk in stream_generate(
             model, 
             tokenizer, 
-            prompt=prompt, 
+            prompt=final_prompt, 
             max_tokens=max_tokens,
             sampler=sampler
         ):
@@ -254,6 +297,28 @@ def generate_text(model_name, adapter_path, prompt, max_tokens, temperature):
         model, tokenizer = load(model_name, adapter_path=adapter_path)
         logger.info("Model loaded successfully")
         
+        # Format prompt using WEB UI LOGIC (copy exact formatting from app.js)
+        final_prompt = prompt  # Default fallback
+        
+        if ARCHITECTURE_MANAGER:
+            # Detect if this is a BASE model (copy logic from web UI)
+            is_base_model = not ARCHITECTURE_MANAGER.is_instruct_model(model_name)
+            architecture = ARCHITECTURE_MANAGER.detect_architecture(model_name)
+            
+            logger.info(f"Model {model_name} detected as: {architecture} ({'BASE' if is_base_model else 'INSTRUCT'})")
+            
+            if is_base_model:
+                # BASE MODEL: Use prompt as-is (no chat template formatting)
+                final_prompt = prompt
+                logger.debug("Using BASE model formatting (prompt as-is)")
+            else:
+                # INSTRUCT MODEL: Use proper message formatting for chat template
+                messages = [{"role": "user", "content": prompt}]
+                final_prompt = ARCHITECTURE_MANAGER.format_messages(messages, model_name)
+                logger.debug(f"Using {architecture} INSTRUCT formatting")
+        else:
+            logger.warning("Using fallback formatting (no ModelArchitectureManager)")
+        
         # Generate text
         start_time = time.time()
         
@@ -261,13 +326,13 @@ def generate_text(model_name, adapter_path, prompt, max_tokens, temperature):
         sampler = make_sampler(temp=temperature)
         
         # SOTA CLI streaming: Real-time character-by-character output
-        logger.info(f"Generating with prompt: '{prompt}' (streaming to terminal)")
+        logger.info(f"Generating with formatted prompt (streaming to terminal)")
         print("\n" + "="*50 + "\nGENERATED OUTPUT:\n" + "="*50)
         
         for chunk in stream_generate(
             model, 
             tokenizer, 
-            prompt=prompt, 
+            prompt=final_prompt, 
             max_tokens=max_tokens,
             sampler=sampler
         ):
@@ -298,6 +363,8 @@ def start_repl(model_name, adapter_path=None, max_tokens=100, temperature=0.7):
     print("  /load <filename> - Load conversation history")
     print("  /stats - Show session statistics")
     print("  /system [prompt] - Show/set system prompt")
+    print("  /info - Show model architecture information")
+    print("  /format - Show current formatting details")
     print("\nType your message and press Enter to chat!\n")
     
     try:
@@ -350,6 +417,8 @@ def start_repl(model_name, adapter_path=None, max_tokens=100, temperature=0.7):
                         print("  /load <filename> - Load conversation history")
                         print("  /stats - Show session statistics")
                         print("  /system [prompt] - Show/set system prompt")
+                        print("  /info - Show model architecture information")
+                        print("  /format - Show current formatting details")
                         print()
                         continue
                     
@@ -460,6 +529,62 @@ def start_repl(model_name, adapter_path=None, max_tokens=100, temperature=0.7):
                             print(f"❌ Error loading conversation: {e}\n")
                         continue
                     
+                    elif command == '/info':
+                        print(f"\n🔍 Model Architecture Information:")
+                        if ARCHITECTURE_MANAGER:
+                            architecture = ARCHITECTURE_MANAGER.detect_architecture(model_name)
+                            is_instruct = ARCHITECTURE_MANAGER.is_instruct_model(model_name)
+                            arch_info = ARCHITECTURE_MANAGER.get_architecture_info(architecture)
+                            
+                            print(f"  📋 Architecture: {architecture}")
+                            print(f"  🤖 Model Type: {'INSTRUCT' if is_instruct else 'BASE'}")
+                            print(f"  💬 System Support: {arch_info.get('system_support_type', 'N/A')}")
+                            
+                            if "qwen" in model_name.lower():
+                                if "base" in model_name.lower():
+                                    print(f"  🔥 Special: Qwen BASE model")
+                                else:
+                                    print(f"  🔥 Special: Qwen INSTRUCT (default)")
+                            
+                            if architecture == "gemma":
+                                print(f"  🔥 Special: Uses assistant turns for system messages")
+                        else:
+                            print("  ❌ ModelArchitectureManager not available")
+                        print()
+                        continue
+                    
+                    elif command == '/format':
+                        print(f"\n📄 Current Formatting Details:")
+                        if ARCHITECTURE_MANAGER:
+                            architecture = ARCHITECTURE_MANAGER.detect_architecture(model_name)
+                            is_instruct = ARCHITECTURE_MANAGER.is_instruct_model(model_name)
+                            
+                            print(f"  🎯 Detected Architecture: {architecture}")
+                            print(f"  🤖 Model Type: {'INSTRUCT' if is_instruct else 'BASE'}")
+                            print(f"  💬 System Prompt: '{system_prompt}'")
+                            
+                            # Show example formatting
+                            if system_prompt and system_prompt.strip():
+                                example_messages = [
+                                    {"role": "system", "content": system_prompt},
+                                    {"role": "user", "content": "Example user message"}
+                                ]
+                            else:
+                                example_messages = [
+                                    {"role": "user", "content": "Example user message"}
+                                ]
+                            
+                            if is_instruct:
+                                formatted = ARCHITECTURE_MANAGER.format_messages(example_messages, model_name)
+                                print(f"  📝 Example Format Preview:")
+                                print(f"     {repr(formatted[:100])}...")
+                            else:
+                                print(f"  📝 BASE model - prompts used as-is")
+                        else:
+                            print("  ❌ ModelArchitectureManager not available")
+                        print()
+                        continue
+                    
                     else:
                         print(f"❌ Unknown command: {command}")
                         print("   Type /help for available commands\n")
@@ -474,12 +599,68 @@ def start_repl(model_name, adapter_path=None, max_tokens=100, temperature=0.7):
                     'content': user_input
                 })
                 
-                # Build full prompt with system message and conversation history
-                full_prompt = f"System: {system_prompt}\n\n"
-                for msg in conversation_history:
-                    role_name = "Human" if msg['role'] == 'user' else "Assistant"
-                    full_prompt += f"{role_name}: {msg['content']}\n"
-                full_prompt += "Assistant:"
+                # Build full prompt using WEB UI LOGIC (copy exact formatting from app.js)
+                full_prompt = user_input  # Default fallback
+                
+                if ARCHITECTURE_MANAGER:
+                    # Detect if this is a BASE model (copy logic from web UI isCurrentModelBase)
+                    is_base_model = not ARCHITECTURE_MANAGER.is_instruct_model(model_name)
+                    architecture = ARCHITECTURE_MANAGER.detect_architecture(model_name)
+                    
+                    logger.info(f"Model type: {'BASE' if is_base_model else 'INSTRUCT'} ({architecture})")
+                    
+                    if is_base_model:
+                        # BASE MODEL: Use plain text continuation (copy from web UI)
+                        logger.debug("Using BASE model formatting (plain text continuation)")
+                        history_text = ""
+                        
+                        # Add system prompt at the beginning if provided
+                        if system_prompt and system_prompt.strip():
+                            history_text += f"{system_prompt}\n\n"
+                        
+                        # Add conversation history as plain text
+                        for msg in conversation_history[:-1]:  # Exclude current message
+                            if msg['role'] == 'user':
+                                history_text += f"{msg['content']}\n"
+                            elif msg['role'] == 'assistant':
+                                history_text += f"{msg['content']}\n"
+                        
+                        # Final prompt is: system + history + current input
+                        full_prompt = history_text + user_input
+                        
+                    else:
+                        # INSTRUCT MODEL: Use proper message format for chat template
+                        logger.debug("Using INSTRUCT model formatting (message structure)")
+                        messages = []
+                        
+                        # Add system message if provided
+                        if system_prompt and system_prompt.strip():
+                            messages.append({
+                                'role': 'system',
+                                'content': system_prompt
+                            })
+                        
+                        # Add conversation history
+                        for msg in conversation_history[:-1]:  # Exclude the current user message
+                            messages.append(msg)
+                        
+                        # Add current user message
+                        messages.append({
+                            'role': 'user',
+                            'content': user_input
+                        })
+                        
+                        # Format using architecture manager
+                        full_prompt = ARCHITECTURE_MANAGER.format_messages(messages, model_name)
+                    
+                else:
+                    # Fallback: Basic formatting when architecture manager not available
+                    logger.warning("Using fallback formatting (no ModelArchitectureManager)")
+                    full_prompt = f"System: {system_prompt}\n\n"
+                    for msg in conversation_history:
+                        role_name = "Human" if msg['role'] == 'user' else "Assistant"
+                        full_prompt += f"{role_name}: {msg['content']}\n"
+                    full_prompt += "Assistant:"
                 
                 # Generate response
                 start_time = time.time()
@@ -520,6 +701,85 @@ def start_repl(model_name, adapter_path=None, max_tokens=100, temperature=0.7):
     
     except Exception as e:
         logger.error(f"Error in REPL mode: {e}")
+        return False
+
+def show_model_info(model_name, show_example=False):
+    """Show information about a model's architecture and formatting."""
+    print(f"\n🔍 Model Information: {model_name}")
+    print("=" * 60)
+    
+    if not ARCHITECTURE_MANAGER:
+        print("❌ ModelArchitectureManager not available")
+        return False
+    
+    try:
+        # Detect architecture and model type
+        architecture = ARCHITECTURE_MANAGER.detect_architecture(model_name)
+        is_instruct = ARCHITECTURE_MANAGER.is_instruct_model(model_name)
+        arch_info = ARCHITECTURE_MANAGER.get_architecture_info(architecture)
+        
+        # Basic info
+        print(f"📋 Architecture: {architecture}")
+        print(f"🤖 Model Type: {'INSTRUCT' if is_instruct else 'BASE'}")
+        print(f"📝 Description: {arch_info.get('description', 'N/A')}")
+        print(f"🔧 Message Format: {arch_info.get('message_format', 'N/A')}")
+        print(f"💬 System Support: {arch_info.get('system_support_type', 'N/A')}")
+        
+        # Special handling notes
+        if arch_info.get('system_note'):
+            print(f"⚠️  Note: {arch_info['system_note']}")
+        
+        # Patterns that triggered detection
+        patterns = arch_info.get('patterns', [])
+        if patterns:
+            print(f"🎯 Detection Patterns: {', '.join(patterns)}")
+        
+        # Special cases
+        special_cases = []
+        if "qwen" in model_name.lower():
+            if "base" in model_name.lower():
+                special_cases.append("Qwen BASE model (detected by 'base' in name)")
+            else:
+                special_cases.append("Qwen INSTRUCT model (default for Qwen)")
+        
+        if architecture == "gemma":
+            special_cases.append("Uses assistant turns for system messages")
+        
+        if special_cases:
+            print(f"🔥 Special Handling: {'; '.join(special_cases)}")
+        
+        # Show example formatting if requested
+        if show_example:
+            print("\n📄 Example Formatting:")
+            print("-" * 40)
+            
+            # Example with system prompt
+            if is_instruct:
+                example_messages = [
+                    {"role": "system", "content": "You are a helpful assistant."},
+                    {"role": "user", "content": "Hello, how are you?"}
+                ]
+                formatted = ARCHITECTURE_MANAGER.format_messages(example_messages, model_name)
+                print("With system prompt:")
+                print(repr(formatted))
+                print()
+                
+                # Example without system prompt
+                example_messages_no_sys = [
+                    {"role": "user", "content": "Hello, how are you?"}
+                ]
+                formatted_no_sys = ARCHITECTURE_MANAGER.format_messages(example_messages_no_sys, model_name)
+                print("Without system prompt:")
+                print(repr(formatted_no_sys))
+            else:
+                print("BASE model - prompt used as-is:")
+                print(repr("Hello, how are you?"))
+        
+        print("\n✅ Analysis complete!")
+        return True
+        
+    except Exception as e:
+        print(f"❌ Error analyzing model: {e}")
         return False
 
 if __name__ == "__main__":

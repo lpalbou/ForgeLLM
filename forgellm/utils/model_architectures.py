@@ -123,13 +123,29 @@ class ModelArchitectureManager:
                 logger.info(f"Qwen model '{model_name}' detected as INSTRUCT (default for Qwen)")
                 return True
         
-        # Common patterns for instruct model names
+        # First check for explicit BASE model patterns
+        base_patterns = [
+            "-base", "_base", "-pt-", "_pt_", "pretrained", "pre-trained", "foundation", 
+            "raw", "vanilla", "untuned", "completion"
+        ]
+        
+        if any(pattern in model_name_lower for pattern in base_patterns):
+            logger.info(f"Model '{model_name}' detected as BASE (contains base pattern)")
+            return False
+        
+        # Then check for INSTRUCT model patterns
         instruct_patterns = [
-            "instruct", "chat", "it", "sft", "dpo", "rlhf", 
+            "instruct", "-chat", "_chat", "_it_", "-it-", "sft", "dpo", "rlhf", 
             "assistant", "alpaca", "vicuna", "wizard", "conversation"
         ]
         
-        return any(pattern in model_name_lower for pattern in instruct_patterns)
+        if any(pattern in model_name_lower for pattern in instruct_patterns):
+            logger.info(f"Model '{model_name}' detected as INSTRUCT (contains instruct pattern)")
+            return True
+        
+        # Default: if no clear pattern, assume BASE (safer for unknown models)
+        logger.info(f"Model '{model_name}' detected as BASE (no clear pattern, defaulting to BASE)")
+        return False
     
     def get_architecture_config(self, architecture: str) -> Dict[str, Any]:
         """

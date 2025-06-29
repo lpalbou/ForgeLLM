@@ -212,11 +212,12 @@ def setup_api(app: Flask) -> Blueprint:
                 for model_dir in model_dirs:
                     try:
                         # Extract model name from directory name
-                        model_name = model_dir.name.replace('models--', '').replace('--', '/')
-                        
-                        # Skip published models
-                        if "published" in model_name.lower():
-                            continue
+                        if model_dir.name.startswith('published--'):
+                            # Handle published models - extract the actual model name
+                            model_name = model_dir.name.replace('published--', '')
+                        else:
+                            # Handle regular cached models
+                            model_name = model_dir.name.replace('models--', '').replace('--', '/')
                         
                         # Calculate model size using du command for accurate directory size
                         try:

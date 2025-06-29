@@ -330,8 +330,13 @@ class ModelHandler(BaseHTTPRequestHandler):
                 # Streaming response
                 self._set_headers(content_type='text/plain')
                 
+                # Count prompt tokens
+                prompt_tokens = len(TOKENIZER.encode(final_prompt))
+                completion_text = ""
+                
                 # Generate and stream text chunks
                 for chunk in stream_generate(MODEL, TOKENIZER, prompt=final_prompt, **generation_kwargs):
+                    completion_text += chunk.text
                     chunk_data = json.dumps({
                         'type': 'chunk',
                         'text': chunk.text,
@@ -340,32 +345,51 @@ class ModelHandler(BaseHTTPRequestHandler):
                     self.wfile.write(chunk_data.encode())
                     self.wfile.flush()
                 
-                # Send completion signal
+                # Count completion tokens
+                completion_tokens = len(TOKENIZER.encode(completion_text))
+                
+                # Send completion signal with token counts
                 end_time = time.time()
                 completion_data = json.dumps({
                     'type': 'complete',
-                    'generation_time': end_time - start_time
+                    'generation_time': end_time - start_time,
+                    'prompt_tokens': prompt_tokens,
+                    'completion_tokens': completion_tokens,
+                    'total_tokens': prompt_tokens + completion_tokens
                 }) + '\n'
                 self.wfile.write(completion_data.encode())
                 self.wfile.flush()
             else:
                 # Non-streaming response (original behavior)
                 response_text = ""
+                chunk_count = 0
                 for chunk in stream_generate(MODEL, TOKENIZER, prompt=final_prompt, **generation_kwargs):
+                    chunk_count += 1
+                    logger.info(f"Chunk {chunk_count}: '{chunk.text}'")
                     response_text += chunk.text
+                logger.info(f"Total chunks received: {chunk_count}, total length: {len(response_text)}")
                 
                 end_time = time.time()
                 
                 # Clean up the response for instruct models
                 if is_instruct:
                     # Remove any repeated patterns or strange artifacts
+                    logger.info(f"Response before cleaning: {response_text[:100]}...")
                     response_text = clean_instruct_response(response_text)
+                    logger.info(f"Response after cleaning: {response_text[:100]}...")
+                
+                # Count tokens
+                prompt_tokens = len(TOKENIZER.encode(final_prompt))
+                completion_tokens = len(TOKENIZER.encode(response_text))
                 
                 self._set_headers()
                 response = {
                     'success': True,
                     'text': response_text,
-                    'generation_time': end_time - start_time
+                    'generation_time': end_time - start_time,
+                    'prompt_tokens': prompt_tokens,
+                    'completion_tokens': completion_tokens,
+                    'total_tokens': prompt_tokens + completion_tokens
                 }
                 self.wfile.write(json.dumps(response).encode())
         except Exception as e:
@@ -382,6 +406,29 @@ def load_model(model_name, adapter_path=None):
     
     try:
         logger.info(f"Loading model {model_name} with adapter {adapter_path}")
+        
+        # Convert published model names to actual local paths
+        actual_model_path = model_name
+        if model_name.startswith('published/'):
+            # Convert published/model_name/timestamp to actual cache path
+            from pathlib import Path
+            cache_path = Path.home() / '.cache' / 'huggingface' / 'hub'
+            
+            # Extract the model parts
+            published_parts = model_name.replace('published/', '').split('/')
+            if len(published_parts) >= 2:
+                model_part = published_parts[0]
+                timestamp_part = published_parts[1]
+                
+                # Look for the actual directory
+                expected_dir = f"models--published--{model_part}--{timestamp_part}"
+                actual_path = cache_path / expected_dir
+                
+                if actual_path.exists():
+                    actual_model_path = str(actual_path)
+                    logger.info(f"Converted published model path: {model_name} -> {actual_model_path}")
+                else:
+                    logger.warning(f"Published model directory not found: {actual_path}")
         
         # Unload previous model first to free memory
         if MODEL is not None:
@@ -405,12 +452,12 @@ def load_model(model_name, adapter_path=None):
         
         try:
             # Try to load with adapter first
-            model, tokenizer = load(model_name, adapter_path=adapter_path)
+            model, tokenizer = load(actual_model_path, adapter_path=adapter_path)
         except FileNotFoundError as e:
             if "adapter_config.json" in str(e):
                 # Handle missing adapter_config.json by loading without adapter
                 logger.warning(f"adapter_config.json not found, loading model without adapter: {e}")
-                model, tokenizer = load(model_name, adapter_path=None)
+                model, tokenizer = load(actual_model_path, adapter_path=None)
             else:
                 # Re-raise if it's a different file not found error
                 raise
@@ -447,12 +494,29 @@ def is_instruct_model(model_name):
             logger.info(f"Qwen model '{model_name}' detected as INSTRUCT (default for Qwen)")
             return True
     
-    # Common patterns for instruct model names
-    instruct_patterns = [
-        "-it-", "instruct", "-i-", "chat", "-c-", "assistant", "-sft"
+    # First check for explicit BASE model patterns
+    base_patterns = [
+        "base", "pt", "pretrained", "pre-trained", "foundation", 
+        "raw", "vanilla", "untuned", "completion"
     ]
     
-    return any(pattern in model_name_lower for pattern in instruct_patterns)
+    if any(pattern in model_name_lower for pattern in base_patterns):
+        logger.info(f"Model '{model_name}' detected as BASE (contains base pattern)")
+        return False
+    
+    # Then check for INSTRUCT model patterns
+    instruct_patterns = [
+        "-it-", "_it_", "instruct", "-i-", "chat", "-c-", "assistant", "-sft", 
+        "it", "dpo", "rlhf", "alpaca", "vicuna", "wizard", "conversation"
+    ]
+    
+    if any(pattern in model_name_lower for pattern in instruct_patterns):
+        logger.info(f"Model '{model_name}' detected as INSTRUCT (contains instruct pattern)")
+        return True
+    
+    # Default: if no clear pattern, assume BASE (safer for unknown models)
+    logger.info(f"Model '{model_name}' detected as BASE (no clear pattern, defaulting to BASE)")
+    return False
 
 def is_gemma_model(model_name):
     """Detect if a model is a Gemma model based on its name."""
