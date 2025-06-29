@@ -65,6 +65,10 @@ class DashboardGenerator:
         Returns:
             Path to the generated dashboard image
         """
+        # Configure matplotlib to use non-GUI backend for thread safety
+        import matplotlib
+        matplotlib.use('Agg')  # Use Anti-Grain Geometry backend (no GUI)
+        
         # Load training data
         with open(json_file, 'r') as f:
             data = json.load(f)
@@ -93,6 +97,14 @@ class DashboardGenerator:
         tokens_per_sec = [m.get('tokens_per_sec', None) for m in metrics]
         peak_memory = [m.get('peak_memory_gb', None) for m in metrics]
         
+        # Filter out None values for training loss
+        train_iterations = []
+        train_loss_filtered = []
+        for i, loss in zip(iterations, train_loss):
+            if loss is not None:
+                train_iterations.append(i)
+                train_loss_filtered.append(loss)
+        
         # Filter out None values for validation loss
         val_iterations = []
         val_loss_filtered = []
@@ -102,16 +114,16 @@ class DashboardGenerator:
                 val_loss_filtered.append(loss)
         
         # Calculate perplexity
-        train_ppl = [np.exp(loss) if loss and loss < 20 else float('nan') for loss in train_loss]
+        train_ppl = [np.exp(loss) if loss and loss < 20 else float('nan') for loss in train_loss_filtered]
         val_ppl = [np.exp(loss) if loss and loss < 20 else float('nan') for loss in val_loss_filtered]
         
         # Plot 1: Training and Validation Loss
         ax1 = self.fig.add_subplot(gs[0, :2])
-        self._create_loss_visualization(ax1, iterations, train_loss, val_iterations, val_loss_filtered)
+        self._create_loss_visualization(ax1, train_iterations, train_loss_filtered, val_iterations, val_loss_filtered)
         
         # Plot 2: Perplexity
         ax2 = self.fig.add_subplot(gs[0, 2])
-        self._create_perplexity_visualization(ax2, iterations, train_ppl, val_iterations, val_ppl)
+        self._create_perplexity_visualization(ax2, train_iterations, train_ppl, val_iterations, val_ppl)
         
         # Plot 3: Learning Rate
         ax3 = self.fig.add_subplot(gs[1, 0])
@@ -127,11 +139,11 @@ class DashboardGenerator:
         
         # Plot 6: Loss Stability Analysis
         ax6 = self.fig.add_subplot(gs[2, 0])
-        self._create_loss_stability_analysis(ax6, iterations, train_loss)
+        self._create_loss_stability_analysis(ax6, train_iterations, train_loss_filtered)
         
         # Plot 7: Overfitting Analysis
         ax7 = self.fig.add_subplot(gs[2, 1])
-        self._create_overfitting_analysis(ax7, iterations, train_loss, val_iterations, val_loss_filtered)
+        self._create_overfitting_analysis(ax7, train_iterations, train_loss_filtered, val_iterations, val_loss_filtered)
         
         # Plot 8: Training Progress
         ax8 = self.fig.add_subplot(gs[2, 2])
@@ -199,8 +211,23 @@ class DashboardGenerator:
     
     def _create_learning_rate_schedule(self, ax, iterations, learning_rate, config):
         """Create learning rate schedule visualization with theoretical curve"""
+        # Filter out None values for learning rate
+        filtered_iterations = []
+        filtered_lr = []
+        for i, lr in zip(iterations, learning_rate):
+            if lr is not None:
+                filtered_iterations.append(i)
+                filtered_lr.append(lr)
+        
         # Plot actual learning rates
-        ax.plot(iterations, learning_rate, 'g-', label='Actual LR')
+        if filtered_lr:
+            ax.plot(filtered_iterations, filtered_lr, 'g-', label='Actual LR')
+        else:
+            ax.text(0.5, 0.5, "No learning rate data available", 
+                   ha='center', va='center', fontsize=12)
+            ax.set_title('Learning Rate', fontsize=14)
+            ax.axis('off')
+            return
         
         # Plot theoretical schedule if we have config
         if config:
@@ -258,18 +285,33 @@ class DashboardGenerator:
     
     def _create_performance_metrics(self, ax, iterations, metrics_data, metric_type='speed'):
         """Create performance metrics visualization"""
+        # Filter out None values
+        filtered_iterations = []
+        filtered_data = []
+        for i, data in zip(iterations, metrics_data):
+            if data is not None:
+                filtered_iterations.append(i)
+                filtered_data.append(data)
+        
+        if not filtered_data:
+            ax.text(0.5, 0.5, f"No {metric_type} data available", 
+                   ha='center', va='center', fontsize=12)
+            ax.set_title(f'Training Speed' if metric_type == 'speed' else 'Memory Usage', fontsize=14)
+            ax.axis('off')
+            return
+        
         if metric_type == 'speed':
-            ax.plot(iterations, metrics_data, 'c-')
+            ax.plot(filtered_iterations, filtered_data, 'c-')
             ax.set_title('Training Speed', fontsize=14)
             ax.set_ylabel('Tokens/sec', fontsize=12)
             # Add fill below curve
-            ax.fill_between(iterations, 0, metrics_data, alpha=0.2, color='c')
+            ax.fill_between(filtered_iterations, 0, filtered_data, alpha=0.2, color='c')
         else:  # memory
-            ax.plot(iterations, metrics_data, 'r-')
+            ax.plot(filtered_iterations, filtered_data, 'r-')
             ax.set_title('Memory Usage', fontsize=14)
             ax.set_ylabel('Memory (GB)', fontsize=12)
             # Add fill below curve
-            ax.fill_between(iterations, 0, metrics_data, alpha=0.2, color='r')
+            ax.fill_between(filtered_iterations, 0, filtered_data, alpha=0.2, color='r')
             
         ax.set_xlabel('Iterations', fontsize=12)
         ax.grid(True, linestyle='--', alpha=0.7)
@@ -291,10 +333,7 @@ class DashboardGenerator:
         variances = []
         for i in range(window, len(train_loss)):
             window_data = train_loss[i-window:i]
-            if all(x is not None for x in window_data):
-                variances.append(np.var(window_data))
-            else:
-                variances.append(np.nan)
+            variances.append(np.var(window_data))
                 
         # Prepend NaNs for alignment with iterations
         variances = [np.nan] * window + variances
@@ -331,7 +370,7 @@ class DashboardGenerator:
         for i, val_iter in enumerate(val_iterations):
             # Find closest train iteration
             train_idx = np.argmin(np.abs(np.array(iterations) - val_iter))
-            if train_idx < len(train_loss) and train_loss[train_idx] is not None and val_loss[i] is not None:
+            if train_idx < len(train_loss):
                 gen_gaps.append(val_loss[i] - train_loss[train_idx])
                 gap_iterations.append(val_iter)
         
@@ -511,9 +550,28 @@ class DashboardGenerator:
                 'iteration': m['iteration'],
                 'val_loss': m['val_loss'],
                 'train_loss': train,
-                'checkpoint': m.get('checkpoint'),
                 'rank': 0  # Will be set later
             }
+            
+            # Extract checkpoint path from compound string
+            checkpoint_path = m.get('checkpoint_path')
+            if checkpoint_path:
+                # The checkpoint_path contains both paths, extract the numbered one
+                # e.g., "models/cpt/.../adapters.safetensors and models/cpt/.../0000025_adapters.safetensors."
+                parts = checkpoint_path.split(' and ')
+                for part in parts:
+                    part = part.rstrip('.')  # Remove trailing period
+                    if f"{m['iteration']:07d}_adapters.safetensors" in part:
+                        entry['path'] = part
+                        break
+                else:
+                    # Fallback: use the last part if no numbered match found
+                    if parts:
+                        entry['path'] = parts[-1].rstrip('.')
+                    else:
+                        entry['path'] = checkpoint_path.rstrip('.')
+            else:
+                entry['path'] = None
             
             # Calculate perplexity
             entry['val_perplexity'] = math.exp(val) if val < 20 else float('inf')

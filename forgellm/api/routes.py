@@ -20,7 +20,7 @@ from ..models import ModelManager, ModelPublisher
 from ..training.config import TrainingConfig
 from ..training.trainer import ContinuedPretrainer
 from ..training.process_manager import TrainingProcessManager
-from ..training.dashboard import create_comprehensive_dashboard, identify_best_checkpoints, load_training_data
+from ..training.dashboard import create_comprehensive_dashboard, identify_best_checkpoints, load_training_data, generate_web_chart_data
 
 logger = logging.getLogger(__name__)
 
@@ -554,10 +554,80 @@ def setup_api(app: Flask) -> Blueprint:
             # Get log file path from request
             log_file = request.json.get('log_file')
             
+            if not log_file:
+                return jsonify({'success': False, 'error': 'No log file specified'}), 400
+            
             # Load training data
             data = load_training_data(log_file)
             
-            return jsonify({'success': True, 'data': data})
+            if 'error' in data:
+                return jsonify({'success': False, 'error': data['error']}), 500
+            
+            # Generate chart data for web display
+            charts = generate_web_chart_data(data)
+            
+            # Identify best checkpoints
+            best_checkpoints = identify_best_checkpoints(data, top_k=3)
+            
+            # Create summary with metrics and best checkpoints
+            metrics = data.get('metrics', [])
+            config = data.get('config', {})
+            
+            # Extract all checkpoints from metrics
+            all_checkpoints = []
+            for metric in metrics:
+                if metric.get('checkpoint_saved') and metric.get('checkpoint_path'):
+                    checkpoint_info = {
+                        'iteration': metric.get('iteration'),
+                        'path': metric.get('checkpoint_path'),
+                        'train_loss': metric.get('train_loss'),
+                        'val_loss': metric.get('val_loss'),
+                        'train_perplexity': metric.get('train_perplexity'),
+                        'val_perplexity': metric.get('val_perplexity'),
+                        'learning_rate': metric.get('learning_rate'),
+                        'timestamp': metric.get('timestamp')
+                    }
+                    all_checkpoints.append(checkpoint_info)
+            
+            summary = {
+                'total_iterations': len(metrics),
+                'best_checkpoints': best_checkpoints,
+                'all_checkpoints': all_checkpoints,
+                'config': config
+            }
+            
+            # Add latest metrics if available
+            if metrics:
+                latest = metrics[-1]
+                summary.update({
+                    'iteration': latest.get('iteration', 0),
+                    'train_loss': latest.get('train_loss'),
+                    'val_loss': latest.get('val_loss'),
+                    'train_perplexity': latest.get('train_perplexity'),
+                    'val_perplexity': latest.get('val_perplexity'),
+                    'learning_rate': latest.get('learning_rate'),
+                    'tokens_per_sec': latest.get('tokens_per_sec'),
+                    'peak_memory_gb': latest.get('peak_memory_gb'),
+                    'trained_tokens': latest.get('trained_tokens', 0)
+                })
+            
+            # Add config-based metrics
+            if config:
+                summary.update({
+                    'warmup_steps': config.get('warmup_steps'),
+                    'lr_decay_factor': config.get('lr_decay_factor'),
+                    'weight_decay': config.get('weight_decay'),
+                    'max_iterations': config.get('max_iterations'),
+                    'lr_schedule': config.get('lr_schedule')
+                })
+            
+            # Return data in the format expected by frontend
+            return jsonify({
+                'success': True,
+                'charts': charts,
+                'summary': summary
+            })
+            
         except Exception as e:
             logger.error(f"Error getting historical dashboard: {e}")
             return jsonify({'success': False, 'error': str(e)}), 500

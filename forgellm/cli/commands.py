@@ -326,7 +326,7 @@ def run_dashboard_generation(args):
 
 def run_publish_model(args):
     """Run model publishing command."""
-    from .models.model_publisher import publish_checkpoint
+    from ..models.model_publisher import publish_checkpoint
     
     try:
         output_dir = publish_checkpoint(args.checkpoint_path, args.output_dir)

@@ -575,8 +575,11 @@ class TrainingInterface {
         const select = document.getElementById('training-session-select');
         const logFile = select.value;
         
+        console.log('🔄 Loading training session:', logFile);
+        
         if (!logFile) {
             // No session selected, show current training
+            console.log('📊 No session selected, refreshing current dashboard');
             this.refreshDashboard();
             return;
         }
@@ -584,34 +587,45 @@ class TrainingInterface {
         this.showLoading('Loading training session data...');
         
         try {
+            console.log('📡 Sending request to /api/dashboard/historical with log_file:', logFile);
+            
             const response = await fetch('/api/dashboard/historical', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ log_file: logFile })
             });
             
+            console.log('📥 Response status:', response.status);
             const data = await response.json();
+            console.log('📊 Response data:', data);
             
-            if (data.error) {
-                this.showAlert(data.error, 'danger');
+            if (!data.success) {
+                this.showAlert(data.error || 'Failed to load training session', 'danger');
             } else {
+                console.log('✅ Successfully loaded training session data');
+                
                 // Reset the checkpointsResetDone flag when loading historical data
                 this.checkpointsResetDone = false;
                 
                 // Display historical charts and metrics
+                console.log('📈 Displaying historical charts with data:', data);
                 this.displayHistoricalCharts(data);
                 
                 // Update metrics
                 if (data.summary) {
+                    console.log('📊 Updating training metrics with summary:', data.summary);
                     this.updateTrainingMetrics(data.summary);
                     
                     // Populate the checkpoint-select dropdown with all available checkpoints
+                    console.log('🎯 Populating checkpoint select with summary:', data.summary);
                     this.populateCheckpointSelect(data.summary);
                 }
+                
+                this.showAlert('Training session loaded successfully', 'success');
             }
         } catch (error) {
-            console.error('Error loading training session:', error);
-            this.showAlert('Error loading training session', 'danger');
+            console.error('❌ Error loading training session:', error);
+            this.showAlert('Error loading training session: ' + error.message, 'danger');
         } finally {
             this.hideLoading();
         }
@@ -943,14 +957,20 @@ class TrainingInterface {
         
         // Update warmup steps
         const warmupSteps = document.getElementById('warmup-steps');
-        if (warmupSteps && data.config) {
-            warmupSteps.textContent = data.config.warmup_steps || '-';
+        if (warmupSteps) {
+            warmupSteps.textContent = data.warmup_steps || (data.config && data.config.warmup_steps) || '-';
         }
         
         // Update LR decay factor
         const lrDecayFactor = document.getElementById('lr-decay-factor');
-        if (lrDecayFactor && data.config) {
-            lrDecayFactor.textContent = data.config.lr_decay_factor || '-';
+        if (lrDecayFactor) {
+            lrDecayFactor.textContent = data.lr_decay_factor || (data.config && data.config.lr_decay_factor) || '-';
+        }
+        
+        // Update weight decay
+        const weightDecay = document.getElementById('weight-decay');
+        if (weightDecay) {
+            weightDecay.textContent = data.weight_decay || (data.config && data.config.weight_decay) || '-';
         }
         
         // Calculate epoch and progress
@@ -2221,13 +2241,20 @@ class TrainingInterface {
     }
 
     displayHistoricalCharts(data) {
+        console.log('📈 displayHistoricalCharts called with data:', data);
+        
         // Update charts with historical data
         if (data.charts) {
+            console.log('📊 Rendering charts:', Object.keys(data.charts));
             this.renderCharts(data.charts);
+        } else {
+            console.log('⚠️ No charts data found in response');
         }
         
         // Update metrics with historical summary
         if (data.summary) {
+            console.log('📊 Updating metrics with summary:', data.summary);
+            
             // Update all metrics with the historical data
             this.updateTrainingMetrics(data.summary);
             
@@ -2237,9 +2264,10 @@ class TrainingInterface {
             
             // Explicitly update best checkpoints if available
             if (data.summary.best_checkpoints && data.summary.best_checkpoints.length > 0) {
-                console.log("Historical data contains best checkpoints:", data.summary.best_checkpoints);
+                console.log("✅ Historical data contains best checkpoints:", data.summary.best_checkpoints);
                 this.updateBestCheckpoints(data.summary.best_checkpoints);
             } else {
+                console.log("⚠️ No best checkpoints found in historical data");
                 // If no best checkpoints available, show a message
                 const bestCheckpointsContainer = document.getElementById('best-checkpoints');
                 bestCheckpointsContainer.innerHTML = `
@@ -2251,7 +2279,10 @@ class TrainingInterface {
             }
             
             // Populate the checkpoint-select dropdown with all available checkpoints
+            console.log('🎯 Populating checkpoint select with summary');
             this.populateCheckpointSelect(data.summary);
+        } else {
+            console.log('⚠️ No summary data found in response');
         }
     }
     
