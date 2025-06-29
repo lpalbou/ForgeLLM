@@ -4,7 +4,7 @@ ForgeLLM is a comprehensive platform for continued pre-training and instruction 
 
 ## What ForgeLLM Does
 
-- **🚀 Training**: Continued pre-training (CPT) and instruction fine-tuning (IFT) via web interface
+- **🚀 Training**: Continued pre-training (CPT) via web interface *(IFT coming soon - see [Development Perspectives](docs/perspectives.md))*
 - **💬 Chat & Testing**: Interactive chat with models and adapters via CLI or web
 - **📊 Monitoring**: Real-time training dashboards and checkpoint management
 - **📦 Publishing**: Convert and publish trained models with comprehensive documentation
@@ -14,7 +14,7 @@ ForgeLLM is a comprehensive platform for continued pre-training and instruction 
 ### 1. Installation
 
 ```bash
-git clone https://github.com/yourusername/forgellm.git
+git clone https://github.com/lpalbou/forgellm.git
 cd forgellm
 pip install -e .
 ```
@@ -56,7 +56,7 @@ forgellm server --port 5001      # Model server only (separate terminal)
 ```
 
 **Web Interface Features:**
-- **Training Tab**: Configure and start CPT/IFT training
+- **Training Tab**: Configure and start CPT training *(IFT support coming soon)*
 - **Monitoring Tab**: View training progress and dashboards  
 - **Testing Tab**: Chat with models and test different prompts
 
@@ -134,6 +134,8 @@ Choose base models for straightforward domain adaptation, instruct models when y
 
 ## Training Your Own Models
 
+### Continued Pre-Training (CPT) - Available Now
+
 1. **Prepare Data**: Place text files in `dataset/` directory
 2. **Start Web Interface**: `forgellm start`
 3. **Training Tab**: Configure model, data, and parameters
@@ -142,6 +144,10 @@ Choose base models for straightforward domain adaptation, instruct models when y
 
 Training is currently only available through the web interface.
 
+### Instruction Fine-Tuning (IFT) - Coming Soon
+
+IFT capabilities are currently in development. For technical details and implementation roadmap, see **[Development Perspectives](docs/perspectives.md)**.
+
 ## Directory Structure
 
 ```
@@ -149,7 +155,7 @@ forgellm/
 ├── dataset/          # Your training data (text files)
 ├── models/           # Trained model outputs
 │   ├── cpt/         # Continued pre-training models
-│   └── ift/         # Instruction fine-tuning models
+│   └── ift/         # Instruction fine-tuning models (coming soon)
 └── data/            # Processed training data
 ```
 
@@ -207,6 +213,7 @@ This allows you to use just the CLI for testing, or the full web interface for t
 - **[Data Flow](docs/data_flow.md)**: How data moves through the system
 - **[API Reference](docs/api_reference.md)**: Complete REST API and CLI documentation
 - **[CPT Best Practices](docs/cpt.md)**: Advanced continued pre-training techniques
+- **[Development Perspectives](docs/perspectives.md)**: Current capabilities and IFT roadmap
 
 ### 🔧 Technical Documentation
 

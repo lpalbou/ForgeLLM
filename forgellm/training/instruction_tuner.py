@@ -20,8 +20,8 @@ from .models.model_manager import ModelManager
 logger = logging.getLogger(__name__)
 
 
-class MnemosyneVerbatimExtractor:
-    """Extract verbatim conversations from Mnemosyne documents"""
+class ConversationExtractor:
+    """Extract conversations from markdown documents with XML conversation tags"""
     
     def __init__(self):
         """Initialize the extractor"""
@@ -29,7 +29,7 @@ class MnemosyneVerbatimExtractor:
         self.message_pattern = re.compile(r'<message from="(user|assistant)">(.*?)</message>', re.DOTALL)
     
     def extract_conversations(self, input_dir: str) -> List[Dict[str, Any]]:
-        """Extract conversations from Mnemosyne documents"""
+        """Extract conversations from markdown documents with XML conversation tags"""
         conversations = []
         input_path = Path(input_dir)
         
@@ -74,7 +74,7 @@ class MnemosyneVerbatimExtractor:
             except Exception as e:
                 logger.warning(f"Error processing file {file_path}: {e}")
         
-        logger.info(f"Extracted {len(conversations)} conversations from Mnemosyne documents")
+        logger.info(f"Extracted {len(conversations)} conversations from markdown documents")
         return conversations
 
 
@@ -84,7 +84,7 @@ class InstructionDataProcessor:
     def __init__(self, config: InstructTuningConfig):
         """Initialize the processor"""
         self.config = config
-        self.verbatim_extractor = MnemosyneVerbatimExtractor()
+        self.conversation_extractor = ConversationExtractor()
     
     def prepare_instruction_data(self) -> Tuple[List[Dict], List[Dict]]:
         """Prepare instruction data for fine-tuning"""
@@ -92,27 +92,27 @@ class InstructionDataProcessor:
         data_dir = Path(self.config.data_dir)
         data_dir.mkdir(parents=True, exist_ok=True)
         
-        # Extract Mnemosyne conversations
-        mnemosyne_conversations = self.verbatim_extractor.extract_conversations("mnemosyne")
+        # Extract conversations from custom dataset
+        custom_conversations = self.conversation_extractor.extract_conversations("dataset")
         
         # Load general instruction datasets
         general_instructions = self.load_general_instruction_data()
         
         # Combine datasets with the specified ratio
-        mnemosyne_count = int(self.config.max_train_examples * self.config.dataset_ratio)
-        general_count = self.config.max_train_examples - mnemosyne_count
+        custom_count = int(self.config.max_train_examples * self.config.dataset_ratio)
+        general_count = self.config.max_train_examples - custom_count
         
         # Sample from each dataset
         np.random.seed(self.config.seed)
         
-        if len(mnemosyne_conversations) > mnemosyne_count:
-            mnemosyne_sample = np.random.choice(
-                mnemosyne_conversations, 
-                size=mnemosyne_count, 
+        if len(custom_conversations) > custom_count:
+            custom_sample = np.random.choice(
+                custom_conversations, 
+                size=custom_count, 
                 replace=False
             ).tolist()
         else:
-            mnemosyne_sample = mnemosyne_conversations
+            custom_sample = custom_conversations
             
         if len(general_instructions) > general_count:
             general_sample = np.random.choice(
@@ -124,7 +124,7 @@ class InstructionDataProcessor:
             general_sample = general_instructions
         
         # Combine samples
-        combined_instructions = mnemosyne_sample + general_sample
+        combined_instructions = custom_sample + general_sample
         np.random.shuffle(combined_instructions)
         
         # Split into train and validation
@@ -133,7 +133,7 @@ class InstructionDataProcessor:
         val_instructions = combined_instructions[-val_size:]
         
         logger.info(f"Prepared {len(train_instructions)} training examples and {len(val_instructions)} validation examples")
-        logger.info(f"Mnemosyne ratio: {len(mnemosyne_sample) / len(combined_instructions):.1%}")
+        logger.info(f"Custom dataset ratio: {len(custom_sample) / len(combined_instructions):.1%}")
         
         return train_instructions, val_instructions
     

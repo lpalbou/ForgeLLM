@@ -24,7 +24,7 @@ ForgeLLM is a comprehensive platform for continued pre-training (CPT) and instru
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/yourusername/forgellm.git
+git clone https://github.com/lpalbou/forgellm.git
 cd forgellm
 ```
 
