@@ -425,9 +425,9 @@ See `reproducibility_config.yaml` in this repository for the exact configuration
 ## 🙏 Acknowledgments
 
 This model was created using:
-- **[MLX](https://github.com/ml-explore/mlx)**: Apple's machine learning framework for Apple Silicon ([Documentation](https://ml-explore.github.io/mlx/build/html/index.html))
-- **[MLX-LM](https://github.com/ml-explore/mlx-lm)**: Apple's MLX-based LLM training and inference library
 - **[ForgeLLM](https://github.com/lpalbou/ForgeLLM)**: Comprehensive toolkit for continued pre-training and fine-tuning
+- **[MLX-LM](https://github.com/ml-explore/mlx-lm)**: Apple's MLX-based LLM training and inference library
+- **[MLX](https://github.com/ml-explore/mlx)**: Apple's machine learning framework for Apple Silicon ([Documentation](https://ml-explore.github.io/mlx/build/html/index.html))
 
 ## 📖 Citation
 

@@ -151,14 +151,23 @@ class DashboardGenerator:
         
         # Plot 9: Configuration Summary
         ax9 = self.fig.add_subplot(gs[3, :])
-        self._add_config_summary(ax9, config, metrics)
+        self._add_config_summary(ax9, config, metrics, data)
         
         # Add title
         model_name = data.get('model_name') or config.get('model', 'Unknown Model')
         if '/' in model_name:
             model_name = model_name.split('/')[-1]
         self._model_name = model_name  # Store for config summary
-        self.fig.suptitle(f'Training Dashboard: {model_name}', fontsize=16)
+        
+        # Extract base model and training type for title
+        base_model = data.get('base_model', 'Unknown Model')
+        if '/' in base_model:
+            base_model_display = base_model.split('/')[-1]
+        else:
+            base_model_display = base_model
+            
+        training_type = data.get('training_type', 'CPT')
+        self.fig.suptitle(f'Training Dashboard of {base_model_display} ({training_type})', fontsize=16)
         
         # Adjust layout
         plt.tight_layout(rect=[0, 0, 1, 0.97])
@@ -425,7 +434,7 @@ class DashboardGenerator:
         # Add grid
         ax.grid(True, linestyle='--', alpha=0.7, axis='x')
     
-    def _add_config_summary(self, ax, config: Dict[str, Any], metrics: List[Dict[str, Any]]):
+    def _add_config_summary(self, ax, config: Dict[str, Any], metrics: List[Dict[str, Any]], data: Dict[str, Any] = None):
         """Add configuration summary to the dashboard"""
         ax.axis('off')
         
@@ -488,9 +497,20 @@ class DashboardGenerator:
             except Exception as e:
                 logger.warning(f"Failed to calculate training time: {e}")
         
+        # Extract base model name from model_name or config
+        if data:
+            base_model = data.get('base_model') or config.get('model', model_name)
+        else:
+            base_model = config.get('model', model_name)
+            
+        if '/' in base_model:
+            base_model_display = base_model.split('/')[-1]
+        else:
+            base_model_display = base_model
+        
         # Create summary text
         summary = (
-            f"Model: {model_name}\n\n"
+            f"Base Model: {base_model_display}\n\n"
             f"Training Configuration:\n"
             f"- Batch Size: {batch_size}\n"
             f"- Learning Rate: {learning_rate}\n"
