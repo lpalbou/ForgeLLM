@@ -111,9 +111,26 @@ huggingface-cli download mlx-community/Meta-Llama-3.1-8B-Instruct-bf16
 
 ### Model Types
 
-- **Base Models** (`-bf16`, `-pt-`): For continued pre-training
-- **Instruct Models** (`-it-`, `-Instruct-`): For chat and instruction following
-- **Quantized Models** (`-4bit`, `-8bit`): Smaller memory usage
+- **Base Models** (`-bf16`, `-pt-`): Ideal for continued pre-training, clean slate for domain adaptation
+- **Instruct Models** (`-it-`, `-Instruct-`): Can also be used for continued pre-training with careful data mixing
+- **Quantized Models** (`-4bit`, `-8bit`): Smaller memory usage, slightly lower quality
+
+### Continued Pre-training: Base vs Instruct Models
+
+**Base Models (Recommended for CPT):**
+- ✅ No instruction-following capabilities to preserve
+- ✅ Clean foundation for domain-specific knowledge
+- ✅ Higher learning rates and longer training possible
+
+**Instruct Models (Advanced CPT):**
+- ✅ Better at learning from complex documents (recent research)
+- ⚠️ Requires careful data mixing (1-5% original pretraining data)
+- ⚠️ Lower learning rates to prevent catastrophic forgetting
+- ⚠️ Shorter training to avoid losing instruction-following abilities
+
+Choose base models for straightforward domain adaptation, instruct models when you need better knowledge absorption from complex documents.
+
+> **📖 For detailed CPT best practices and latest research findings, see [docs/cpt.md](docs/cpt.md)**
 
 ## Training Your Own Models
 

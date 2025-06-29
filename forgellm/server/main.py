@@ -365,7 +365,7 @@ class ModelHandler(BaseHTTPRequestHandler):
                 chunk_count = 0
                 for chunk in stream_generate(MODEL, TOKENIZER, prompt=final_prompt, **generation_kwargs):
                     chunk_count += 1
-                    logger.info(f"Chunk {chunk_count}: '{chunk.text}'")
+                    logger.debug(f"Chunk {chunk_count}: '{chunk.text}'")
                     response_text += chunk.text
                 logger.info(f"Total chunks received: {chunk_count}, total length: {len(response_text)}")
                 
