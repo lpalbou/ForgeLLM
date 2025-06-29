@@ -541,16 +541,24 @@ def setup_api(app: Flask) -> Blueprint:
             for log_file in all_log_files:
                 try:
                     mtime = os.path.getmtime(log_file)
+                    # Ensure mtime is valid
+                    if mtime is None:
+                        continue
+                        
                     # Only consider files modified in the last 10 minutes
                     if time.time() - mtime < 600:
                         try:
                             with open(log_file, 'r') as f:
                                 data = json.load(f)
                                 # File should not have end_time to be considered active
-                                if data.get('end_time') is None and mtime > most_recent_time:
+                                # Ensure both values are valid for comparison
+                                if (data.get('end_time') is None and 
+                                    mtime is not None and 
+                                    most_recent_time is not None and 
+                                    mtime > most_recent_time):
                                     most_recent_time = mtime
                                     most_recent = log_file
-                        except:
+                        except Exception:
                             continue
                 except Exception:
                     continue
@@ -607,7 +615,8 @@ def setup_api(app: Flask) -> Blueprint:
                     trained_tokens = latest_metrics.get('trained_tokens', 0)
                     dataset_total_tokens = config.get('dataset_total_tokens', 0)
                     
-                    if dataset_total_tokens > 0 and trained_tokens > 0:
+                    if (dataset_total_tokens is not None and trained_tokens is not None and
+                        dataset_total_tokens > 0 and trained_tokens > 0):
                         epoch_fraction = trained_tokens / dataset_total_tokens
                         epoch_value = format_numeric_value(epoch_fraction, 3)
                     else:
@@ -633,7 +642,9 @@ def setup_api(app: Flask) -> Blueprint:
                         current_iteration = latest_metrics.get('iteration', 0)
                         max_iterations = config.get('max_iterations', 300)
                         
-                        if current_iteration > 0 and max_iterations > current_iteration:
+                        # Ensure all values are valid numbers for comparison
+                        if (current_iteration is not None and max_iterations is not None and
+                            current_iteration > 0 and max_iterations > current_iteration):
                             progress_fraction = current_iteration / max_iterations
                             if progress_fraction > 0:
                                 total_estimated_minutes = elapsed_minutes / progress_fraction

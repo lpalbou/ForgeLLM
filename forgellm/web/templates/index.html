@@ -229,7 +229,7 @@
 
         /* Chat container styling */
         #chat-history {
-            background: linear-gradient(to bottom, #f8f9fa, #ffffff) !important;
+            background: linear-gradient(to bottom, #f8f9fa, #ccc4c4) !important;
             padding: 20px 16px !important;
             border-radius: 0 !important;
         }
@@ -930,28 +930,28 @@
                             </div>
                             <div class="col-md-2">
                                 <div class="metric-card">
-                                    <div class="metric-value" id="learning-rate">-</div>
-                                    <div class="metric-label">Learning Rate</div>
-                                </div>
+                                                                    <div class="metric-value" id="display-learning-rate">-</div>
+                                <div class="metric-label">Learning Rate</div>
                             </div>
-                            <div class="col-md-2">
-                                <div class="metric-card">
-                                    <div class="metric-value" id="warmup-steps">-</div>
-                                    <div class="metric-label">Warmup Steps</div>
-                                </div>
+                        </div>
+                        <div class="col-md-2">
+                            <div class="metric-card">
+                                <div class="metric-value" id="display-warmup-steps">-</div>
+                                <div class="metric-label">Warmup Steps</div>
                             </div>
-                            <div class="col-md-2">
-                                <div class="metric-card">
-                                    <div class="metric-value" id="lr-decay-factor">-</div>
-                                    <div class="metric-label">LR Decay</div>
-                                </div>
+                        </div>
+                        <div class="col-md-2">
+                            <div class="metric-card">
+                                <div class="metric-value" id="display-lr-decay-factor">-</div>
+                                <div class="metric-label">LR Decay</div>
                             </div>
-                            <div class="col-md-2">
-                                <div class="metric-card">
-                                    <div class="metric-value" id="weight-decay">-</div>
-                                    <div class="metric-label">Weight Decay</div>
-                                </div>
+                        </div>
+                        <div class="col-md-2">
+                            <div class="metric-card">
+                                <div class="metric-value" id="display-weight-decay">-</div>
+                                <div class="metric-label">Weight Decay</div>
                             </div>
+                        </div>
                         </div>
                     </div>
                     
@@ -1092,7 +1092,7 @@
                                         <div class="row g-2 mb-2">
                                             <div class="col-md-6">
                                                 <label for="max-tokens" class="form-label small">Max Tokens</label>
-                                                <input type="number" class="form-control" id="max-tokens" value="1000" min="1" required>
+                                                <input type="number" class="form-control" id="max-tokens" value="2000" min="1" required>
                                             </div>
                                             <div class="col-md-6">
                                                 <label for="max-kv-size" class="form-label small">Context Window</label>

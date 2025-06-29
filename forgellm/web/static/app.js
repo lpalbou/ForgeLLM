@@ -305,80 +305,38 @@ class TrainingInterface {
     }
     
     startPeriodicUpdates() {
-        // SINGLE consolidated update every 10 seconds
+        // Simple update every 10 seconds
         this.updateInterval = setInterval(() => {
-            console.log('🔄 Performing single consolidated update...');
             this.performSingleUpdate();
-        }, 10000); // 10 seconds - ONE update only
+        }, 10000);
     }
     
     async performSingleUpdate() {
         try {
-            // ONLY call the realtime dashboard API - it has everything we need
             const response = await fetch('/api/dashboard/realtime');
             const data = await response.json();
             
-            console.log('📊 Single update received - active:', data.active);
-            
-            // Update training state
             this.isTraining = data.active || false;
             this.updateTrainingButtons(this.isTraining);
             
-            if (data.active) {
-                // Update all metrics from single source
-                if (data.current_values) {
-                    // Ensure config is properly passed without being overridden by current_values
-                    const metricsData = {
-                        ...data.current_values,
-                        config: data.config
-                    };
-                    // Remove any config fields from current_values that might override the config object
-                    delete metricsData.learning_rate;
-                    delete metricsData.warmup_steps;
-                    delete metricsData.lr_decay;
-                    delete metricsData.weight_decay;
-                    
-                    this.updateTrainingMetrics(metricsData);
-                }
-                
-                // Update training status
+            if (data.active && data.current_values) {
+                this.updateAllFields(data.current_values, data.config);
                 this.updateTrainingStatus(data);
-                
-                // Render charts if available
                 if (data.charts) {
                     this.renderCharts(data.charts);
                 }
-                
-                // Reset checkpoints flag when training is active
-                this.checkpointsResetDone = false;
             } else {
-                // Handle inactive training
                 this.updateTrainingStatus({active: false});
-                
-                // Reset best checkpoints display when no training is active
-                if (!this.checkpointsResetDone) {
-                    const bestCheckpointsContainer = document.getElementById('best-checkpoints');
-                    if (bestCheckpointsContainer) {
-                        bestCheckpointsContainer.innerHTML = `
-                            <div class="text-center text-muted">
-                                <i class="fas fa-chart-line fa-2x mb-3"></i>
-                                <p>No training data available</p>
-                            </div>
-                        `;
-                    }
-                    this.checkpointsResetDone = true;
-                }
             }
             
-            // Load checkpoints/sessions ONLY every 60 seconds to reduce API calls further
-            if (Date.now() - (this.lastCheckpointsUpdate || 0) > 60000) { // Every 60 seconds
-                console.log('📁 Loading checkpoints (60s interval)...');
+            // Load checkpoints every 60 seconds
+            if (Date.now() - (this.lastCheckpointsUpdate || 0) > 60000) {
                 this.loadCheckpoints();
                 this.lastCheckpointsUpdate = Date.now();
             }
             
         } catch (error) {
-            console.error('❌ Error in single update:', error);
+            console.error('Error in update:', error);
         }
     }
     
@@ -688,7 +646,7 @@ class TrainingInterface {
                 // Update metrics
                 if (data.summary) {
                     console.log('📊 Updating training metrics with summary:', data.summary);
-                    this.updateTrainingMetrics(data.summary);
+                    this.updateAllFields(data.summary, data.summary.config || {});
                     
                     // Populate the checkpoint-select dropdown with all available checkpoints
                     console.log('🎯 Populating checkpoint select with summary:', data.summary);
@@ -927,150 +885,81 @@ class TrainingInterface {
         }
     }
     
-    updateTrainingMetrics(data) {
-        if (!data) {
-            console.error('No training metrics data provided');
-            return;
+
+
+    updateAllFields(values, config) {
+        console.log('=== UPDATE ALL FIELDS ===');
+        console.log('values:', values);
+        console.log('config:', config);
+        
+        // Update basic metrics
+        this.setElement('current-iteration', values.iteration || '-');
+        this.setElement('epoch-done', values.epoch || '-');
+        this.setElement('train-loss', this.formatNumber(values.train_loss));
+        this.setElement('val-loss', this.formatNumber(values.val_loss));
+        this.setElement('perplexity', this.formatNumber(values.val_perplexity || values.train_perplexity));
+        this.setElement('tokens-per-sec', values.tokens_per_sec ? Math.round(values.tokens_per_sec) : '-');
+        this.setElement('trained-tokens', values.trained_tokens ? values.trained_tokens.toLocaleString() : '-');
+        this.setElement('memory-usage', this.formatNumber(values.peak_memory_gb, 1));
+        
+        // Update time and progress
+        if (values.elapsed_minutes !== undefined) {
+            this.setElement('elapsed-time', `E.Time: ${Math.round(values.elapsed_minutes)}m`);
+        }
+        if (values.eta_minutes !== undefined) {
+            this.setElement('eta-time', `R.Time: ${Math.round(values.eta_minutes)}m`);
         }
         
-        console.log('📈 Updating training metrics with:', data);
-        
-        // Helper function to update element only if value changed
-        const updateElementIfChanged = (elementId, newValue) => {
-            const element = document.getElementById(elementId);
-            if (element && element.textContent !== newValue) {
-                element.textContent = newValue;
-                return true; // Updated
+        // Calculate and update progress percentage
+        if (values.elapsed_minutes !== undefined && values.eta_minutes !== undefined) {
+            const totalTime = values.elapsed_minutes + values.eta_minutes;
+            const progressPercent = totalTime > 0 ? (values.elapsed_minutes / totalTime * 100) : 0;
+            this.setElement('progress-text', `${progressPercent.toFixed(1)}%`);
+            
+            // Update progress bar
+            const progressBar = document.getElementById('progress-bar');
+            if (progressBar) {
+                progressBar.style.width = `${progressPercent}%`;
+                progressBar.setAttribute('aria-valuenow', progressPercent);
             }
-            return false; // No change
-        };
-        
-        // Update metric cards with proper data extraction
-        const formatValue = (value, decimals = 4) => {
-            if (value === null || value === undefined) return '-';
-            return typeof value === 'number' ? value.toFixed(decimals) : value;
-        };
-        
-        // Update metrics only if values changed
-        let updatedCount = 0;
-        
-        // Update iteration
-        if (updateElementIfChanged('current-iteration', data.iteration || '-')) {
-            updatedCount++;
         }
         
-        // Update loss values
-        if (updateElementIfChanged('train-loss', formatValue(data.train_loss))) {
-            updatedCount++;
-        }
-        
-        // Update val-loss - only if not "-" (keep existing value when waiting for validation)
-        const valLossValue = formatValue(data.val_loss);
-        if (valLossValue !== '-' && updateElementIfChanged('val-loss', valLossValue)) {
-            updatedCount++;
-        }
-        
-        // Update perplexity - only if not "-" (keep existing value when waiting for validation)
-        const perplexityValue = formatValue(data.val_perplexity, 2) || 
-                               formatValue(data.train_perplexity, 2) || '-';
-        if (perplexityValue !== '-' && updateElementIfChanged('perplexity', perplexityValue)) {
-            updatedCount++;
-        }
-        
-        // Update tokens per second
-        const tokensPerSecValue = data.tokens_per_sec ? Math.round(data.tokens_per_sec).toString() : '-';
-        if (updateElementIfChanged('tokens-per-sec', tokensPerSecValue)) {
-            updatedCount++;
-        }
-        
-        // Update trained tokens
-        const trainedTokensValue = data.trained_tokens ? data.trained_tokens.toLocaleString() : '-';
-        if (updateElementIfChanged('trained-tokens', trainedTokensValue)) {
-            updatedCount++;
-        }
-        
-        // Update memory usage
-        const memoryUsage = document.getElementById('memory-usage');
-        if (memoryUsage) {
-            memoryUsage.textContent = formatValue(data.peak_memory_gb, 1);
-        }
-        
-        // DIRECT CONFIG VALUE UPDATES - Simple and direct approach
-        
-        // Learning Rate: ALWAYS from config.learning_rate
-        const learningRateElement = document.getElementById('learning-rate');
-        if (learningRateElement && data.config && data.config.learning_rate !== undefined) {
-            const lrValue = data.config.learning_rate;
-            learningRateElement.textContent = typeof lrValue === 'number' ? lrValue.toExponential(2) : lrValue;
-        }
-        
-        // Warmup Steps: ALWAYS from config.warmup_steps
-        const warmupStepsElement = document.getElementById('warmup-steps');
-        if (warmupStepsElement && data.config && data.config.warmup_steps !== undefined) {
-            warmupStepsElement.textContent = data.config.warmup_steps;
-        }
-        
-        // LR Decay Factor: ALWAYS from config.lr_decay_factor
-        const lrDecayElement = document.getElementById('lr-decay-factor');
-        if (lrDecayElement && data.config && data.config.lr_decay_factor !== undefined) {
-            lrDecayElement.textContent = data.config.lr_decay_factor;
-        }
-        
-        // Weight Decay: ALWAYS from config.weight_decay
-        const weightDecayElement = document.getElementById('weight-decay');
-        if (weightDecayElement && data.config && data.config.weight_decay !== undefined) {
-            weightDecayElement.textContent = data.config.weight_decay;
-        }
-        
-        // Calculate epoch and progress
-        const iterationValue = data.iteration || 0;
-        const maxIterations = (data.config && data.config.max_iterations) || 500;
-        const progress = maxIterations > 0 ? (iterationValue / maxIterations) * 100 : 0;
-        
-        // Update progress bar
-        const progressBar = document.getElementById('progress-bar');
-        const progressText = document.getElementById('progress-text');
-        
-        if (progressBar) {
-            progressBar.style.width = `${progress}%`;
-            progressBar.setAttribute('aria-valuenow', progress);
-        }
-        
-        if (progressText) {
-            progressText.textContent = `${progress.toFixed(1)}%`;
-        }
-        
-        // Update epoch - use calculated epoch from API
-        const epochDone = data.epoch !== undefined && data.epoch !== '-' ? data.epoch : (progress / 100).toFixed(2);
-        const epochElement = document.getElementById('epoch-done');
-        if (epochElement) {
-            epochElement.textContent = epochDone;
-        }
-        
-        // Update elapsed & remaining time
-        const elapsedTime = document.getElementById('elapsed-time');
-        const etaTime = document.getElementById('eta-time');
-        
-        if (elapsedTime && data.elapsed_minutes !== undefined) {
-            elapsedTime.textContent = `E.Time: ${Math.round(data.elapsed_minutes)}m`;
-        }
-        
-        if (etaTime && data.eta_minutes !== undefined) {
-            etaTime.textContent = `R.Time: ${Math.round(data.eta_minutes)}m`;
-        }
-        
-        // Update best checkpoints
-        if (data.best_checkpoints && data.best_checkpoints.length > 0) {
-            this.updateBestCheckpoints(data.best_checkpoints);
-        }
-        
-        // Log update summary
-        if (updatedCount > 0) {
-            console.log(`✅ Updated ${updatedCount} metric elements`);
+        // Update config values directly from config object
+        if (config) {
+            console.log('CONFIG EXISTS - updating config fields');
+            console.log('config.learning_rate:', config.learning_rate);
+            console.log('config.warmup_steps:', config.warmup_steps);
+            console.log('config.lr_decay_factor:', config.lr_decay_factor);
+            console.log('config.weight_decay:', config.weight_decay);
+            
+            this.setElement('display-learning-rate', config.learning_rate ? config.learning_rate.toExponential(2) : '-');
+            this.setElement('display-warmup-steps', config.warmup_steps || '-');
+            this.setElement('display-lr-decay-factor', config.lr_decay_factor || '-');
+            this.setElement('display-weight-decay', config.weight_decay || '-');
         } else {
-            console.log('🔄 No metric changes detected');
+            console.log('NO CONFIG PROVIDED!');
         }
     }
+    
+    setElement(id, value) {
+        const element = document.getElementById(id);
+        if (element) {
+            console.log(`Setting ${id} = ${value}`);
+            element.textContent = value;
+        } else {
+            console.log(`ELEMENT NOT FOUND: ${id}`);
+        }
+    }
+    
+    formatNumber(value, decimals = 3) {
+        if (value === null || value === undefined) return '-';
+        if (typeof value === 'number') {
+            return value.toFixed(decimals);
+        }
+        return value;
+    }
+
+
     
     updateBestCheckpoints(checkpoints) {
         const container = document.getElementById('best-checkpoints');
@@ -1161,6 +1050,9 @@ class TrainingInterface {
             console.log('📊 Dashboard data received:', data);
             
             if (data.active) {
+                // FIRST: Force update config values directly - no interference
+                this.forceUpdateConfigValues(data.config);
+                
                 // Update training metrics with current values and config
                 if (data.current_values) {
                     // Ensure config is properly passed without being overridden by current_values
@@ -1174,7 +1066,7 @@ class TrainingInterface {
                     delete metricsData.lr_decay;
                     delete metricsData.weight_decay;
                     
-                    this.updateTrainingMetrics(metricsData);
+                    // This call is no longer needed - updateAllFields is called in performSingleUpdate
                 }
                 
                 // Update training status
@@ -2489,7 +2381,7 @@ class TrainingInterface {
             console.log('📊 Updating metrics with summary:', data.summary);
             
             // Update all metrics with the historical data
-            this.updateTrainingMetrics(data.summary);
+            this.updateAllFields(data.summary, data.summary.config || {});
             
             // Always set the flag to true when displaying historical data
             // This prevents checkpoints from being cleared during periodic updates
