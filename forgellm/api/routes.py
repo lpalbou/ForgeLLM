@@ -506,13 +506,155 @@ def setup_api(app: Flask) -> Blueprint:
             # Get model path from request
             path = request.args.get('path')
             
-            # Check if dashboard exists
-            dashboard_path = os.path.join(path, 'dashboard')
-            exists = os.path.exists(dashboard_path)
+            if not path:
+                return jsonify({'success': False, 'error': 'No path provided'}), 400
             
-            return jsonify({'success': True, 'exists': exists, 'path': dashboard_path if exists else None})
+            logger.info(f"Checking dashboard for path: {path}")
+            
+            # For published models, the path will be like: published/gemma_3_4b_it_bf16_lr3e_05_bs2_iter200_seq3072_2025-06-29_15-17_0000200_20250629_163142
+            # We need to convert this to the actual cache path
+            if path.startswith('published/'):
+                # Extract the published model name
+                published_name = path.replace('published/', '')
+                # Construct the full cache path
+                cache_path = Path.home() / '.cache' / 'huggingface' / 'hub' / f'models--published--{published_name}'
+                actual_path = str(cache_path)
+                logger.info(f"Converted published model path to: {actual_path}")
+            else:
+                actual_path = path
+            
+            # Check for published model dashboard first (assets/training_dashboard.png)
+            published_dashboard_path = os.path.join(actual_path, 'assets', 'training_dashboard.png')
+            if os.path.exists(published_dashboard_path):
+                # Return a web-accessible URL for the published dashboard
+                # Use the original path for URL generation to avoid issues with special characters
+                safe_path = path.replace('/', '_').replace(' ', '_').replace(':', '_').replace('-', '_')
+                dashboard_url = f"/api/dashboard/{safe_path}/training_dashboard.png"
+                logger.info(f"Found published dashboard at: {published_dashboard_path}, URL: {dashboard_url}")
+                return jsonify({
+                    'success': True, 
+                    'exists': True, 
+                    'dashboard_url': dashboard_url,
+                    'path': published_dashboard_path
+                })
+            
+            # Fallback: Check for legacy dashboard directory
+            legacy_dashboard_path = os.path.join(actual_path, 'dashboard')
+            if os.path.exists(legacy_dashboard_path):
+                safe_path = path.replace('/', '_').replace(' ', '_').replace(':', '_').replace('-', '_')
+                return jsonify({
+                    'success': True, 
+                    'exists': True, 
+                    'dashboard_url': f"/api/dashboard/{safe_path}/dashboard",
+                    'path': legacy_dashboard_path
+                })
+            
+            logger.info(f"No dashboard found for path: {actual_path}")
+            return jsonify({'success': True, 'exists': False, 'dashboard_url': None, 'path': None})
+            
         except Exception as e:
             logger.error(f"Error checking dashboard: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @bp.route('/dashboard/<path:model_path>/<filename>')
+    def serve_dashboard_image(model_path, filename):
+        """Serve dashboard images for published models."""
+        try:
+            logger.info(f"Serving dashboard for model_path: {model_path}, filename: {filename}")
+            
+            # Convert back from URL-safe format - need to handle the complex conversions
+            # First, convert underscores back to various characters
+            actual_path = model_path.replace('_', '/')
+            
+            # For published models, convert to the actual cache path
+            if actual_path.startswith('published/'):
+                published_name = actual_path.replace('published/', '')
+                # Need to restore the original format with dashes and colons
+                # This is a bit tricky since we converted multiple characters to underscores
+                # Let's check if this is a published model pattern and construct the cache path
+                cache_path = Path.home() / '.cache' / 'huggingface' / 'hub' / f'models--published--{published_name}'
+                
+                # Try to find the actual directory since the name might have been mangled
+                cache_dir = Path.home() / '.cache' / 'huggingface' / 'hub'
+                if cache_dir.exists():
+                    # Look for directories that start with the expected prefix
+                    pattern = f'models--published--*{published_name.split("/")[-1]}*'
+                    matching_dirs = list(cache_dir.glob(pattern))
+                    if matching_dirs:
+                        actual_path = str(matching_dirs[0])
+                        logger.info(f"Found matching published model directory: {actual_path}")
+                    else:
+                        actual_path = str(cache_path)
+                        logger.info(f"Using constructed cache path: {actual_path}")
+                else:
+                    actual_path = str(cache_path)
+            
+            # Construct the full path to the dashboard image
+            if filename == 'training_dashboard.png':
+                image_path = os.path.join(actual_path, 'assets', filename)
+            else:
+                # For other dashboard types (legacy)
+                image_path = os.path.join(actual_path, filename)
+            
+            logger.info(f"Looking for dashboard image at: {image_path}")
+            
+            # Check if file exists and serve it
+            if os.path.exists(image_path):
+                from flask import send_file
+                logger.info(f"Serving dashboard image: {image_path}")
+                return send_file(image_path, mimetype='image/png')
+            else:
+                logger.warning(f"Dashboard image not found: {image_path}")
+                return jsonify({'error': 'Dashboard image not found'}), 404
+                
+        except Exception as e:
+            logger.error(f"Error serving dashboard image: {e}")
+            return jsonify({'error': str(e)}), 500
+    
+    @bp.route('/open_folder', methods=['POST'])
+    def open_folder():
+        """Open a folder in the system file explorer."""
+        try:
+            data = request.get_json()
+            folder_path = data.get('path')
+            
+            if not folder_path:
+                return jsonify({'success': False, 'error': 'No path provided'}), 400
+            
+            # Convert to absolute path if relative
+            if not os.path.isabs(folder_path):
+                folder_path = os.path.abspath(folder_path)
+            
+            # Check if path exists
+            if not os.path.exists(folder_path):
+                return jsonify({'success': False, 'error': f'Path does not exist: {folder_path}'}), 404
+            
+            # If it's a file, get the parent directory
+            if os.path.isfile(folder_path):
+                folder_path = os.path.dirname(folder_path)
+            
+            # Open folder based on operating system
+            import platform
+            import subprocess
+            
+            system = platform.system()
+            try:
+                if system == 'Darwin':  # macOS
+                    subprocess.run(['open', folder_path], check=True)
+                elif system == 'Windows':
+                    subprocess.run(['explorer', folder_path], check=True)
+                elif system == 'Linux':
+                    subprocess.run(['xdg-open', folder_path], check=True)
+                else:
+                    return jsonify({'success': False, 'error': f'Unsupported operating system: {system}'}), 400
+                
+                return jsonify({'success': True, 'message': f'Opened folder: {folder_path}'})
+                
+            except subprocess.CalledProcessError as e:
+                return jsonify({'success': False, 'error': f'Failed to open folder: {e}'}), 500
+            
+        except Exception as e:
+            logger.error(f"Error opening folder: {e}")
             return jsonify({'success': False, 'error': str(e)}), 500
     
     @bp.route('/training/publish_checkpoint', methods=['POST'])
@@ -573,13 +715,34 @@ def setup_api(app: Flask) -> Blueprint:
             metrics = data.get('metrics', [])
             config = data.get('config', {})
             
-            # Extract all checkpoints from metrics
+            # Extract all checkpoints from metrics with proper path parsing
             all_checkpoints = []
             for metric in metrics:
                 if metric.get('checkpoint_saved') and metric.get('checkpoint_path'):
+                    # Parse the compound checkpoint path to extract the numbered checkpoint
+                    checkpoint_path = metric.get('checkpoint_path')
+                    parsed_path = None
+                    
+                    if checkpoint_path:
+                        # The checkpoint_path contains both paths, extract the numbered one
+                        # e.g., "models/cpt/.../adapters.safetensors and models/cpt/.../0000200_adapters.safetensors."
+                        parts = checkpoint_path.split(' and ')
+                        iteration = metric.get('iteration')
+                        for part in parts:
+                            part = part.rstrip('.')  # Remove trailing period
+                            if iteration and f"{iteration:07d}_adapters.safetensors" in part:
+                                parsed_path = part
+                                break
+                        else:
+                            # Fallback: use the last part if no numbered match found
+                            if parts:
+                                parsed_path = parts[-1].rstrip('.')
+                            else:
+                                parsed_path = checkpoint_path.rstrip('.')
+                    
                     checkpoint_info = {
                         'iteration': metric.get('iteration'),
-                        'path': metric.get('checkpoint_path'),
+                        'path': parsed_path,  # Use parsed path instead of raw path
                         'train_loss': metric.get('train_loss'),
                         'val_loss': metric.get('val_loss'),
                         'train_perplexity': metric.get('train_perplexity'),
@@ -794,10 +957,60 @@ def setup_api(app: Flask) -> Blueprint:
     def get_models():
         """Get all available models (base, CPT, IFT)."""
         try:
-            # Get base models
-            base_response = get_base_models()
-            base_data = json.loads(base_response.data) if not isinstance(base_response, tuple) else {"models": []}
-            base_models = base_data.get("models", [])
+            # Get base models - call the logic directly to avoid response parsing issues
+            base_models = []
+            cache_path = Path.home() / '.cache' / 'huggingface' / 'hub'
+            if cache_path.exists():
+                model_dirs = list(cache_path.glob('models--*'))
+                for model_dir in model_dirs:
+                    try:
+                        if model_dir.name.startswith('published--'):
+                            model_name = model_dir.name.replace('published--', '')
+                        else:
+                            model_name = model_dir.name.replace('models--', '').replace('--', '/')
+                        
+                        # Calculate model size
+                        try:
+                            result = subprocess.run(
+                                ['du', '-sh', str(model_dir)],
+                                capture_output=True, 
+                                text=True, 
+                                check=False
+                            )
+                            if result.returncode == 0:
+                                size_str = result.stdout.strip().split()[0]
+                                match = re.match(r'([0-9.]+)([KMGTP])', size_str)
+                                if match:
+                                    size_num = float(match.group(1))
+                                    unit = match.group(2)
+                                    
+                                    if unit == 'K':
+                                        size_gb = size_num / (1024 * 1024)
+                                    elif unit == 'M':
+                                        size_gb = size_num / 1024
+                                    elif unit == 'G':
+                                        size_gb = size_num
+                                    elif unit == 'T':
+                                        size_gb = size_num * 1024
+                                    elif unit == 'P':
+                                        size_gb = size_num * 1024 * 1024
+                                    else:
+                                        size_gb = 0
+                                else:
+                                    size_gb = 0
+                            else:
+                                size_gb = sum(f.stat().st_size for f in model_dir.glob('**/*') if f.is_file()) / (1024**3)
+                        except Exception as e:
+                            logger.warning(f"Error calculating size for {model_name}: {e}")
+                            size_gb = 0
+                        
+                        base_models.append({
+                            "name": model_name,
+                            "path": str(model_dir),
+                            "size": round(size_gb, 2)
+                        })
+                    except Exception as e:
+                        logger.warning(f"Error processing model directory {model_dir}: {e}")
             
             # Get CPT models
             cpt_response = get_cpt_models()
@@ -817,15 +1030,22 @@ def setup_api(app: Flask) -> Blueprint:
                 all_models.append({
                     "id": model.get("name", ""),
                     "name": model.get("name", ""),
+                    "path": model.get("path", model.get("name", "")),  # Include actual path for folder opening
                     "type": "base",
                     "size": model.get("size", 0)
                 })
+            
+            # Get IFT models
+            ift_response = get_ift_models()
+            ift_data = json.loads(ift_response.data) if not isinstance(ift_response, tuple) else {"models": []}
+            ift_models = ift_data.get("models", [])
             
             # Add CPT models
             for model in cpt_models:
                 all_models.append({
                     "id": model.get("path", ""),
                     "name": model.get("name", ""),
+                    "path": model.get("path", ""),
                     "type": "cpt",
                     "size": model.get("size", 0)
                 })
@@ -835,6 +1055,7 @@ def setup_api(app: Flask) -> Blueprint:
                 all_models.append({
                     "id": model.get("path", ""),
                     "name": model.get("name", ""),
+                    "path": model.get("path", ""),
                     "type": "ift",
                     "size": model.get("size", 0)
                 })

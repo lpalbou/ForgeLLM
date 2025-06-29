@@ -268,6 +268,19 @@ class TrainingInterface {
             }
         });
         
+        document.getElementById('open-model-folder-btn').addEventListener('click', () => {
+            const modelSelect = document.getElementById('test-model-select');
+            const selectedOption = modelSelect.selectedOptions[0];
+            
+            if (selectedOption) {
+                // Use the stored path if available, otherwise fall back to the value
+                const modelPath = selectedOption.getAttribute('data-path') || selectedOption.value;
+                this.openModelFolder(modelPath);
+            } else {
+                this.showAlert('No model selected', 'warning');
+            }
+        });
+        
         document.getElementById('copy-adapter-path-btn').addEventListener('click', () => {
             const adapterPath = document.getElementById('adapter-path').value;
             if (adapterPath) {
@@ -357,6 +370,11 @@ class TrainingInterface {
         models.forEach(model => {
             const option = document.createElement('option');
             option.value = model.id;
+            
+            // Store the actual path for folder opening (if available)
+            if (model.path) {
+                option.setAttribute('data-path', model.path);
+            }
             
             // Determine if this is a base model using same logic as isCurrentModelBase
             const modelName = model.name.toLowerCase();
@@ -2840,6 +2858,30 @@ class TrainingInterface {
             button._tooltip.hide();
             button.setAttribute('title', originalTitle);
         }, 1500);
+    }
+    
+    // Method to open model folder in system file explorer
+    async openModelFolder(modelPath) {
+        try {
+            const response = await fetch('/api/open_folder', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ path: modelPath })
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                this.showTooltip('open-model-folder-btn', 'Folder opened!');
+            } else {
+                this.showAlert(`Failed to open folder: ${data.error}`, 'danger');
+            }
+        } catch (error) {
+            console.error('Error opening folder:', error);
+            this.showAlert(`Error opening folder: ${error.message}`, 'danger');
+        }
     }
 
     // Add this method after loadModel() method
