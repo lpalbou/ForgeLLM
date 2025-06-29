@@ -887,6 +887,12 @@
                                         <button id="toggle-chat-btn" class="btn btn-sm btn-outline-secondary" data-bs-toggle="tooltip" title="Toggle chat history for context (on by default)">
                                             <i class="fas fa-book-open"></i> History: On
                                         </button>
+                                        <button id="toggle-markdown-btn" class="btn btn-sm btn-outline-primary" data-bs-toggle="tooltip" title="Toggle markdown rendering (on by default)">
+                                            <i class="fab fa-markdown"></i> Markdown: On
+                                        </button>
+                                        <button id="force-markdown-btn" class="btn btn-sm btn-outline-info" data-bs-toggle="tooltip" title="Force markdown rendering for all responses">
+                                            <i class="fas fa-magic"></i> Force MD
+                                        </button>
                                         <button id="save-chat-btn" class="btn btn-sm btn-outline-primary" disabled data-bs-toggle="tooltip" title="Saves conversation with model metadata">
                                             <i class="fas fa-save"></i> Save History <i class="fas fa-tag small"></i>
                                         </button>
@@ -1053,6 +1059,9 @@
 
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- Marked.js for Markdown rendering -->
+    <script src="{{ url_for('static', filename='js/utils/marked.min.js') }}"></script>
     
     <!-- Custom JavaScript -->
     <script src="{{ url_for('static', filename='app.js') }}"></script>

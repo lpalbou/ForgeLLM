@@ -14,6 +14,7 @@ class TrainingInterface {
         this.completionTokens = 0;   // Track completion tokens
         this.conversationTokens = 0; // Track total tokens across entire conversation
         this.trainingStartTime = null; // Store training start time for timing calculations
+        this.markdownEnabled = true; // Enable markdown rendering by default
         
         this.init();
     }
@@ -1464,6 +1465,127 @@ class TrainingInterface {
     }
     
     /**
+     * Render markdown content using marked.js library
+     * @param {HTMLElement} element - The element to render content into
+     * @param {string} text - The raw text content to render
+     * @param {boolean} forceMarkdown - Force markdown rendering even if not detected
+     */
+    renderMarkdownContent(element, text, forceMarkdown = false) {
+        try {
+            // Store the raw text for potential future use
+            element.setAttribute('data-raw-text', text);
+            
+            console.log('🔍 renderMarkdownContent called with:', {
+                textLength: text.length,
+                textPreview: text.substring(0, 100),
+                markdownEnabled: this.markdownEnabled,
+                markedAvailable: typeof marked !== 'undefined',
+                forceMarkdown
+            });
+            
+            // Test markdown detection with a simple example
+            const testMd = "## Header\n**bold** text";
+            console.log('🧪 Test markdown detection:', this.isMarkdown(testMd));
+            
+            // Check if marked.js is available
+            if (typeof marked === 'undefined') {
+                console.warn('⚠️ Marked.js library not loaded, falling back to plain text');
+                element.innerText = text;
+                return;
+            }
+            
+            // Check if content appears to be markdown and markdown is enabled
+            const isMarkdownContent = forceMarkdown || this.isMarkdown(text);
+            console.log('🔍 Markdown detection:', {
+                isMarkdownContent,
+                markdownEnabled: this.markdownEnabled,
+                willRender: this.markdownEnabled && isMarkdownContent,
+                forceMarkdown
+            });
+            
+            if (this.markdownEnabled && isMarkdownContent) {
+                console.log('📝 Rendering markdown content with marked.js');
+                
+                // Configure marked.js options for security and formatting
+                marked.setOptions({
+                    breaks: true,        // Enable line breaks
+                    gfm: true,          // Enable GitHub Flavored Markdown
+                    sanitize: false,    // We'll handle sanitization ourselves if needed
+                    smartLists: true,   // Use smarter list behavior
+                    smartypants: false  // Don't use smart quotes (can interfere with code)
+                });
+                
+                // Render markdown to HTML
+                const htmlContent = marked.parse(text);
+                element.innerHTML = htmlContent;
+                
+                // Add Bootstrap classes to rendered elements for better styling
+                this.enhanceMarkdownStyling(element);
+            } else {
+                console.log('📝 Content doesn\'t appear to be markdown, using plain text');
+                element.innerText = text;
+            }
+        } catch (error) {
+            console.error('❌ Error rendering markdown:', error);
+            // Fallback to plain text on error
+            element.innerText = text;
+        }
+    }
+    
+    /**
+     * Enhance the styling of rendered markdown by adding Bootstrap classes
+     * @param {HTMLElement} container - The container with rendered markdown
+     */
+    enhanceMarkdownStyling(container) {
+        // Add Bootstrap classes to tables
+        const tables = container.querySelectorAll('table');
+        tables.forEach(table => {
+            table.className = 'table table-bordered table-striped';
+            // Wrap table in responsive container if not already wrapped
+            if (!table.parentElement.classList.contains('table-responsive')) {
+                const wrapper = document.createElement('div');
+                wrapper.className = 'table-responsive';
+                table.parentNode.insertBefore(wrapper, table);
+                wrapper.appendChild(table);
+            }
+        });
+        
+        // Add Bootstrap classes to code blocks
+        const codeBlocks = container.querySelectorAll('pre code');
+        codeBlocks.forEach(code => {
+            const pre = code.parentElement;
+            pre.className = 'bg-dark text-light p-3 rounded';
+        });
+        
+        // Add Bootstrap classes to inline code
+        const inlineCodes = container.querySelectorAll('code:not(pre code)');
+        inlineCodes.forEach(code => {
+            code.className = 'bg-light px-1 rounded';
+        });
+        
+        // Add Bootstrap classes to blockquotes
+        const blockquotes = container.querySelectorAll('blockquote');
+        blockquotes.forEach(blockquote => {
+            blockquote.className = 'border-start border-3 ps-3 text-muted';
+        });
+        
+        // Add Bootstrap classes to lists
+        const lists = container.querySelectorAll('ul, ol');
+        lists.forEach(list => {
+            list.classList.add('mb-3');
+            if (!list.closest('li')) { // Only add margin to top-level lists
+                list.classList.add('ms-3');
+            }
+        });
+        
+        // Add Bootstrap classes to headers
+        const headers = container.querySelectorAll('h1, h2, h3, h4, h5, h6');
+        headers.forEach(header => {
+            header.classList.add('mt-3', 'mb-2');
+        });
+    }
+    
+    /**
      * Process markdown tables
      * @param {string} text - The markdown text containing tables
      * @returns {string} - Text with tables converted to HTML
@@ -1542,21 +1664,26 @@ class TrainingInterface {
         
         // Check for common markdown patterns
         const markdownPatterns = [
-            /^#+\s+.+$/m,           // Headers
-            /\*\*.+\*\*/,           // Bold
-            /\*.+\*/,               // Italic
-            /```[\s\S]*?```/,       // Code blocks
-            /`.+`/,                 // Inline code
-            /^(\s*)-\s+.+$/m,       // Unordered lists
-            /^\s*\d+\.\s+.+$/m,     // Ordered lists
-            /^>\s+.+$/m,            // Blockquotes
-            /^---+$/m,              // Horizontal rules
-            /\|[\s-:]+\|/           // Tables
+            { name: 'Headers', pattern: /^#+\s+.+$/m },
+            { name: 'Bold', pattern: /\*\*.+\*\*/ },
+            { name: 'Italic', pattern: /\*.+\*/ },
+            { name: 'Code blocks', pattern: /```[\s\S]*?```/ },
+            { name: 'Inline code', pattern: /`.+`/ },
+            { name: 'Unordered lists', pattern: /^(\s*)-\s+.+$/m },
+            { name: 'Ordered lists', pattern: /^\s*\d+\.\s+.+$/m },
+            { name: 'Blockquotes', pattern: /^>\s+.+$/m },
+            { name: 'Horizontal rules', pattern: /^---+$/m },
+            { name: 'Tables', pattern: /\|[\s-:]+\|/ },
+            { name: 'Links', pattern: /\[.+\]\(.+\)/ },
+            { name: 'Images', pattern: /!\[.*\]\(.+\)/ },
+            { name: 'Strikethrough', pattern: /~~.+~~/ },
+            { name: 'Line breaks', pattern: /  \n/ }
         ];
         
         // Check if any pattern matches
-        for (const pattern of markdownPatterns) {
+        for (const { name, pattern } of markdownPatterns) {
             if (pattern.test(text)) {
+                console.log(`✅ Markdown detected: ${name} pattern matched`);
                 return true;
             }
         }
@@ -1565,16 +1692,43 @@ class TrainingInterface {
         // Look for multiple lines starting with numbers or dashes
         const lines = text.split('\n');
         let listItemCount = 0;
+        let hasMultipleLineBreaks = 0;
         
         for (const line of lines) {
-            if (/^\s*\d+\.\s+.+$/.test(line) || /^\s*-\s+.+$/.test(line)) {
+            if (/^\s*\d+\.\s+.+$/.test(line) || /^\s*-\s+.+$/.test(line) || /^\s*\*\s+.+$/.test(line)) {
                 listItemCount++;
                 if (listItemCount >= 2) {
+                    console.log(`✅ Markdown detected: Multiple list items found`);
                     return true;
                 }
             }
+            
+            // Check for multiple blank lines (common in structured text)
+            if (line.trim() === '') {
+                hasMultipleLineBreaks++;
+            }
         }
         
+        // If text has multiple paragraphs (separated by blank lines), it might benefit from markdown rendering
+        if (hasMultipleLineBreaks >= 2 && lines.length > 5) {
+            console.log(`✅ Markdown detected: Multiple paragraphs with blank lines`);
+            return true;
+        }
+        
+        // Check for common markdown-like structures that models often generate
+        if (text.includes('\n\n') && (
+            text.includes('**') || 
+            text.includes('*') || 
+            text.includes('`') ||
+            text.includes('#') ||
+            /^\d+\./.test(text) ||
+            text.includes('- ')
+        )) {
+            console.log(`✅ Markdown detected: Common markdown elements with paragraph breaks`);
+            return true;
+        }
+        
+        console.log(`❌ No markdown patterns detected in text`);
         return false;
     }
     
@@ -1825,8 +1979,8 @@ class TrainingInterface {
                                 completion += data.text;
                                 // Removed excessive chunk logging for cleaner console output
                                 
-                                // For streaming, always use plain text to avoid markdown processing issues
-                                // Markdown will be applied at the end
+                                // For streaming, use plain text during streaming to avoid processing issues
+                                // Store raw text for final markdown rendering
                                 botBubble.innerText = completion;
                                 botBubble.setAttribute('data-raw-text', completion);
                                 
@@ -1861,10 +2015,8 @@ class TrainingInterface {
             completion = this.cleanCompletion(completion);
             console.log(`🎯 Final completion (${completion.length} chars): "${completion.substring(0, 100)}..."`);
             
-            // Always use plain text - markdown disabled
-            console.log(`📝 Using plain text (markdown disabled)`);
-            botBubble.innerText = completion;
-            botBubble.setAttribute('data-raw-text', completion);
+            // Apply markdown rendering after streaming is complete
+            this.renderMarkdownContent(botBubble, completion, this.forceMarkdown);
             
             // Enable save button
             document.getElementById('save-chat-btn').disabled = false;
@@ -1889,10 +2041,8 @@ class TrainingInterface {
             
             console.log('🔍 Raw completion:', completion.substring(0, 100) + '...');
             
-            // Always use plain text - markdown disabled
-            console.log('📝 Using plain text (markdown disabled)');
-            botBubble.innerText = completion;
-            botBubble.setAttribute('data-raw-text', completion);
+            // Apply markdown rendering for non-streaming response
+            this.renderMarkdownContent(botBubble, completion, this.forceMarkdown);
             
             // Enable save button as soon as we have at least one answer
             document.getElementById('save-chat-btn').disabled = false;
@@ -2520,6 +2670,8 @@ class TrainingInterface {
     initChatToolbar() {
         const clearBtn = document.getElementById('clear-chat-btn');
         const toggleBtn = document.getElementById('toggle-chat-btn');
+        const markdownToggleBtn = document.getElementById('toggle-markdown-btn');
+        const forceMarkdownBtn = document.getElementById('force-markdown-btn');
         const saveBtn = document.getElementById('save-chat-btn');
 
         // Initialize tooltips
@@ -2534,6 +2686,8 @@ class TrainingInterface {
 
         // State flags
         this.chatHidden = false;
+        this.markdownEnabled = true; // Markdown enabled by default
+        this.forceMarkdown = false; // Force markdown disabled by default
 
         clearBtn.addEventListener('click', () => {
             const chatHistory = document.getElementById('chat-history');
@@ -2579,6 +2733,46 @@ class TrainingInterface {
                 chatHistory.style.display = 'none';
             } else {
                 chatHistory.style.display = 'block';
+            }
+        });
+
+        // Markdown toggle functionality
+        markdownToggleBtn.addEventListener('click', () => {
+            this.markdownEnabled = !this.markdownEnabled;
+            markdownToggleBtn.innerHTML = this.markdownEnabled ? 
+                '<i class="fab fa-markdown"></i> Markdown: On' : 
+                '<i class="fab fa-markdown"></i> Markdown: Off';
+            
+            // Re-render all assistant messages with new setting
+            this.refreshChatRendering();
+            
+            this.showAlert(`Markdown rendering ${this.markdownEnabled ? 'enabled' : 'disabled'}`, 'info');
+        });
+
+        forceMarkdownBtn.addEventListener('click', () => {
+            this.forceMarkdown = !this.forceMarkdown;
+            forceMarkdownBtn.innerHTML = this.forceMarkdown ? 
+                '<i class="fas fa-magic"></i> Force MD: On' : 
+                '<i class="fas fa-magic"></i> Force MD: Off';
+            
+            // Re-render all assistant messages with new setting
+            this.refreshChatRendering();
+            
+            this.showAlert(`Force Markdown ${this.forceMarkdown ? 'enabled' : 'disabled'}`, 'info');
+        });
+    }
+
+    /**
+     * Refresh the rendering of all chat messages based on current markdown setting
+     */
+    refreshChatRendering() {
+        const chatHistory = document.getElementById('chat-history');
+        const assistantBubbles = chatHistory.querySelectorAll('.chat-assistant');
+        
+        assistantBubbles.forEach(bubble => {
+            const rawText = bubble.getAttribute('data-raw-text');
+            if (rawText) {
+                this.renderMarkdownContent(bubble, rawText, this.forceMarkdown);
             }
         });
     }
@@ -2803,9 +2997,8 @@ class TrainingInterface {
                     bubble.className = `list-group-item ${message.role === 'user' ? 'chat-user' : 'chat-assistant'}`;
                     
                     // Handle markdown for assistant messages
-                    if (message.role === 'assistant' && this.isMarkdown(message.content)) {
-                        bubble.innerHTML = this.formatMarkdown(message.content);
-                        bubble.setAttribute('data-raw-text', message.content);
+                    if (message.role === 'assistant') {
+                        this.renderMarkdownContent(bubble, message.content, this.forceMarkdown);
                     } else {
                         bubble.innerText = message.content;
                     }
@@ -3277,6 +3470,71 @@ class TrainingInterface {
         } catch (error) {
             console.error('Error checking model type:', error);
             return false; // Default to false on error
+        }
+    }
+
+    /**
+     * Test markdown rendering functionality (for debugging)
+     * Call this from browser console: trainingInterface.testMarkdownRendering()
+     */
+    testMarkdownRendering() {
+        console.log('🧪 Testing markdown rendering...');
+        
+        // Test marked.js availability
+        console.log('📚 Marked.js available:', typeof marked !== 'undefined');
+        if (typeof marked !== 'undefined') {
+            console.log('📚 Marked.js version:', marked.defaults);
+        }
+        
+        // Test markdown detection
+        const testCases = [
+            "## Header\n**bold** text",
+            "Simple text without markdown",
+            "1. First item\n2. Second item",
+            "- Bullet point\n- Another point",
+            "Some text with `inline code` and\n\nMultiple paragraphs.",
+            "```javascript\nconsole.log('code block');\n```"
+        ];
+        
+        testCases.forEach((test, index) => {
+            const isMarkdown = this.isMarkdown(test);
+            console.log(`Test ${index + 1}: "${test.substring(0, 30)}..." → ${isMarkdown ? '✅ Markdown' : '❌ Plain text'}`);
+        });
+        
+        // Test actual rendering if marked is available
+        if (typeof marked !== 'undefined') {
+            const testElement = document.createElement('div');
+            testElement.style.cssText = 'border: 2px solid #007bff; padding: 10px; margin: 10px; background: #f8f9fa;';
+            
+            const testMarkdown = `# Test Markdown
+            
+**Bold text** and *italic text*
+
+- List item 1
+- List item 2
+
+\`inline code\` and:
+
+\`\`\`javascript
+console.log('code block');
+\`\`\`
+
+> Blockquote text
+
+[Link example](https://example.com)`;
+            
+            this.renderMarkdownContent(testElement, testMarkdown, true);
+            document.body.appendChild(testElement);
+            
+            console.log('🎯 Test element added to page with rendered markdown');
+            
+            // Remove test element after 10 seconds
+            setTimeout(() => {
+                if (testElement.parentNode) {
+                    testElement.remove();
+                    console.log('🧹 Test element removed');
+                }
+            }, 10000);
         }
     }
 }

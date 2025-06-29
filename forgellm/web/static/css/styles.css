@@ -160,6 +160,88 @@ body {
     align-self: flex-start;
 }
 
+/* Markdown rendering styles */
+.chat-assistant h1, .chat-assistant h2, .chat-assistant h3, 
+.chat-assistant h4, .chat-assistant h5, .chat-assistant h6 {
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+}
+
+.chat-assistant h1 { font-size: 1.5rem; }
+.chat-assistant h2 { font-size: 1.3rem; }
+.chat-assistant h3 { font-size: 1.1rem; }
+.chat-assistant h4, .chat-assistant h5, .chat-assistant h6 { font-size: 1rem; }
+
+.chat-assistant pre {
+    background-color: #2d3748 !important;
+    color: #e2e8f0 !important;
+    padding: 1rem !important;
+    border-radius: 0.375rem !important;
+    overflow-x: auto;
+    font-family: 'Courier New', Consolas, monospace;
+    font-size: 0.875rem;
+    line-height: 1.4;
+    margin: 1rem 0;
+}
+
+.chat-assistant code:not(pre code) {
+    background-color: #f1f5f9 !important;
+    color: #475569 !important;
+    padding: 0.125rem 0.25rem !important;
+    border-radius: 0.25rem !important;
+    font-family: 'Courier New', Consolas, monospace;
+    font-size: 0.875rem;
+}
+
+.chat-assistant blockquote {
+    border-left: 4px solid #3b82f6 !important;
+    padding-left: 1rem !important;
+    margin: 1rem 0 !important;
+    color: #64748b !important;
+    font-style: italic;
+}
+
+.chat-assistant table {
+    margin: 1rem 0;
+    border-collapse: collapse;
+    width: 100%;
+}
+
+.chat-assistant table th,
+.chat-assistant table td {
+    padding: 0.5rem;
+    text-align: left;
+    border: 1px solid #e2e8f0;
+}
+
+.chat-assistant table th {
+    background-color: #f8fafc;
+    font-weight: 600;
+}
+
+.chat-assistant ul, .chat-assistant ol {
+    margin: 0.5rem 0;
+    padding-left: 1.5rem;
+}
+
+.chat-assistant li {
+    margin: 0.25rem 0;
+}
+
+.chat-assistant p {
+    margin: 0.5rem 0;
+    line-height: 1.6;
+}
+
+.chat-assistant p:first-child {
+    margin-top: 0;
+}
+
+.chat-assistant p:last-child {
+    margin-bottom: 0;
+}
+
 /* Responsive adjustments */
 @media (max-width: 768px) {
     .sidebar {
@@ -169,5 +251,14 @@ body {
     
     .metrics-container {
         grid-template-columns: 1fr;
+    }
+    
+    .chat-assistant pre {
+        font-size: 0.75rem;
+        padding: 0.75rem !important;
+    }
+    
+    .chat-assistant table {
+        font-size: 0.875rem;
     }
 } 
