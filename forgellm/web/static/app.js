@@ -13,6 +13,7 @@ class TrainingInterface {
         this.promptTokens = 0;       // Track prompt tokens
         this.completionTokens = 0;   // Track completion tokens
         this.conversationTokens = 0; // Track total tokens across entire conversation
+        this.lastTokensPerSec = null; // Track latest tokens per second
         this.trainingStartTime = null; // Store training start time for timing calculations
         this.markdownEnabled = true; // Enable markdown rendering by default
         this.lastRefreshTime = 0;    // Throttle dashboard refreshes
@@ -2044,11 +2045,15 @@ class TrainingInterface {
             this.promptTokens = data.prompt_tokens || 0;
             this.completionTokens = data.completion_tokens || 0;
             this.currentTokenCount = data.total_tokens || (this.promptTokens + this.completionTokens);
+            this.lastTokensPerSec = data.tokens_per_sec || null;
             
             // Add to conversation total
             this.conversationTokens += this.currentTokenCount;
             
             console.log(`📊 Tokens: ${this.promptTokens} prompt + ${this.completionTokens} completion = ${this.currentTokenCount} total (conversation: ${this.conversationTokens})`);
+            if (this.lastTokensPerSec) {
+                console.log(`⚡ Generation speed: ${this.lastTokensPerSec} tokens/sec`);
+            }
         } else {
             botBubble.classList.remove('chat-assistant');
             botBubble.classList.add('list-group-item-danger');
@@ -2078,6 +2083,11 @@ class TrainingInterface {
                 ` [${Math.round((this.conversationTokens / contextWindow) * 100)}%]` : '';
             
             statsHtml = `${turns} turn${turns !== 1 ? 's' : ''} | ${this.conversationTokens} tokens${tokenPercentage}`;
+            
+            // Add tokens per second if available
+            if (this.lastTokensPerSec) {
+                statsHtml += ` | ${this.lastTokensPerSec} tk/s`;
+            }
             
             // Add breakdown if we have prompt/completion details
             if (this.promptTokens && this.completionTokens) {
@@ -2725,6 +2735,7 @@ class TrainingInterface {
             this.promptTokens = 0;
             this.completionTokens = 0;
             this.conversationTokens = 0;
+            this.lastTokensPerSec = null;
             document.getElementById('chat-stats').innerText = '';
         });
 

@@ -380,7 +380,13 @@ class SOTAInstructTrainer:
                 temperature=0.7
             )
             
-            logger.info(f"Response: {response}")
+            # Handle new dictionary response format
+            if isinstance(response, dict) and response.get('success'):
+                response_text = response.get('text', response)
+            else:
+                response_text = response
+            
+            logger.info(f"Response: {response_text}")
         
         # Unload the model
         model_manager.unload()

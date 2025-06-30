@@ -263,7 +263,10 @@ def run_generate_command(args):
         )
         
         # Print response
-        print(response)
+        if isinstance(response, dict) and response.get('success'):
+            print(response.get('text', response))
+        else:
+            print(response)
         
         # Unload model
         model_manager.unload()

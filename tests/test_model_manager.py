@@ -278,8 +278,13 @@ class TestModelManager(unittest.TestCase):
             timeout=30
         )
         
-        # Check that the result is correct
-        self.assertEqual(result, 'Generated text')
+        # Check that the result is correct - should now return the full response dict
+        expected_result = {
+            'success': True,
+            'text': 'Generated text',
+            'generation_time': 0.5
+        }
+        self.assertEqual(result, expected_result)
     
     def test_generate_text_no_model(self):
         """Test generating text with no model loaded."""

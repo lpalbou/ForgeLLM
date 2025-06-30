@@ -246,8 +246,13 @@ def setup_socketio(socketio: SocketIO, app=None):
         if app and hasattr(app, 'model_manager'):
             model_manager = app.model_manager
             try:
-                text = model_manager.generate_text(data)
-                emit('generation_result', {'text': text})
+                response = model_manager.generate_text(data)
+                
+                # Handle new dictionary response format
+                if isinstance(response, dict) and response.get('success'):
+                    emit('generation_result', {'text': response.get('text', response)})
+                else:
+                    emit('generation_result', {'text': response})
             except Exception as e:
                 logger.error(f"Error generating text: {e}")
                 emit('error', {'message': f"Error generating text: {e}"})

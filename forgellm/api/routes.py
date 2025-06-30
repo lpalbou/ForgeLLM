@@ -461,11 +461,33 @@ def setup_api(app: Flask) -> Blueprint:
                 })
                 end_time = time.time()
                 
-                return jsonify({
+                # Calculate tokens per second if we have token information
+                tokens_per_sec = None
+                if isinstance(response, dict) and 'completion_tokens' in response and 'generation_time' in response:
+                    completion_tokens = response.get('completion_tokens', 0)
+                    gen_time = response.get('generation_time', 0)
+                    if gen_time > 0 and completion_tokens > 0:
+                        tokens_per_sec = completion_tokens / gen_time
+                
+                # Build response with all available data
+                result = {
                     'success': True,
-                    'completion': response,
+                    'completion': response.get('text', response) if isinstance(response, dict) else response,
                     'generation_time': end_time - start_time
-                })
+                }
+                
+                # Add token information if available
+                if isinstance(response, dict):
+                    if 'prompt_tokens' in response:
+                        result['prompt_tokens'] = response['prompt_tokens']
+                    if 'completion_tokens' in response:
+                        result['completion_tokens'] = response['completion_tokens']
+                    if 'total_tokens' in response:
+                        result['total_tokens'] = response['total_tokens']
+                    if tokens_per_sec is not None:
+                        result['tokens_per_sec'] = round(tokens_per_sec, 1)
+                
+                return jsonify(result)
         except Exception as e:
             logger.error(f"Error generating text: {e}")
             return jsonify({

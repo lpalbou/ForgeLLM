@@ -261,7 +261,7 @@ class ModelManager:
             max_kv_size (int, optional): Maximum KV cache size.
         
         Returns:
-            str: Generated text.
+            dict or str: Generated response with token information, or error string.
         """
         if not self.loaded:
             if self.loading:
@@ -301,7 +301,8 @@ class ModelManager:
             if response.status_code == 200:
                 result = response.json()
                 if result.get('success'):
-                    return result.get('text')
+                    # Return the full result object with token information
+                    return result
                 else:
                     logger.error(f"Failed to generate text: {result.get('error')}")
                     return f"Error: {result.get('error')}"
@@ -400,7 +401,7 @@ class ModelManager:
                 - system_prompt: Optional system prompt for chat models
             
         Returns:
-            The generated text
+            dict or str: Generated response with token information, or error string
         """
         prompt = params.get('prompt', '')
         history = params.get('history')
