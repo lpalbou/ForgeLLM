@@ -11,7 +11,7 @@ from flask_socketio import SocketIO
 from ..api.routes import setup_api
 from .routes import bp as views_bp
 from .services.socket_service import setup_socketio
-from ..models import ModelManager
+from ..models import ModelManager, ModelQuantizer
 from ..training.trainer import ContinuedPretrainer
 
 logger = logging.getLogger(__name__)
@@ -46,9 +46,10 @@ def create_app(static_folder=None, template_folder=None):
     app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev_key')
     app.config['MODELS_DIR'] = os.environ.get('MODELS_DIR', 'models')
     
-    # Initialize model manager and trainer
+    # Initialize model manager, trainer, and quantizer
     app.model_manager = ModelManager()
     app.trainer = ContinuedPretrainer()
+    app.quantizer = ModelQuantizer()
     
     # Register blueprints
     app.register_blueprint(views_bp)
@@ -68,6 +69,7 @@ def create_app(static_folder=None, template_folder=None):
     os.makedirs(os.path.join(app.config['MODELS_DIR'], 'cpt'), exist_ok=True)
     os.makedirs(os.path.join(app.config['MODELS_DIR'], 'ift'), exist_ok=True)
     os.makedirs(os.path.join(app.config['MODELS_DIR'], 'base'), exist_ok=True)
+    os.makedirs(os.path.join(app.config['MODELS_DIR'], 'quantized'), exist_ok=True)
     
     # Add route to serve static files from original static directory
     @app.route('/static/<path:filename>')

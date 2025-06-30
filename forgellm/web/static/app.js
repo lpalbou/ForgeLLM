@@ -219,6 +219,11 @@ class TrainingInterface {
                 if (e.target.id === 'monitoring-tab') {
                     // Force a single update when switching to monitoring tab
                     this.performSingleUpdate();
+                } else if (e.target.id === 'quantization-tab') {
+                    // Activate quantization component when tab is shown
+                    if (typeof quantizationComponent !== 'undefined' && quantizationComponent.onActivate) {
+                        quantizationComponent.onActivate();
+                    }
                 }
             });
         });

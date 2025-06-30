@@ -594,6 +594,11 @@
                 </button>
             </li>
             <li class="nav-item" role="presentation">
+                <button class="nav-link" id="quantization-tab" data-bs-toggle="tab" data-bs-target="#quantization" type="button" role="tab">
+                    <i class="fas fa-compress-alt me-2"></i>Quantization
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
                 <button class="nav-link" id="testing-tab" data-bs-toggle="tab" data-bs-target="#testing" type="button" role="tab">
                     <i class="fas fa-flask me-2"></i>Testing
                 </button>
@@ -1043,6 +1048,195 @@
                 </div>
             </div>
 
+            <!-- Quantization Tab -->
+            <div class="tab-pane fade" id="quantization" role="tabpanel">
+                <div class="row">
+                    <div class="col-lg-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <i class="fas fa-compress-alt me-2"></i>Model Quantization
+                            </div>
+                            <div class="card-body">
+                                <form id="quantization-form">
+                                    <div class="mb-3">
+                                        <label for="quantization-model-select" class="form-label">Select Model to Quantize</label>
+                                        <select class="form-select" id="quantization-model-select" required>
+                                            <option value="">Loading models...</option>
+                                        </select>
+                                        <div class="form-text">Choose from local models or HuggingFace cache</div>
+                                    </div>
+                                    
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="quantization-bits" class="form-label">Quantization Bits</label>
+                                                <select class="form-select" id="quantization-bits" required>
+                                                    <option value="4" selected>4-bit (High compression)</option>
+                                                    <option value="8">8-bit (Balanced)</option>
+                                                </select>
+                                                <div class="form-text">Lower bits = smaller model, slightly lower quality</div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="quantization-group-size" class="form-label">Group Size</label>
+                                                <select class="form-select" id="quantization-group-size" required>
+                                                    <option value="32">32 (Higher quality)</option>
+                                                    <option value="64" selected>64 (Recommended)</option>
+                                                    <option value="128">128 (Faster)</option>
+                                                </select>
+                                                <div class="form-text">Smaller groups = better quality, larger file</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="mb-3" id="quantization-output-info" style="display: none;">
+                                        <label class="form-label">Output Model Name</label>
+                                        <div class="alert alert-info">
+                                            <i class="fas fa-info-circle me-2"></i>
+                                            <span id="output-model-name">model_name_Q4</span>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="d-grid">
+                                        <button type="button" class="btn btn-primary" id="start-quantization-btn">
+                                            <i class="fas fa-compress-alt me-2"></i>Start Quantization
+                                        </button>
+                                        <button type="button" class="btn btn-danger mt-2" id="stop-quantization-btn" style="display: none;">
+                                            <i class="fas fa-stop me-2"></i>Stop Quantization
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                        
+                        <!-- Quantized Models List -->
+                        <div class="card mt-4">
+                            <div class="card-header">
+                                <i class="fas fa-archive me-2"></i>Quantized Models
+                            </div>
+                            <div class="card-body">
+                                <div id="quantized-models-list">
+                                    <div class="text-center text-muted py-3">
+                                        <i class="fas fa-box-open fa-2x mb-2"></i>
+                                        <p>No quantized models yet</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-lg-6">
+                        <!-- Progress Card -->
+                        <div class="card">
+                            <div class="card-header">
+                                <i class="fas fa-tasks me-2"></i>Quantization Progress
+                            </div>
+                            <div class="card-body">
+                                <div id="quantization-progress-container">
+                                    <div class="text-center text-muted py-4" id="quantization-idle">
+                                        <i class="fas fa-compress-alt fa-3x mb-3" style="color: #C7C7CC;"></i>
+                                        <h5>Ready for Quantization</h5>
+                                        <p>Select a model and click "Start Quantization" to begin</p>
+                                    </div>
+                                    
+                                    <div id="quantization-active" style="display: none;">
+                                        <!-- Progress Bar -->
+                                        <div class="mb-3">
+                                            <div class="d-flex justify-content-between mb-1">
+                                                <span class="text-muted">Progress</span>
+                                                <span class="text-muted"><span id="progress-percentage">0</span>%</span>
+                                            </div>
+                                            <div class="progress" style="height: 20px;">
+                                                <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                                                     id="quantization-progress-bar" 
+                                                     role="progressbar" 
+                                                     style="width: 0%">
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        <!-- Status Message -->
+                                        <div class="mb-3">
+                                            <label class="form-label">Status</label>
+                                            <div class="alert alert-info mb-0">
+                                                <i class="fas fa-info-circle me-2"></i>
+                                                <span id="quantization-status-message">Initializing...</span>
+                                            </div>
+                                        </div>
+                                        
+                                        <!-- Time Information -->
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <div class="metric-card">
+                                                    <div class="metric-value" id="elapsed-time">00:00</div>
+                                                    <div class="metric-label">Elapsed Time</div>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <div class="metric-card">
+                                                    <div class="metric-value" id="estimated-remaining">--:--</div>
+                                                    <div class="metric-label">Est. Remaining</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        <!-- Job Information -->
+                                        <div class="mt-3">
+                                            <h6>Current Job</h6>
+                                            <div class="small text-muted">
+                                                <div><strong>Input:</strong> <span id="current-input-model">-</span></div>
+                                                <div><strong>Output:</strong> <span id="current-output-model">-</span></div>
+                                                <div><strong>Settings:</strong> <span id="current-settings">-</span></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Error Display -->
+                                    <div id="quantization-error" class="alert alert-danger" style="display: none;">
+                                        <i class="fas fa-exclamation-triangle me-2"></i>
+                                        <span id="quantization-error-message">An error occurred</span>
+                                    </div>
+                                    
+                                    <!-- Success Display -->
+                                    <div id="quantization-success" class="alert alert-success" style="display: none;">
+                                        <i class="fas fa-check-circle me-2"></i>
+                                        <span id="quantization-success-message">Quantization completed successfully!</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Tips Card -->
+                        <div class="card mt-4">
+                            <div class="card-header">
+                                <i class="fas fa-lightbulb me-2"></i>Quantization Tips
+                            </div>
+                            <div class="card-body">
+                                <div class="small">
+                                    <div class="mb-2">
+                                        <strong>4-bit vs 8-bit:</strong> 4-bit provides better compression (~75% size reduction) 
+                                        but slightly lower quality. 8-bit offers better quality with ~50% compression.
+                                    </div>
+                                    <div class="mb-2">
+                                        <strong>Group Size:</strong> Smaller groups (32) provide better quality but larger files. 
+                                        64 is the recommended balance.
+                                    </div>
+                                    <div class="mb-2">
+                                        <strong>Performance:</strong> Quantized models are faster to load and use less memory, 
+                                        making them ideal for deployment.
+                                    </div>
+                                    <div>
+                                        <strong>Compatibility:</strong> Quantized models work with the same inference code 
+                                        as the original models.
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Testing Tab -->
             <div class="tab-pane fade" id="testing" role="tabpanel">
                 <div class="row">
@@ -1353,5 +1547,9 @@
     
     <!-- Custom JavaScript -->
     <script src="{{ url_for('static', filename='app.js') }}?v={{ cache_buster }}"></script>
+    
+    <!-- Component Scripts -->
+    <script src="{{ url_for('static', filename='js/services/api.js') }}?v={{ cache_buster }}"></script>
+    <script src="{{ url_for('static', filename='js/components/quantization.js') }}?v={{ cache_buster }}"></script>
 </body>
 </html> 

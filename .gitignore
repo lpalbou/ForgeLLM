@@ -77,9 +77,9 @@ continued_pretraining.log
 models/base/
 models/cpt/
 models/ift/
-mnemosyne/
-mnemosyne-light/
-mnemosyne-full-backup
+models/quantized/
+
+
 .venv
 data
 data/

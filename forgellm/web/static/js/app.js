@@ -84,6 +84,11 @@ class TrainingInterface {
             modelsComponent.init();
         }
         
+        // Initialize quantization component
+        if (typeof quantizationComponent !== 'undefined') {
+            quantizationComponent.init();
+        }
+        
         // Initialize generation component
         if (typeof generationComponent !== 'undefined') {
             generationComponent.init();
@@ -243,6 +248,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Initialize components
     if (typeof trainingComponent !== 'undefined') trainingComponent.init();
     if (typeof modelsComponent !== 'undefined') modelsComponent.init();
+    if (typeof quantizationComponent !== 'undefined') quantizationComponent.init();
     if (typeof generationComponent !== 'undefined') generationComponent.init();
     if (typeof dashboardComponent !== 'undefined') dashboardComponent.init();
     

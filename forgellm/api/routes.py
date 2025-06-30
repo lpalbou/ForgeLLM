@@ -16,7 +16,7 @@ from datetime import datetime
 from flask import Flask, Blueprint, request, jsonify, current_app, send_file
 import time
 
-from ..models import ModelManager, ModelPublisher
+from ..models import ModelManager, ModelPublisher, ModelQuantizer
 from ..training.config import TrainingConfig
 from ..training.trainer import ContinuedPretrainer
 from ..training.process_manager import TrainingProcessManager
@@ -52,6 +52,12 @@ def setup_api(app: Flask) -> Blueprint:
     if training_manager is None:
         training_manager = TrainingProcessManager()
         app.training_manager = training_manager
+    
+    # Get quantizer
+    quantizer = getattr(app, 'quantizer', None)
+    if quantizer is None:
+        quantizer = ModelQuantizer()
+        app.quantizer = quantizer
     
     @bp.route('/cpt_models', methods=['GET'])
     def get_cpt_models():
@@ -1499,5 +1505,64 @@ def setup_api(app: Flask) -> Blueprint:
                 'success': False,
                 'error': str(e)
             }), 500
+    
+    # Quantization endpoints
+    @bp.route('/quantization/models', methods=['GET'])
+    def get_quantizable_models():
+        """Get list of models available for quantization."""
+        try:
+            models = quantizer.get_available_models()
+            return jsonify({"success": True, "models": models})
+        except Exception as e:
+            logger.error(f"Error getting quantizable models: {e}")
+            return jsonify({"success": False, "error": str(e)}), 500
+    
+    @bp.route('/quantization/start', methods=['POST'])
+    def start_quantization():
+        """Start model quantization."""
+        try:
+            data = request.get_json()
+            model_path = data.get('model_path')
+            bits = int(data.get('bits', 4))
+            group_size = int(data.get('group_size', 64))
+            
+            if not model_path:
+                return jsonify({"success": False, "error": "Model path is required"}), 400
+            
+            result = quantizer.start_quantization(model_path, bits, group_size)
+            return jsonify(result)
+        except Exception as e:
+            logger.error(f"Error starting quantization: {e}")
+            return jsonify({"success": False, "error": str(e)}), 500
+    
+    @bp.route('/quantization/status', methods=['GET'])
+    def get_quantization_status():
+        """Get current quantization status."""
+        try:
+            status = quantizer.get_quantization_status()
+            return jsonify({"success": True, **status})
+        except Exception as e:
+            logger.error(f"Error getting quantization status: {e}")
+            return jsonify({"success": False, "error": str(e)}), 500
+    
+    @bp.route('/quantization/stop', methods=['POST'])
+    def stop_quantization():
+        """Stop current quantization."""
+        try:
+            result = quantizer.stop_quantization()
+            return jsonify(result)
+        except Exception as e:
+            logger.error(f"Error stopping quantization: {e}")
+            return jsonify({"success": False, "error": str(e)}), 500
+    
+    @bp.route('/quantization/quantized_models', methods=['GET'])
+    def get_quantized_models():
+        """Get list of quantized models."""
+        try:
+            models = quantizer.get_quantized_models()
+            return jsonify({"success": True, "models": models})
+        except Exception as e:
+            logger.error(f"Error getting quantized models: {e}")
+            return jsonify({"success": False, "error": str(e)}), 500
     
     return bp 

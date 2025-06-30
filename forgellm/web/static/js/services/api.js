@@ -207,6 +207,53 @@ class ApiService {
     async getHistoricalDashboard(logFile) {
         return this.post('dashboard/historical', { log_file: logFile });
     }
+
+    /**
+     * Get models available for quantization
+     * @returns {Promise<object>} - Response data
+     */
+    async getQuantizableModels() {
+        return this.get('quantization/models');
+    }
+
+    /**
+     * Start model quantization
+     * @param {string} modelPath - Path to model to quantize
+     * @param {number} bits - Number of bits (4 or 8)
+     * @param {number} groupSize - Group size (32, 64, or 128)
+     * @returns {Promise<object>} - Response data
+     */
+    async startQuantization(modelPath, bits = 4, groupSize = 64) {
+        return this.post('quantization/start', {
+            model_path: modelPath,
+            bits: bits,
+            group_size: groupSize
+        });
+    }
+
+    /**
+     * Get quantization status
+     * @returns {Promise<object>} - Response data
+     */
+    async getQuantizationStatus() {
+        return this.get('quantization/status');
+    }
+
+    /**
+     * Stop current quantization
+     * @returns {Promise<object>} - Response data
+     */
+    async stopQuantization() {
+        return this.post('quantization/stop');
+    }
+
+    /**
+     * Get list of quantized models
+     * @returns {Promise<object>} - Response data
+     */
+    async getQuantizedModels() {
+        return this.get('quantization/quantized_models');
+    }
 }
 
 // Create a singleton instance
