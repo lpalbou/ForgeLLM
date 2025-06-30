@@ -16,6 +16,7 @@
     
     <style>
         :root {
+            /* Light theme colors */
             --primary-color: #2E86AB;
             --secondary-color: #A23B72;
             --success-color: #28a745;
@@ -24,15 +25,65 @@
             --info-color: #17a2b8;
             --light-color: #f8f9fa;
             --dark-color: #343a40;
+            
+            /* Theme variables */
+            --bg-color: #f8f9fa;
+            --surface-color: #ffffff;
+            --text-color: #212529;
+            --text-muted: #6c757d;
+            --border-color: #e9ecef;
+            --input-bg: #ffffff;
+            --input-border: #e9ecef;
+            --card-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            --chat-user-bg: linear-gradient(135deg, #007AFF, #5AC8FA);
+            --chat-assistant-bg: #f1f3f4;
+            --chat-assistant-text: #1c1c1e;
+            --chat-history-bg: linear-gradient(to bottom, #f8f9fa, #e1dcdc);
+            --navbar-bg: linear-gradient(135deg, #2E86AB, #A23B72);
+            
+            /* Light theme specific overrides */
+            --code-bg: #f1f3f4;
+            --code-text: #d73a49;
+            --pre-bg: #f8f9fa;
+            --pre-border: #e9ecef;
+            --blockquote-bg: #f8f9ff;
+            --blockquote-border: #007AFF;
+        }
+        
+        [data-theme="dark"] {
+            /* Dark theme colors */
+            --bg-color: #1a1a1a;
+            --surface-color: #2d2d2d;
+            --text-color: #ffffff;
+            --text-muted: #a0a0a0;
+            --border-color: #404040;
+            --input-bg: #3d3d3d;
+            --input-border: #505050;
+            --card-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            --chat-user-bg: linear-gradient(135deg, #0066cc, #4da6ff);
+            --chat-assistant-bg: #3d3d3d;
+            --chat-assistant-text: #e0e0e0;
+            --chat-history-bg: linear-gradient(to bottom, #2d2d2d, #242424);
+            --navbar-bg: linear-gradient(135deg, #1f5f7a, #7a1f4f);
+            
+            /* Dark theme specific overrides */
+            --code-bg: #2a2a2a;
+            --code-text: #ff6b6b;
+            --pre-bg: #242424;
+            --pre-border: #404040;
+            --blockquote-bg: #2a2a3a;
+            --blockquote-border: #4d79ff;
         }
         
         body {
-            background-color: var(--light-color);
+            background-color: var(--bg-color);
+            color: var(--text-color);
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            transition: background-color 0.3s ease, color 0.3s ease;
         }
         
         .navbar {
-            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            background: var(--navbar-bg);
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
         }
         
@@ -42,10 +93,11 @@
         }
         
         .card {
-            border: none;
+            border: 1px solid var(--border-color);
             border-radius: 15px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-            transition: transform 0.2s ease;
+            box-shadow: var(--card-shadow);
+            background-color: var(--surface-color);
+            transition: transform 0.2s ease, background-color 0.3s ease, border-color 0.3s ease;
         }
         
         .card:hover {
@@ -92,19 +144,185 @@
         
         .form-control, .form-select {
             border-radius: 10px;
-            border: 2px solid #e9ecef;
-            transition: border-color 0.2s ease;
+            border: 2px solid var(--input-border);
+            background-color: var(--input-bg);
+            color: var(--text-color);
+            transition: border-color 0.2s ease, background-color 0.3s ease, color 0.3s ease;
         }
         
         .form-control:focus, .form-select:focus {
             border-color: var(--primary-color);
             box-shadow: 0 0 0 0.2rem rgba(46, 134, 171, 0.25);
+            background-color: var(--input-bg);
+        }
+        
+        .form-label {
+            color: var(--text-color);
+            transition: color 0.3s ease;
+        }
+        
+        .form-text {
+            color: var(--text-muted) !important;
+            transition: color 0.3s ease;
+        }
+        
+        /* Additional text color fixes for dark theme */
+        .text-muted {
+            color: var(--text-muted) !important;
+            transition: color 0.3s ease;
+        }
+        
+        .text-secondary {
+            color: var(--text-muted) !important;
+            transition: color 0.3s ease;
+        }
+        
+        small, .small {
+            color: var(--text-muted) !important;
+            transition: color 0.3s ease;
+        }
+        
+        /* Badge and label styling */
+        .badge {
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+        
+        /* Card text content */
+        .card-body {
+            color: var(--text-color);
+            transition: color 0.3s ease;
+        }
+        
+        .card-text {
+            color: var(--text-color) !important;
+            transition: color 0.3s ease;
+        }
+        
+        /* List group items */
+        .list-group-item {
+            background-color: var(--surface-color);
+            border-color: var(--border-color);
+            color: var(--text-color);
+            transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
+        }
+        
+        /* Training status and session details */
+        .training-session-item {
+            background: var(--surface-color) !important;
+            border: 1px solid var(--border-color) !important;
+            color: var(--text-color) !important;
+            transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
+        }
+        
+        .training-session-item .text-muted {
+            color: var(--text-muted) !important;
+        }
+        
+        /* Quantization progress and tips */
+        .quantization-tips {
+            background: var(--surface-color) !important;
+            border: 1px solid var(--border-color) !important;
+            color: var(--text-color) !important;
+            transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
+        }
+        
+        .quantization-tips p {
+            color: var(--text-muted) !important;
+        }
+        
+        /* General text content in cards */
+        .card p {
+            color: var(--text-color) !important;
+            transition: color 0.3s ease;
+        }
+        
+        .card h5 {
+            color: var(--text-color) !important;
+            transition: color 0.3s ease;
+        }
+        
+        .card h6 {
+            color: var(--text-color) !important;
+            transition: color 0.3s ease;
+        }
+        
+        /* Comprehensive text color fixes */
+        .card-body p,
+        .card-body div,
+        .card-body span:not(.badge),
+        .card-body small,
+        .card-body h1,
+        .card-body h2,
+        .card-body h3,
+        .card-body h4,
+        .card-body h5,
+        .card-body h6 {
+            color: var(--text-color) !important;
+            transition: color 0.3s ease;
+        }
+        
+        /* Ensure all muted text uses theme variables */
+        .text-muted,
+        .text-secondary,
+        small.text-muted,
+        .small.text-muted {
+            color: var(--text-muted) !important;
+        }
+        
+        /* Button text colors */
+        .btn {
+            transition: all 0.3s ease;
+        }
+        
+        /* Fix for testing tab white rectangles (input groups) */
+        .input-group-text {
+            background-color: var(--surface-color) !important;
+            border-color: var(--border-color) !important;
+            color: var(--text-color) !important;
+            transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
+        }
+        
+        .input-group .form-control {
+            background-color: var(--input-bg) !important;
+            border-color: var(--input-border) !important;
+            color: var(--text-color) !important;
+        }
+        
+        /* Training estimates - keep readable with dark text on light background */
+        #training-estimates {
+            background-color: #d1ecf1 !important;
+            border-color: #bee5eb !important;
+            color: #0c5460 !important;
+        }
+        
+        [data-theme="dark"] #training-estimates {
+            background-color: #1e3a3f !important;
+            border-color: #2a4c52 !important;
+            color: #b8e6f0 !important;
+        }
+        
+        /* Ensure specific input fields use theme variables */
+        #num-layers {
+            background-color: var(--input-bg) !important;
+            border-color: var(--input-border) !important;
+            color: var(--text-color) !important;
+        }
+        
+        /* Additional form control fixes */
+        input[type="number"].form-control,
+        input[type="text"].form-control,
+        select.form-select,
+        textarea.form-control {
+            background-color: var(--input-bg) !important;
+            border-color: var(--input-border) !important;
+            color: var(--text-color) !important;
         }
         
         .progress {
             height: 25px;
             border-radius: 15px;
-            background-color: #e9ecef;
+            background-color: var(--border-color);
+            transition: background-color 0.3s ease;
         }
         
         .progress-bar {
@@ -113,12 +331,14 @@
         }
         
         .metric-card {
-            background: white;
+            background: var(--surface-color);
+            border: 1px solid var(--border-color);
             border-radius: 15px;
             padding: 20px;
             margin-bottom: 20px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            box-shadow: var(--card-shadow);
             text-align: center;
+            transition: background-color 0.3s ease, border-color 0.3s ease;
         }
         
         .metric-value {
@@ -128,9 +348,10 @@
         }
         
         .metric-label {
-            color: var(--dark-color);
+            color: var(--text-muted);
             font-size: 0.9rem;
             margin-top: 5px;
+            transition: color 0.3s ease;
         }
         
         .status-indicator {
@@ -146,11 +367,13 @@
         .status-completed { background-color: var(--info-color); }
         
         .chart-container {
-            background: white;
+            background: var(--surface-color);
+            border: 1px solid var(--border-color);
             border-radius: 15px;
             padding: 20px;
             margin-bottom: 20px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            box-shadow: var(--card-shadow);
+            transition: background-color 0.3s ease, border-color 0.3s ease;
         }
         
         .loading-spinner {
@@ -165,12 +388,15 @@
         }
         
         .checkpoint-item {
-            background: white;
+            background: var(--surface-color);
+            border: 1px solid var(--border-color);
             border-radius: 10px;
             padding: 15px;
             margin-bottom: 10px;
             border-left: 4px solid var(--primary-color);
-            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            box-shadow: var(--card-shadow);
+            color: var(--text-color);
+            transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
         }
         
         .checkpoint-rank {
@@ -198,7 +424,7 @@
 
         /* iPhone-like chat styling */
         .chat-user {
-            background: linear-gradient(135deg, #007AFF, #5AC8FA) !important;
+            background: var(--chat-user-bg) !important;
             color: white !important;
             border-radius: 20px 20px 6px 20px !important;
             margin: 6px 0 6px auto !important;
@@ -210,28 +436,31 @@
             line-height: 1.45 !important;
             word-wrap: break-word !important;
             font-weight: 400 !important;
+            transition: background 0.3s ease;
         }
 
         .chat-assistant {
-            background: white !important;
-            color: #1c1c1e !important;
+            background: var(--chat-assistant-bg) !important;
+            color: var(--chat-assistant-text) !important;
             border-radius: 20px 20px 20px 6px !important;
             margin: 6px auto 6px 0 !important;
             max-width: 80% !important;
             padding: 14px 18px !important;
-            border: 1px solid #e5e5ea !important;
+            border: 1px solid var(--border-color) !important;
             box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08) !important;
             font-size: 15px !important;
             line-height: 1.45 !important;
             word-wrap: break-word !important;
             font-weight: 400 !important;
+            transition: background 0.3s ease, color 0.3s ease, border-color 0.3s ease;
         }
 
         /* Chat container styling */
         #chat-history {
-            background: linear-gradient(to bottom, #f8f9fa, #e1dcdc) !important;
+            background: var(--chat-history-bg) !important;
             padding: 20px 16px !important;
             border-radius: 0 !important;
+            transition: background 0.3s ease;
         }
 
         #chat-history .list-group-item:first-child {
@@ -268,17 +497,19 @@
 
         /* Chat input styling */
         #chat-input-container {
-            background: white !important;
-            border-top: 1px solid #E5E5EA !important;
+            background: var(--surface-color) !important;
+            border-top: 1px solid var(--border-color) !important;
             padding: 16px 20px !important;
+            transition: background-color 0.3s ease, border-color 0.3s ease;
         }
 
         #chat-input {
             border-radius: 24px !important;
-            border: 2px solid #e5e5ea !important;
+            border: 2px solid var(--input-border) !important;
             padding: 12px 18px !important;
             font-size: 15px !important;
-            background: #f8f9fa !important;
+            background: var(--input-bg) !important;
+            color: var(--text-color) !important;
             transition: all 0.2s ease !important;
             resize: none !important;
         }
@@ -286,7 +517,7 @@
         #chat-input:focus {
             border-color: #007AFF !important;
             box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.1) !important;
-            background: white !important;
+            background: var(--input-bg) !important;
             outline: none !important;
         }
 
@@ -350,7 +581,8 @@
             margin-top: 18px !important;
             margin-bottom: 10px !important;
             font-weight: 700 !important;
-            color: #2c3e50 !important;
+            color: var(--chat-assistant-text) !important;
+            transition: color 0.3s ease;
         }
 
         .chat-assistant h1:first-child, .chat-assistant h2:first-child, 
@@ -365,7 +597,8 @@
 
         .chat-assistant p {
             margin-bottom: 14px !important;
-            color: #1c1c1e !important;
+            color: var(--chat-assistant-text) !important;
+            transition: color 0.3s ease;
         }
 
         .chat-assistant p:last-child {
@@ -379,62 +612,70 @@
 
         .chat-assistant li {
             margin-bottom: 6px !important;
-            color: #1c1c1e !important;
+            color: var(--chat-assistant-text) !important;
+            transition: color 0.3s ease;
         }
 
         .chat-assistant code {
-            background: #f1f3f4 !important;
-            color: #d73a49 !important;
+            background: var(--code-bg) !important;
+            color: var(--code-text) !important;
             padding: 3px 8px !important;
             border-radius: 6px !important;
             font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace !important;
             font-size: 13px !important;
             font-weight: 500 !important;
+            transition: background-color 0.3s ease, color 0.3s ease;
         }
 
         .chat-assistant pre {
-            background: #f8f9fa !important;
-            border: 1px solid #e9ecef !important;
+            background: var(--pre-bg) !important;
+            border: 1px solid var(--pre-border) !important;
             padding: 16px !important;
             border-radius: 10px !important;
             margin: 16px 0 !important;
             overflow-x: auto !important;
+            transition: background-color 0.3s ease, border-color 0.3s ease;
         }
 
         .chat-assistant pre code {
             background: none !important;
-            color: #24292e !important;
+            color: var(--chat-assistant-text) !important;
             padding: 0 !important;
             font-weight: 400 !important;
+            transition: color 0.3s ease;
         }
 
         .chat-assistant blockquote {
-            border-left: 4px solid #007AFF !important;
-            background: #f8f9ff !important;
+            border-left: 4px solid var(--blockquote-border) !important;
+            background: var(--blockquote-bg) !important;
+            transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
             padding: 12px 16px !important;
             margin: 16px 0 !important;
             border-radius: 0 8px 8px 0 !important;
-            color: #495057 !important;
+            color: var(--text-muted) !important;
             font-style: italic !important;
         }
 
         .chat-assistant strong {
-            color: #2c3e50 !important;
+            color: var(--chat-assistant-text) !important;
             font-weight: 600 !important;
+            transition: color 0.3s ease;
         }
 
         .chat-assistant em {
-            color: #6c757d !important;
+            color: var(--text-muted) !important;
+            transition: color 0.3s ease;
         }
 
         /* Welcome message styling */
         #chat-welcome {
-            background: rgba(255, 255, 255, 0.8) !important;
+            background: var(--surface-color) !important;
             border-radius: 16px !important;
             padding: 40px 20px !important;
             margin: 20px !important;
             backdrop-filter: blur(10px) !important;
-            border: 1px solid rgba(229, 229, 234, 0.5) !important;
+            border: 1px solid var(--border-color) !important;
+            transition: background-color 0.3s ease, border-color 0.3s ease;
         }
 
         #chat-welcome i {
@@ -442,27 +683,30 @@
         }
 
         #chat-welcome p {
-            color: #8e8e93 !important;
+            color: var(--text-muted) !important;
             font-size: 16px !important;
             margin: 0 !important;
             font-weight: 400 !important;
+            transition: color 0.3s ease;
         }
 
         /* Stats display */
         #chat-stats {
-            background: rgba(255, 255, 255, 0.9) !important;
+            background: var(--surface-color) !important;
             padding: 8px 12px !important;
             border-radius: 8px !important;
             font-size: 12px !important;
-            color: #6c757d !important;
-            border: 1px solid rgba(229, 229, 234, 0.5) !important;
+            color: var(--text-muted) !important;
+            border: 1px solid var(--border-color) !important;
+            transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
         }
 
         /* Toolbar container */
         .d-flex.justify-content-between.align-items-center.px-3.py-2.border-bottom {
-            background: rgba(248, 249, 250, 0.95) !important;
+            background: var(--surface-color) !important;
             backdrop-filter: blur(10px) !important;
-            border-bottom: 1px solid #e5e5ea !important;
+            border-bottom: 1px solid var(--border-color) !important;
+            transition: background-color 0.3s ease, border-color 0.3s ease;
         }
 
         /* Scrollbar styling for chat */
@@ -573,10 +817,11 @@
             left: 0;
             width: 100vw;
             height: 100vh;
-            background: #f8f9fa;
+            background: var(--bg-color);
             z-index: 9999;
             display: none;
             flex-direction: column;
+            transition: background-color 0.3s ease;
         }
         
         .fullscreen-overlay .card {
@@ -626,6 +871,9 @@
                 <i class="fas fa-brain me-2"></i>MLX Training Interface
             </a>
             <div class="navbar-nav ms-auto">
+                <button id="theme-toggle" class="btn btn-outline-light btn-sm me-3" type="button" title="Toggle dark mode">
+                    <i class="fas fa-moon" id="theme-icon"></i>
+                </button>
                 <span class="navbar-text" id="connection-status">
                     <span class="status-indicator status-stopped"></span>
                     Connecting...
@@ -1190,7 +1438,7 @@
                             <div class="card-body">
                                 <div id="quantization-progress-container">
                                     <div class="text-center text-muted py-4" id="quantization-idle">
-                                        <i class="fas fa-compress-alt fa-3x mb-3" style="color: #C7C7CC;"></i>
+                                        <i class="fas fa-compress-alt fa-3x mb-3" style="color: var(--text-muted);"></i>
                                         <h5>Ready for Quantization</h5>
                                         <p>Select a model and click "Start Quantization" to begin</p>
                                     </div>
@@ -1445,7 +1693,7 @@
                                 <div id="chat-history" class="list-group overflow-auto" style="height:60vh;">
                                     <!-- Welcome message when no chat history -->
                                     <div class="d-flex flex-column align-items-center justify-content-center h-100 text-muted" id="chat-welcome">
-                                        <i class="fas fa-robot fa-3x mb-3" style="color: #C7C7CC;"></i>
+                                        <i class="fas fa-robot fa-3x mb-3" style="color: var(--text-muted);"></i>
                                         <p class="text-center">Model ready! Type a message below to start the conversation.</p>
                                     </div>
                                 </div>
@@ -1616,5 +1864,41 @@
     <!-- Component Scripts -->
     <script src="{{ url_for('static', filename='js/services/api.js') }}?v={{ cache_buster }}"></script>
     <script src="{{ url_for('static', filename='js/components/quantization.js') }}?v={{ cache_buster }}"></script>
+    
+    <!-- Theme Toggle Script -->
+    <script>
+        // Theme management
+        const themeToggle = document.getElementById('theme-toggle');
+        const themeIcon = document.getElementById('theme-icon');
+        const body = document.body;
+        
+        // Check for saved theme preference or default to light mode
+        const currentTheme = localStorage.getItem('theme') || 'light';
+        
+        // Apply the current theme
+        function applyTheme(theme) {
+            if (theme === 'dark') {
+                body.setAttribute('data-theme', 'dark');
+                themeIcon.className = 'fas fa-sun';
+                themeToggle.title = 'Switch to light mode';
+            } else {
+                body.removeAttribute('data-theme');
+                themeIcon.className = 'fas fa-moon';
+                themeToggle.title = 'Switch to dark mode';
+            }
+        }
+        
+        // Initialize theme
+        applyTheme(currentTheme);
+        
+        // Theme toggle event listener
+        themeToggle.addEventListener('click', () => {
+            const currentTheme = body.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            
+            applyTheme(newTheme);
+            localStorage.setItem('theme', newTheme);
+        });
+    </script>
 </body>
 </html> 
