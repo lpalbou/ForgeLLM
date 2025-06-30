@@ -202,6 +202,24 @@ class TrainingInterface {
                 }
             });
         }
+        
+        // Fullscreen toggle functionality
+        const fullscreenBtn = document.getElementById('fullscreen-btn');
+        if (fullscreenBtn) {
+            fullscreenBtn.addEventListener('click', () => {
+                this.toggleFullscreen();
+            });
+        }
+        
+        // Escape key to exit fullscreen
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                const fullscreenOverlay = document.getElementById('fullscreen-overlay');
+                if (fullscreenOverlay && fullscreenOverlay.style.display === 'flex') {
+                    this.toggleFullscreen();
+                }
+            }
+        });
 
 
         
@@ -3582,6 +3600,63 @@ console.log('code block');
                     console.log('🧹 Test element removed');
                 }
             }, 10000);
+        }
+    }
+    
+    toggleFullscreen() {
+        const fullscreenOverlay = document.getElementById('fullscreen-overlay');
+        const chatPanel = document.querySelector('.col-lg-8 .card');
+        const fullscreenBtn = document.getElementById('fullscreen-btn');
+        const fullscreenIcon = fullscreenBtn.querySelector('i');
+        
+        if (!fullscreenOverlay || !chatPanel || !fullscreenBtn) {
+            console.error('Fullscreen elements not found');
+            return;
+        }
+        
+        const isCurrentlyFullscreen = fullscreenOverlay.style.display === 'flex';
+        
+        if (isCurrentlyFullscreen) {
+            // Exit fullscreen mode
+            // Move the chat panel back to its original location
+            const originalContainer = document.querySelector('.col-lg-8');
+            originalContainer.appendChild(chatPanel);
+            
+            // Hide the overlay
+            fullscreenOverlay.style.display = 'none';
+            
+            // Update button icon and tooltip
+            fullscreenIcon.className = 'fas fa-expand';
+            fullscreenBtn.setAttribute('title', 'Toggle fullscreen view');
+            
+            // Re-enable body scrolling
+            document.body.style.overflow = 'auto';
+            
+        } else {
+            // Enter fullscreen mode
+            // Move the chat panel to the fullscreen overlay
+            fullscreenOverlay.appendChild(chatPanel);
+            
+            // Show the overlay
+            fullscreenOverlay.style.display = 'flex';
+            
+            // Update button icon and tooltip
+            fullscreenIcon.className = 'fas fa-compress';
+            fullscreenBtn.setAttribute('title', 'Exit fullscreen view');
+            
+            // Disable body scrolling
+            document.body.style.overflow = 'hidden';
+        }
+        
+        // Update tooltip if using Bootstrap tooltips
+        try {
+            const tooltip = bootstrap.Tooltip.getInstance(fullscreenBtn);
+            if (tooltip) {
+                tooltip.dispose();
+                new bootstrap.Tooltip(fullscreenBtn);
+            }
+        } catch (e) {
+            // Tooltip might not be initialized yet
         }
     }
 }

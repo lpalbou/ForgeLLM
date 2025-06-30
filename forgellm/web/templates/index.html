@@ -561,6 +561,55 @@
         #chat-history .chat-assistant p {
             margin: 0.5rem 0;
         }
+        
+        /* Fullscreen mode styles */
+        .fullscreen-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: #f8f9fa;
+            z-index: 9999;
+            display: none;
+            flex-direction: column;
+        }
+        
+        .fullscreen-overlay .card {
+            height: 100vh;
+            border-radius: 0 !important;
+            box-shadow: none !important;
+            border: none !important;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .fullscreen-overlay .card-header {
+            border-radius: 0 !important;
+            padding: 20px 24px !important;
+            font-size: 18px !important;
+        }
+        
+        .fullscreen-overlay .card-body {
+            border-radius: 0 !important;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .fullscreen-overlay #chat-history {
+            height: calc(100vh - 200px) !important;
+            flex: 1;
+        }
+        
+        .fullscreen-overlay #chat-input-container {
+            padding: 20px 24px !important;
+        }
+        
+        .fullscreen-overlay .d-flex.justify-content-between.align-items-center.px-3.py-2.border-bottom {
+            padding: 16px 24px !important;
+        }
     </style>
 </head>
 <body>
@@ -1355,8 +1404,13 @@
                     
                     <div class="col-lg-8">
                         <div class="card">
-                            <div class="card-header">
-                                <i class="fas fa-terminal me-2"></i>Generation Output
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <div>
+                                    <i class="fas fa-terminal me-2"></i>Generation Output
+                                </div>
+                                <button id="fullscreen-btn" class="btn btn-sm btn-outline-secondary" data-bs-toggle="tooltip" title="Toggle fullscreen view">
+                                    <i class="fas fa-expand"></i>
+                                </button>
                             </div>
                             <div class="card-body p-0">
                                 <!-- Toolbar -->
@@ -1537,6 +1591,11 @@
                 </div>
             </div>
         </div>
+    </div>
+
+    <!-- Fullscreen Overlay -->
+    <div id="fullscreen-overlay" class="fullscreen-overlay">
+        <!-- Chat panel will be moved here in fullscreen mode -->
     </div>
 
     <!-- Bootstrap JS -->
