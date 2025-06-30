@@ -588,24 +588,48 @@ class QuantizationComponent {
             return;
         }
         
-        container.innerHTML = models.map(model => `
-            <div class="border rounded p-3 mb-2">
-                <div class="d-flex justify-content-between align-items-start">
-                    <div>
-                        <h6 class="mb-1">${model.name}</h6>
-                        <small class="text-muted">
-                            ${model.size} GB • ${model.bits}-bit • Group ${model.group_size}
-                        </small>
-                    </div>
-                    <div class="text-end">
-                        <button class="btn btn-sm btn-outline-primary" onclick="quantizationComponent.openQuantizedModel('${model.full_path}')">
-                            <i class="fas fa-folder-open"></i>
-                        </button>
+        container.innerHTML = models.map(model => {
+            // Extract meaningful parts of the model name for better display
+            const modelName = model.name;
+            const parts = modelName.split('/');
+            const baseName = parts[parts.length - 1]; // Get the last part (actual model name)
+            const namespace = parts.length > 1 ? parts.slice(0, -1).join('/') : '';
+            
+            return `
+            <div class="card mb-3">
+                <div class="card-body p-3">
+                    <div class="row align-items-start">
+                        <div class="col-10">
+                            <div class="d-flex flex-column">
+                                ${namespace ? `<small class="text-muted mb-1"><i class="fas fa-folder me-1"></i>${namespace}/</small>` : ''}
+                                <h6 class="mb-2 text-break" style="line-height: 1.3; word-break: break-word;">
+                                    ${baseName}
+                                </h6>
+                                <div class="d-flex flex-wrap gap-2 mb-2">
+                                    <span class="badge bg-primary">${model.size} GB</span>
+                                    <span class="badge bg-info">${model.bits}-bit</span>
+                                    <span class="badge bg-secondary">Group ${model.group_size}</span>
+                                </div>
+                                ${model.quantized_at ? `
+                                    <small class="text-muted">
+                                        <i class="fas fa-clock me-1"></i>
+                                        Created: ${new Date(model.quantized_at).toLocaleString()}
+                                    </small>
+                                ` : ''}
+                            </div>
+                        </div>
+                        <div class="col-2 text-end">
+                            <button class="btn btn-sm btn-outline-primary" 
+                                    onclick="quantizationComponent.openQuantizedModel('${model.full_path}')"
+                                    title="Open model folder">
+                                <i class="fas fa-folder-open"></i>
+                            </button>
+                        </div>
                     </div>
                 </div>
-                ${model.quantized_at ? `<small class="text-muted d-block mt-1">Created: ${new Date(model.quantized_at).toLocaleString()}</small>` : ''}
             </div>
-        `).join('');
+            `;
+        }).join('');
     }
 
     /**
