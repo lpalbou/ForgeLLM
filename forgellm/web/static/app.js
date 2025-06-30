@@ -2301,15 +2301,21 @@ class TrainingInterface {
             
             // Extract metadata for display
             let metadataHtml = '';
-            if (rawData.config) {
-                const config = rawData.config;
+            if (rawData.config || rawData.base_model) {
+                const config = rawData.config || {};
+                
+                // Get model name from top level or config
+                const modelName = rawData.base_model || config.base_model || rawData.model_name || config.model_name || 'N/A';
+                // Clean up model name (remove mlx-community/ prefix if present)
+                const cleanModelName = modelName.replace(/^mlx-community\//, '');
+                
                 metadataHtml = `
                     <div class="alert alert-info mb-3">
                         <h6 class="mb-2"><i class="fas fa-info-circle me-2"></i>Training Metadata</h6>
                         <div class="row">
                             <div class="col-md-6">
-                                <small><strong>Model:</strong> ${config.base_model || 'N/A'}</small><br>
-                                <small><strong>Type:</strong> ${config.training_type || 'N/A'}</small><br>
+                                <small><strong>Model:</strong> ${cleanModelName}</small><br>
+                                <small><strong>Type:</strong> ${rawData.training_type || config.training_type || 'N/A'}</small><br>
                                 <small><strong>Fine-tune Type:</strong> ${config.fine_tune_type || 'N/A'}</small>
                             </div>
                             <div class="col-md-6">
@@ -2378,43 +2384,10 @@ class TrainingInterface {
             const logsModal = new bootstrap.Modal(document.getElementById('logsModal'));
             logsModal.show();
             
-            // Now also fetch the processed data for charts
-            return fetch('/api/dashboard/historical', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ log_file: logFile })
-            });
-        })
-        .then(response => {
+            // Hide loading and show success message
             clearTimeout(timeoutId);
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-            }
-            return response.json();
-        })
-        .then(data => {
             this.hideLoading();
-            
-            if (data.error) {
-                throw new Error(data.error);
-            }
-            
-            // Switch to monitoring tab and display the data
-            this.switchToMonitoringTab();
-            
-            // Clear existing charts
-            const chartContainer = document.getElementById('training-charts');
-            if (chartContainer) {
-                chartContainer.innerHTML = '<div class="text-center"><h5>Historical Training Data</h5></div>';
-            }
-            
-            // Display the historical data using the same format as live monitoring
-            if (data.charts && Object.keys(data.charts).length > 0) {
-                this.displayHistoricalCharts(data.charts);
-                this.showAlert(`Successfully loaded training logs from ${logFile}`, 'success');
-            } else {
-                this.showAlert('No chart data found in the training logs', 'warning');
-            }
+            this.showAlert(`Successfully loaded training logs from ${logFile}`, 'success');
         })
         .catch(error => {
             clearTimeout(timeoutId);
