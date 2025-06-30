@@ -359,18 +359,11 @@ class TrainingInterface {
             const allModelsResponse = await fetch('/api/models');
             const allModelsData = await allModelsResponse.json();
             
-            // Load only testing-appropriate models (excluding CPT) for testing dropdown
-            const testingModelsResponse = await fetch('/api/models?exclude_cpt=true');
-            const testingModelsData = await testingModelsResponse.json();
-            
+            // Both training and testing tabs now use the same model list (no CPT models)
             if (allModelsData.models) {
-                // Update training model dropdown with all models (including CPT)
+                // Update both training and testing dropdowns with the same models
                 this.updateModelDropdown('model-select', allModelsData.models);
-            }
-            
-            if (testingModelsData.models) {
-                // Update testing model dropdown with only published models (excluding CPT)
-                this.updateModelDropdown('test-model-select', testingModelsData.models);
+                this.updateModelDropdown('test-model-select', allModelsData.models);
             }
         } catch (error) {
             console.error('Error loading models:', error);

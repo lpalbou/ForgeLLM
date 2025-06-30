@@ -1201,10 +1201,10 @@ def setup_api(app: Flask) -> Blueprint:
     
     @bp.route('/models', methods=['GET'])
     def get_models():
-        """Get all available models (base, CPT, IFT). Use ?exclude_cpt=true to exclude CPT models for testing."""
+        """Get all available models (base, IFT). CPT models are excluded by default for both training and testing."""
         try:
-            # Check if we should exclude CPT models (for testing tab)
-            exclude_cpt = request.args.get('exclude_cpt', 'false').lower() == 'true'
+            # CPT models are always excluded - both tabs show the same list
+            # This matches the existing testing tab behavior
             
             # Get base models - call the logic directly to avoid response parsing issues
             base_models = []
@@ -1213,10 +1213,8 @@ def setup_api(app: Flask) -> Blueprint:
                 model_dirs = list(cache_path.glob('models--*'))
                 for model_dir in model_dirs:
                     try:
-                        if model_dir.name.startswith('published--'):
-                            model_name = model_dir.name.replace('published--', '')
-                        else:
-                            model_name = model_dir.name.replace('models--', '').replace('--', '/')
+                            
+                        model_name = model_dir.name.replace('models--', '').replace('--', '/')
                         
                         # Calculate model size
                         try:
@@ -1261,19 +1259,12 @@ def setup_api(app: Flask) -> Blueprint:
                     except Exception as e:
                         logger.warning(f"Error processing model directory {model_dir}: {e}")
             
-            # Get CPT models (only if not excluding them)
-            cpt_models = []
-            if not exclude_cpt:
-                cpt_response = get_cpt_models()
-                cpt_data = json.loads(cpt_response.data) if not isinstance(cpt_response, tuple) else {"models": []}
-                cpt_models = cpt_data.get("models", [])
-            
             # Get IFT models
             ift_response = get_ift_models()
             ift_data = json.loads(ift_response.data) if not isinstance(ift_response, tuple) else {"models": []}
             ift_models = ift_data.get("models", [])
             
-            # Combine all models
+            # Combine all models (base + IFT, NO CPT)
             all_models = []
             
             # Add base models
@@ -1285,17 +1276,6 @@ def setup_api(app: Flask) -> Blueprint:
                     "type": "base",
                     "size": model.get("size", 0)
                 })
-            
-            # Add CPT models (only if not excluding them)
-            if not exclude_cpt:
-                for model in cpt_models:
-                    all_models.append({
-                        "id": model.get("path", ""),
-                        "name": model.get("name", ""),
-                        "path": model.get("path", ""),
-                        "type": "cpt",
-                        "size": model.get("size", 0)
-                    })
             
             # Add IFT models
             for model in ift_models:
