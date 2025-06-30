@@ -5,7 +5,69 @@ All notable changes to ForgetLLM will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.3.0] - 2025-01-03
+## [0.3.5] - 2025-07-01 (ongoing)
+
+### 🧠 Enhanced Markdown Rendering
+- **Thinking Blocks Feature**: Revolutionary `<think></think>` tag support in chat interface
+  - Interactive collapsible thinking blocks with brain icon and "Thoughts" label
+  - Proper CSS styling with gray italic text and hover effects
+  - Smooth fold/unfold animations with visual feedback
+  - Theme-aware styling for both light and dark modes
+  - Post-markdown processing using placeholder token system to avoid conflicts
+  - Comprehensive CSS specificity handling for `.chat-assistant` containers
+
+### 🚀 Critical Model Loading Fixes
+- **Local-Only Model Resolution**: Eliminated HuggingFace download attempts
+  - Fixed ModelManager to NEVER try downloading from HuggingFace Hub
+  - Proper HuggingFace cache directory structure handling (`snapshots/{hash}/`)
+  - Distinguished between published models (flat structure) and regular models (snapshots structure)
+  - Enhanced model path resolution for both regular and published models
+  - Clear error messages when models aren't found locally
+
+- **API Model Listing Improvements**: Fixed incorrect model paths in `/api/models` endpoint
+  - Corrected snapshot directory navigation for regular HuggingFace models
+  - Proper published model detection with direct file access
+  - Fixed model dropdown population issues in test interface
+  - Enhanced model filtering to skip invalid model directories
+
+### ⚡ Performance Metrics Restoration
+- **Token Speed Display**: Fixed missing tokens/second in generation stats
+  - Restored `tokens_per_sec` calculation in both streaming and non-streaming responses
+  - Fixed server-side token speed calculation and transmission
+  - Enhanced client-side stats display timing for streaming responses
+  - Consistent speed metrics across all generation modes
+
+### 🎨 UI/UX Enhancements
+- **CSS Integration**: Fixed missing `styles.css` loading in web interface
+  - Added proper stylesheet link to `index.html` template
+  - Implemented cache busting for CSS files
+  - Resolved styling conflicts with high CSS specificity
+  - Enhanced paragraph styling inheritance in thinking blocks
+
+- **Dark Theme Improvements**: Enhanced contrast and visibility
+  - Fixed loading text contrast issues in dark theme mode
+  - Improved thinking block styling for dark mode
+  - Better color consistency across all UI elements
+
+### 🔧 Technical Infrastructure
+- **Model Directory Structure Analysis**: Comprehensive investigation of HuggingFace vs local model storage
+  - Documented differences between HF cache symlink structure and local flat directories
+  - Enhanced understanding of MLX-LM model saving patterns
+  - Improved model path resolution logic for different storage types
+
+### 🐛 Critical Bug Fixes
+- **Streaming Response Handling**: Fixed token count and speed display timing issues
+- **Model Path Resolution**: Eliminated infinite loops and download attempts
+- **CSS Specificity**: Resolved styling conflicts in chat interface
+- **Markdown Processing**: Fixed thinking block rendering interference with marked.js
+- **Cache Directory Navigation**: Proper handling of HuggingFace cache structure
+
+### 💡 Developer Experience
+- **Enhanced Error Messages**: Clear feedback when models aren't found locally
+- **Improved Logging**: Better debugging information for model loading and training processes
+- **Code Organization**: Cleaner separation between model types and storage patterns
+
+## [0.3.0] - 2025-06-30
 
 ### 🎨 Complete Dark Theme Implementation
 - **Professional Dark Theme Toggle**: Beautiful moon/sun icon button in navigation bar
