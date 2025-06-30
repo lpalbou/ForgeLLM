@@ -14,6 +14,10 @@ import subprocess
 import time
 import signal
 import os
+from pathlib import Path
+
+# Import the process tracker for graceful shutdown
+from .utils.process_tracker import process_tracker
 
 # Configure logging
 logging.basicConfig(
@@ -22,6 +26,17 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger(__name__)
+
+
+def setup_signal_handlers():
+    """Setup signal handlers for graceful shutdown."""
+    def signal_handler(signum, frame):
+        logger.info(f"Received signal {signum}, shutting down gracefully...")
+        process_tracker.cleanup_all_processes()
+        sys.exit(0)
+    
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
 
 
 def main():
@@ -126,19 +141,7 @@ def start_both_servers(args):
     """Start both model server and web interface."""
     processes = []
     
-    def signal_handler(signum, frame):
-        logger.info("Shutting down servers...")
-        for proc in processes:
-            try:
-                proc.terminate()
-                proc.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                proc.kill()
-        sys.exit(0)
-    
-    # Register signal handlers
-    signal.signal(signal.SIGINT, signal_handler)
-    signal.signal(signal.SIGTERM, signal_handler)
+    setup_signal_handlers()
     
     try:
         logger.info(f"Starting ForgeLLM servers...")
@@ -155,6 +158,7 @@ def start_both_servers(args):
         logger.info("Starting model server...")
         server_proc = subprocess.Popen(server_cmd)
         processes.append(server_proc)
+        process_tracker.track_process(server_proc)
         
         # Wait a moment for server to start
         time.sleep(2)
@@ -169,6 +173,7 @@ def start_both_servers(args):
         logger.info("Starting web interface...")
         web_proc = subprocess.Popen(web_cmd)
         processes.append(web_proc)
+        process_tracker.track_process(web_proc)
         
         # Wait a moment for web to start
         time.sleep(2)
@@ -202,13 +207,8 @@ def start_both_servers(args):
         return 1
     
     finally:
-        # Clean up processes
-        for proc in processes:
-            try:
-                proc.terminate()
-                proc.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                proc.kill()
+        # Use process tracker for cleanup
+        process_tracker.cleanup_all_processes()
     
     return 0
 

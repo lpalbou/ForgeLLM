@@ -10,13 +10,17 @@ import subprocess
 import sys
 import time
 import threading
+import queue
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Any
+import psutil
 
 from .config import TrainingConfig
 from .data_processor import PretrainingDataProcessor
 from .monitor import AdvancedTrainingMonitor
+from .metrics_logger import TrainingMetricsLogger
+from ..utils.process_tracker import process_tracker
 
 logger = logging.getLogger(__name__)
 
@@ -524,6 +528,9 @@ class ContinuedPretrainer:
                 bufsize=1
             )
             
+            # Track the process for cleanup
+            process_tracker.track_process(self._training_process)
+            
             # Set training active flag
             self._is_training_active = True
             
@@ -650,6 +657,10 @@ class ContinuedPretrainer:
             
             # Set training inactive
             self._is_training_active = False
+            
+            # Untrack the process
+            if self._training_process:
+                process_tracker.untrack_process(self._training_process)
             
             logger.info("Training stopped")
             return {

@@ -11,6 +11,8 @@ import logging
 import sys
 import os
 from pathlib import Path
+from .app import create_app
+from ..utils.process_tracker import process_tracker
 
 # Configure logging
 logging.basicConfig(
@@ -49,6 +51,12 @@ def main():
         
         # Import the run_web_interface function
         from .run import run_web_interface
+        
+        # Setup signal handlers for graceful shutdown
+        def cleanup_handler():
+            logger.info("Web interface shutting down...")
+        
+        process_tracker.add_shutdown_handler(cleanup_handler)
         
         # Run the web interface
         run_web_interface(
