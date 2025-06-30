@@ -13,11 +13,28 @@ ForgeLLM is a comprehensive platform for continued pre-training and instruction 
 
 ### 1. Installation
 
+#### Option A: Install from PyPI (Recommended)
+
+```bash
+# Install latest version
+pip install forgellm
+
+# Install specific version
+pip install forgellm==0.2.0
+
+# Upgrade existing installation
+pip install --upgrade forgellm
+```
+
+#### Option B: Install from Source (Development)
+
 ```bash
 git clone https://github.com/lpalbou/forgellm.git
 cd forgellm
 pip install -e .
 ```
+
+> **Requirements**: Python 3.9+ and Apple Silicon Mac (M1/M2/M3/M4). All dependencies including MLX are installed automatically.
 
 ### 2. Download Models
 
