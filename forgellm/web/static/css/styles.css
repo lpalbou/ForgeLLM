@@ -117,6 +117,27 @@ body {
     text-align: center;
 }
 
+/* Loading text styling - ensure good contrast in both themes */
+#loading-overlay #loading-message,
+#loadingModal #loading-message,
+#browser-loading p {
+    color: var(--text-color) !important;
+    font-weight: 500;
+}
+
+/* Dark theme specific loading text fixes */
+[data-theme="dark"] #loading-overlay #loading-message,
+[data-theme="dark"] #loadingModal #loading-message,
+[data-theme="dark"] #browser-loading p {
+    color: #ffffff !important;
+}
+
+/* Ensure loading card has proper background in dark theme */
+[data-theme="dark"] #loading-overlay .card {
+    background-color: var(--surface-color) !important;
+    border-color: var(--border-color) !important;
+}
+
 /* Generation interface */
 .chat-container {
     display: flex;
@@ -240,6 +261,128 @@ body {
 
 .chat-assistant p:last-child {
     margin-bottom: 0;
+}
+
+/* Thinking blocks styling */
+.chat-assistant .thinking-block,
+.thinking-block {
+    background-color: #f8f9fa !important;
+    border: 1px solid #e9ecef !important;
+    border-radius: 8px !important;
+    margin: 1rem 0 !important;
+    overflow: hidden !important;
+    transition: all 0.3s ease !important;
+}
+
+.chat-assistant .thinking-header,
+.thinking-header {
+    display: flex !important;
+    align-items: center !important;
+    padding: 0.75rem 1rem !important;
+    background-color: rgba(108, 117, 125, 0.1) !important;
+    cursor: pointer !important;
+    user-select: none !important;
+    transition: background-color 0.2s ease !important;
+}
+
+.chat-assistant .thinking-header:hover,
+.thinking-header:hover {
+    background-color: rgba(108, 117, 125, 0.2) !important;
+}
+
+.chat-assistant .thinking-icon,
+.thinking-icon {
+    color: #6c757d !important;
+    margin-right: 0.5rem !important;
+    font-size: 1rem !important;
+    transition: transform 0.3s ease !important;
+}
+
+.chat-assistant .thinking-header.collapsed .thinking-icon,
+.thinking-header.collapsed .thinking-icon {
+    transform: rotate(-90deg) !important;
+}
+
+.chat-assistant .thinking-label,
+.thinking-label {
+    color: #495057 !important;
+    font-weight: bold !important;
+    font-size: 0.9rem !important;
+    flex-grow: 1 !important;
+}
+
+.chat-assistant .thinking-content,
+.thinking-content {
+    padding: 1rem !important;
+    border-top: 1px solid #e9ecef !important;
+    color: #6c757d !important;
+    font-style: italic !important;
+    max-height: 300px !important;
+    overflow-y: auto !important;
+    transition: all 0.3s ease !important;
+}
+
+.chat-assistant .thinking-content p,
+.thinking-content p {
+    color: #6c757d !important;
+    font-style: italic !important;
+    margin: 0.5rem 0 !important;
+}
+
+.chat-assistant .thinking-content p:first-child,
+.thinking-content p:first-child {
+    margin-top: 0 !important;
+}
+
+.chat-assistant .thinking-content p:last-child,
+.thinking-content p:last-child {
+    margin-bottom: 0 !important;
+}
+
+.chat-assistant .thinking-content.collapsed,
+.thinking-content.collapsed {
+    display: none !important;
+}
+
+/* Dark theme adjustments for thinking blocks */
+[data-theme="dark"] .chat-assistant .thinking-block,
+[data-theme="dark"] .thinking-block {
+    background-color: #2d2d2d !important;
+    border-color: #404040 !important;
+    border: 1px solid #8a8a8a !important;
+}
+
+
+[data-theme="dark"] .chat-assistant .thinking-header,
+[data-theme="dark"] .thinking-header {
+    background-color: rgba(255, 255, 255, 0.05) !important;
+}
+
+[data-theme="dark"] .chat-assistant .thinking-header:hover,
+[data-theme="dark"] .thinking-header:hover {
+    background-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+[data-theme="dark"] .chat-assistant .thinking-icon,
+[data-theme="dark"] .thinking-icon {
+    color: #a0a0a0 !important;
+}
+
+[data-theme="dark"] .chat-assistant .thinking-label,
+[data-theme="dark"] .thinking-label {
+    color: #ffffff !important;
+}
+
+[data-theme="dark"] .chat-assistant .thinking-content,
+[data-theme="dark"] .thinking-content {
+    border-top-color: #404040 !important;
+    color: #a0a0a0 !important;
+}
+
+[data-theme="dark"] .chat-assistant .thinking-content p,
+[data-theme="dark"] .thinking-content p {
+    color: #a0a0a0 !important;
+    font-style: italic !important;
 }
 
 /* Responsive adjustments */

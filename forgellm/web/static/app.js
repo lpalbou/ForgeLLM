@@ -1535,15 +1535,30 @@ class TrainingInterface {
                     smartypants: false  // Don't use smart quotes (can interfere with code)
                 });
                 
+                // Process thinking blocks before markdown rendering
+                const processedText = this.processThinkingBlocks(text);
+                
                 // Render markdown to HTML
-                const htmlContent = marked.parse(text);
+                const htmlContent = marked.parse(processedText);
                 element.innerHTML = htmlContent;
                 
                 // Add Bootstrap classes to rendered elements for better styling
                 this.enhanceMarkdownStyling(element);
+                
+                // Initialize thinking block interactions
+                this.initializeThinkingBlocks(element);
             } else {
                 console.log('📝 Content doesn\'t appear to be markdown, using plain text');
-                element.innerText = text;
+                // Still process thinking blocks even for plain text
+                const processedText = this.processThinkingBlocks(text);
+                if (processedText !== text) {
+                    // Thinking blocks were found, render as HTML
+                    element.innerHTML = processedText;
+                    this.initializeThinkingBlocks(element);
+                } else {
+                    // No thinking blocks, use plain text
+                    element.innerText = text;
+                }
             }
         } catch (error) {
             console.error('❌ Error rendering markdown:', error);
@@ -1672,6 +1687,80 @@ class TrainingInterface {
         }
         
         return text;
+    }
+    
+    /**
+     * Process thinking blocks in text
+     * @param {string} text - The text to process
+     * @returns {string} - Text with thinking blocks converted to HTML
+     */
+    processThinkingBlocks(text) {
+        // Regular expression to match <think>...</think> blocks
+        const thinkRegex = /<think>([\s\S]*?)<\/think>/gi;
+        
+        return text.replace(thinkRegex, (match, content) => {
+            // Generate a unique ID for this thinking block
+            const blockId = 'thinking-' + Math.random().toString(36).substr(2, 9);
+            
+            // Create the HTML structure for the thinking block
+            return `
+<div class="thinking-block">
+    <div class="thinking-header" data-target="${blockId}">
+        <i class="fas fa-brain thinking-icon"></i>
+                 <span class="thinking-label">Thoughts</span>
+    </div>
+    <div class="thinking-content" id="${blockId}">
+${content.trim()}
+    </div>
+</div>`;
+        });
+    }
+
+    /**
+     * Initialize thinking block interactions
+     * @param {HTMLElement} container - The container with thinking blocks
+     */
+    initializeThinkingBlocks(container) {
+        const thinkingHeaders = container.querySelectorAll('.thinking-header');
+        
+        thinkingHeaders.forEach(header => {
+            header.addEventListener('click', () => {
+                const targetId = header.getAttribute('data-target');
+                const content = document.getElementById(targetId);
+                const icon = header.querySelector('.thinking-icon');
+                
+                if (content) {
+                    // Toggle collapsed state
+                    const isCollapsed = content.classList.contains('collapsed');
+                    
+                    if (isCollapsed) {
+                        // Expand
+                        content.classList.remove('collapsed');
+                        header.classList.remove('collapsed');
+                        content.style.display = 'block';
+                    } else {
+                        // Collapse
+                        content.classList.add('collapsed');
+                        header.classList.add('collapsed');
+                        content.style.display = 'none';
+                    }
+                }
+            });
+        });
+        
+        // Initially collapse all thinking blocks
+        const thinkingContents = container.querySelectorAll('.thinking-content');
+        thinkingContents.forEach(content => {
+            content.classList.add('collapsed');
+            content.style.display = 'none';
+            
+            // Also mark the header as collapsed
+            const blockId = content.id;
+            const header = container.querySelector(`[data-target="${blockId}"]`);
+            if (header) {
+                header.classList.add('collapsed');
+            }
+        });
     }
     
     /**
