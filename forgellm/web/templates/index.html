@@ -520,6 +520,17 @@
             background: var(--input-bg) !important;
             outline: none !important;
         }
+        
+        /* Make placeholder text lighter in dark mode */
+        #chat-input::placeholder {
+            color: var(--text-muted);
+            opacity: 0.7;
+        }
+        
+        [data-theme="dark"] #chat-input::placeholder {
+            color: #888888;
+            opacity: 0.8;
+        }
 
         #send-message-btn {
             border-radius: 50% !important;
