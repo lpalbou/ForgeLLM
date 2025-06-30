@@ -562,6 +562,10 @@
             margin: 0.5rem 0;
         }
         
+        #fullscreen-btn {
+            color: white;
+        }
+
         /* Fullscreen mode styles */
         .fullscreen-overlay {
             position: fixed;
@@ -601,6 +605,8 @@
         .fullscreen-overlay #chat-history {
             height: calc(100vh - 200px) !important;
             flex: 1;
+            overflow-y: auto !important;
+            max-height: calc(100vh - 200px) !important;
         }
         
         .fullscreen-overlay #chat-input-container {

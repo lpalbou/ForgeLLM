@@ -170,6 +170,20 @@ class TrainingInterface {
             });
         });
         
+        // Context window change listener - update stats immediately
+        document.getElementById('max-kv-size').addEventListener('change', () => {
+            if (this.modelLoaded && this.conversationTokens > 0) {
+                // Update chat stats immediately when context window changes
+                this.updateChatStats();
+            }
+            if (this.modelLoaded) {
+                this.updateModelStatus(
+                    document.getElementById('test-model-select').value,
+                    document.getElementById('adapter-path').value
+                );
+            }
+        });
+        
         // Chat input handling
         const chatInput = document.getElementById('chat-input');
         const sendBtn = document.getElementById('send-message-btn');
@@ -3436,6 +3450,14 @@ class TrainingInterface {
                     return isBase;
                 }
                 
+                // Special handling for Gemma models: they are instruct by default EXCEPT if "base" is in the name
+                if (modelName.includes('gemma') || modelName.includes('recurrentgemma')) {
+                    // For Gemma models, check if it's explicitly marked as base
+                    const isBase = modelName.includes('base');
+                    console.log(`🔍 Gemma model '${data.model_name}' detected as ${isBase ? 'BASE' : 'INSTRUCT'}`);
+                    return isBase;
+                }
+                
                 // Regular detection logic for non-Qwen models
                 // Instruction-tuned model patterns with more precise matching
                 const instructPatterns = [
@@ -3605,8 +3627,9 @@ console.log('code block');
     
     toggleFullscreen() {
         const fullscreenOverlay = document.getElementById('fullscreen-overlay');
-        const chatPanel = document.querySelector('.col-lg-8 .card');
+        // Target the specific Generation Output card by finding the card that contains the fullscreen button
         const fullscreenBtn = document.getElementById('fullscreen-btn');
+        const chatPanel = fullscreenBtn.closest('.card');
         const fullscreenIcon = fullscreenBtn.querySelector('i');
         
         if (!fullscreenOverlay || !chatPanel || !fullscreenBtn) {
@@ -3618,8 +3641,8 @@ console.log('code block');
         
         if (isCurrentlyFullscreen) {
             // Exit fullscreen mode
-            // Move the chat panel back to its original location
-            const originalContainer = document.querySelector('.col-lg-8');
+            // Move the chat panel back to its original location in the Testing tab
+            const originalContainer = document.querySelector('#testing .col-lg-8');
             originalContainer.appendChild(chatPanel);
             
             // Hide the overlay
