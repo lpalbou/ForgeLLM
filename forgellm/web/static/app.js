@@ -355,13 +355,22 @@ class TrainingInterface {
     
     async loadModels() {
         try {
-            const response = await fetch('/api/models');
-            const data = await response.json();
+            // Load all models (including CPT) for training dropdown
+            const allModelsResponse = await fetch('/api/models');
+            const allModelsData = await allModelsResponse.json();
             
-            if (data.models) {
-                // Update model dropdowns with icons
-                this.updateModelDropdown('model-select', data.models);
-                this.updateModelDropdown('test-model-select', data.models);
+            // Load only testing-appropriate models (excluding CPT) for testing dropdown
+            const testingModelsResponse = await fetch('/api/models?exclude_cpt=true');
+            const testingModelsData = await testingModelsResponse.json();
+            
+            if (allModelsData.models) {
+                // Update training model dropdown with all models (including CPT)
+                this.updateModelDropdown('model-select', allModelsData.models);
+            }
+            
+            if (testingModelsData.models) {
+                // Update testing model dropdown with only published models (excluding CPT)
+                this.updateModelDropdown('test-model-select', testingModelsData.models);
             }
         } catch (error) {
             console.error('Error loading models:', error);
