@@ -493,7 +493,7 @@ class TrainingInterface {
             return;
         }
         
-        container.innerHTML = trainingSessions.map(session => {
+        const sessionsHTML = trainingSessions.map(session => {
             // Format date with both date and time to avoid conflicts
             // Use start_time from training data if available, otherwise fall back to created timestamp
             let sessionDate;
@@ -506,57 +506,83 @@ class TrainingInterface {
             const timeStr = sessionDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
             const formattedDate = `${dateStr} ${timeStr}`;
             
+            // Clean up model name display
+            const displayModelName = session.model_name || session.base_model || 'Unknown';
+            const cleanModelName = displayModelName.replace('mlx-community/', '').replace('dataset_cpt_', '');
+            
             return `
-            <div class="training-session-card mb-3">
-                <div class="card">
-                    <div class="card-header d-flex justify-content-between align-items-center">
-                        <div>
-                            <h6 class="mb-1">
-                                <i class="fas fa-brain text-primary me-2"></i>
-                                ${session.session_name}
-                            </h6>
-                            <small class="text-muted">
-                                <i class="fas fa-calendar me-1"></i>
-                                ${formattedDate}
-                            </small>
-                        </div>
-                        <div class="text-end">
-                            <span class="badge bg-primary">${session.metrics_count || 0} metrics</span>
-                            ${session.latest_val_loss ? `<span class="badge bg-success ms-1">Val Loss: ${session.latest_val_loss.toFixed(4)}</span>` : ''}
+            <div class="col-12 mb-3">
+                <div class="card h-100 shadow-sm">
+                    <div class="card-header bg-primary text-white">
+                        <div class="row align-items-center">
+                            <div class="col-md-8">
+                                <h6 class="mb-1 fw-bold">
+                                    <i class="fas fa-brain me-2"></i>
+                                    ${session.session_name}
+                                </h6>
+                                <small class="opacity-75">
+                                    <i class="fas fa-calendar me-1"></i>
+                                    ${formattedDate}
+                                </small>
+                            </div>
+                            <div class="col-md-4 text-end">
+                                <span class="badge bg-light text-primary me-1">${session.metrics_count || 0} metrics</span>
+                                ${session.latest_val_loss ? `<span class="badge bg-success">Val: ${session.latest_val_loss.toFixed(3)}</span>` : ''}
+                            </div>
                         </div>
                     </div>
                     <div class="card-body">
-                        <div class="row mb-2">
+                        <div class="row g-3 mb-3">
                             <div class="col-md-6">
-                                <small class="text-muted">Model:</small><br>
-                                <strong>${session.model_name || 'Unknown'}</strong>
+                                <div class="d-flex align-items-center">
+                                    <i class="fas fa-robot text-primary me-2"></i>
+                                    <div>
+                                        <small class="text-muted d-block">Base Model</small>
+                                        <strong class="text-truncate" title="${cleanModelName}">${cleanModelName}</strong>
+                                    </div>
+                                </div>
                             </div>
                             <div class="col-md-6">
-                                <small class="text-muted">Training Progress:</small><br>
-                                <strong>${session.latest_iteration || 0} iterations</strong>
+                                <div class="d-flex align-items-center">
+                                    <i class="fas fa-chart-line text-success me-2"></i>
+                                    <div>
+                                        <small class="text-muted d-block">Progress</small>
+                                        <strong>${session.latest_iteration || 0} iterations</strong>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                         
                         ${session.latest_loss || session.latest_val_loss ? `
-                        <div class="row mb-3">
+                        <div class="row g-3 mb-3">
                             <div class="col-md-6">
-                                <small class="text-muted">Latest Train Loss:</small><br>
-                                <strong>${session.latest_loss ? session.latest_loss.toFixed(4) : 'N/A'}</strong>
+                                <div class="d-flex align-items-center">
+                                    <i class="fas fa-arrow-down text-warning me-2"></i>
+                                    <div>
+                                        <small class="text-muted d-block">Train Loss</small>
+                                        <strong>${session.latest_loss ? session.latest_loss.toFixed(4) : 'N/A'}</strong>
+                                    </div>
+                                </div>
                             </div>
                             <div class="col-md-6">
-                                <small class="text-muted">Latest Val Loss:</small><br>
-                                <strong>${session.latest_val_loss ? session.latest_val_loss.toFixed(4) : 'N/A'}</strong>
+                                <div class="d-flex align-items-center">
+                                    <i class="fas fa-check-circle text-info me-2"></i>
+                                    <div>
+                                        <small class="text-muted d-block">Val Loss</small>
+                                        <strong>${session.latest_val_loss ? session.latest_val_loss.toFixed(4) : 'N/A'}</strong>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                         ` : ''}
                         
                         <div class="d-flex gap-2 flex-wrap">
                             <button class="btn btn-outline-primary btn-sm" onclick="trainingInterface.showCheckpointDetails('${session.session_id}')">
-                                <i class="fas fa-list me-1"></i>View Details
+                                <i class="fas fa-list me-1"></i>Details
                             </button>
                             ${session.log_file ? `
                             <button class="btn btn-outline-info btn-sm" onclick="trainingInterface.viewTrainingLogs('${session.log_file}')">
-                                <i class="fas fa-chart-line me-1"></i>View Logs
+                                <i class="fas fa-chart-line me-1"></i>Logs
                             </button>
                             ` : ''}
                             <button class="btn btn-outline-danger btn-sm" onclick="trainingInterface.deleteTrainingSession('${session.session_id}')">
@@ -568,6 +594,9 @@ class TrainingInterface {
             </div>
             `;
         }).join('');
+        
+        // Wrap in a proper row container for Bootstrap grid
+        container.innerHTML = `<div class="row">${sessionsHTML}</div>`;
     }
     
     updateTrainingSessionsDropdown(trainingSessions) {
@@ -2256,7 +2285,20 @@ class TrainingInterface {
             }
             return response.json();
         })
-        .then(rawData => {
+        .then(response => {
+            if (!response.success) {
+                throw new Error(response.error || 'Failed to load logs');
+            }
+            
+            // Parse the raw logs content
+            let rawData;
+            try {
+                rawData = JSON.parse(response.logs);
+            } catch (e) {
+                // If parsing fails, treat as plain text
+                rawData = { raw_content: response.logs };
+            }
+            
             // Extract metadata for display
             let metadataHtml = '';
             if (rawData.config) {
@@ -2280,21 +2322,54 @@ class TrainingInterface {
                 `;
             }
             
-            // Show the raw JSON in the modal with metadata
+            // Show the formatted logs in the modal with metadata
             const logsContent = document.getElementById('logs-content');
             
-            // Add metadata section before the JSON content
-            logsContent.innerHTML = metadataHtml;
+            // Clear existing content
+            logsContent.innerHTML = '';
             
-            // Add a pre element for the JSON content
+            // Add metadata section if available
+            if (metadataHtml) {
+                const metadataDiv = document.createElement('div');
+                metadataDiv.innerHTML = metadataHtml;
+                logsContent.appendChild(metadataDiv);
+            }
+            
+            // Add formatted JSON content
             const jsonPre = document.createElement('pre');
-            jsonPre.className = 'json-content';
-            jsonPre.textContent = JSON.stringify(rawData, null, 2);
+            jsonPre.className = 'json-content bg-dark text-light p-3 rounded';
+            jsonPre.style.cssText = 'white-space: pre-wrap; word-wrap: break-word; font-family: "Courier New", monospace; font-size: 12px; line-height: 1.4; max-height: 60vh; overflow-y: auto; border: 1px solid #444;';
+            
+            if (rawData.raw_content) {
+                // Plain text content
+                jsonPre.textContent = rawData.raw_content;
+            } else {
+                // Formatted JSON content with syntax highlighting
+                const formattedJson = JSON.stringify(rawData, null, 2);
+                jsonPre.innerHTML = this.syntaxHighlightJson(formattedJson);
+            }
+            
             logsContent.appendChild(jsonPre);
             
-            // Setup copy button
+            // Setup copy button (store rawData in closure)
+            const originalData = rawData;
             document.getElementById('copy-logs-btn').onclick = () => {
-                navigator.clipboard.writeText(logsContent.textContent)
+                // Get the JSON content from the pre element
+                const jsonElement = logsContent.querySelector('.json-content');
+                let textToCopy;
+                
+                if (jsonElement) {
+                    // For syntax highlighted JSON, we need to get the original text
+                    if (originalData.raw_content) {
+                        textToCopy = originalData.raw_content;
+                    } else {
+                        textToCopy = JSON.stringify(originalData, null, 2);
+                    }
+                } else {
+                    textToCopy = logsContent.textContent;
+                }
+                
+                navigator.clipboard.writeText(textToCopy)
                     .then(() => this.showTooltip('copy-logs-btn', 'Copied!'))
                     .catch(err => this.showAlert('Failed to copy logs: ' + err, 'danger'));
             };
@@ -3422,6 +3497,38 @@ class TrainingInterface {
             console.error('Error checking model type:', error);
             return false; // Default to false on error
         }
+    }
+
+    syntaxHighlightJson(json) {
+        // Simple JSON syntax highlighting
+        json = json.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        return json.replace(
+            /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g,
+            function (match) {
+                let cls = 'number';
+                if (/^"/.test(match)) {
+                    if (/:$/.test(match)) {
+                        cls = 'key';
+                    } else {
+                        cls = 'string';
+                    }
+                } else if (/true|false/.test(match)) {
+                    cls = 'boolean';
+                } else if (/null/.test(match)) {
+                    cls = 'null';
+                }
+                
+                const colors = {
+                    'key': '#9CDCFE',      // Light blue for keys
+                    'string': '#CE9178',   // Light orange for strings
+                    'number': '#B5CEA8',   // Light green for numbers
+                    'boolean': '#569CD6',  // Blue for booleans
+                    'null': '#569CD6'      // Blue for null
+                };
+                
+                return `<span style="color: ${colors[cls] || '#FFFFFF'}">${match}</span>`;
+            }
+        );
     }
 
     /**

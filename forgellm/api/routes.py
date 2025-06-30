@@ -1077,7 +1077,8 @@ def setup_api(app: Flask) -> Blueprint:
                                 "log_file": str(log_path),
                                 "start_time": data.get('start_time'),
                                 "status": data.get('status', 'unknown'),
-                                "model_name": data.get('config', {}).get('model_name', 'Unknown'),
+                                "model_name": data.get('model_name') or data.get('base_model') or data.get('config', {}).get('model_name', 'Unknown'),
+                                "base_model": data.get('base_model'),
                                 "metrics_count": len(data.get('metrics', [])),
                                 "modified": datetime.fromtimestamp(log_path.stat().st_mtime).isoformat()
                             }
