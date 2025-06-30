@@ -2111,11 +2111,18 @@ ${content.trim()}
                                     this.promptTokens = data.prompt_tokens;
                                     this.completionTokens = data.completion_tokens;
                                     this.currentTokenCount = data.total_tokens;
+                                    this.lastTokensPerSec = data.tokens_per_sec || null;
                                     
                                     // Add to conversation total
                                     this.conversationTokens += this.currentTokenCount;
                                     
                                     console.log(`📊 Tokens: ${this.promptTokens} prompt + ${this.completionTokens} completion = ${this.currentTokenCount} total (conversation: ${this.conversationTokens})`);
+                                    if (this.lastTokensPerSec) {
+                                        console.log(`⚡ Generation speed: ${this.lastTokensPerSec} tokens/sec`);
+                                    }
+                                    
+                                    // Update stats display now that we have all the data
+                                    this.updateChatStats();
                                 }
                                 break;
                             }
@@ -2135,9 +2142,6 @@ ${content.trim()}
             
             // Enable save button
             document.getElementById('save-chat-btn').disabled = false;
-            
-            // Update stats display
-            this.updateChatStats();
             
         } catch (error) {
             console.error('Streaming error:', error);

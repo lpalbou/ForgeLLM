@@ -350,12 +350,18 @@ class ModelHandler(BaseHTTPRequestHandler):
                 
                 # Send completion signal with token counts
                 end_time = time.time()
+                generation_time = end_time - start_time
+                
+                # Calculate tokens per second
+                tokens_per_sec = completion_tokens / generation_time if generation_time > 0 else 0
+                
                 completion_data = json.dumps({
                     'type': 'complete',
-                    'generation_time': end_time - start_time,
+                    'generation_time': generation_time,
                     'prompt_tokens': prompt_tokens,
                     'completion_tokens': completion_tokens,
-                    'total_tokens': prompt_tokens + completion_tokens
+                    'total_tokens': prompt_tokens + completion_tokens,
+                    'tokens_per_sec': round(tokens_per_sec, 1)
                 }) + '\n'
                 self.wfile.write(completion_data.encode())
                 self.wfile.flush()
@@ -381,15 +387,20 @@ class ModelHandler(BaseHTTPRequestHandler):
                 # Count tokens
                 prompt_tokens = len(TOKENIZER.encode(final_prompt))
                 completion_tokens = len(TOKENIZER.encode(response_text))
+                generation_time = end_time - start_time
+                
+                # Calculate tokens per second
+                tokens_per_sec = completion_tokens / generation_time if generation_time > 0 else 0
                 
                 self._set_headers()
                 response = {
                     'success': True,
                     'text': response_text,
-                    'generation_time': end_time - start_time,
+                    'generation_time': generation_time,
                     'prompt_tokens': prompt_tokens,
                     'completion_tokens': completion_tokens,
-                    'total_tokens': prompt_tokens + completion_tokens
+                    'total_tokens': prompt_tokens + completion_tokens,
+                    'tokens_per_sec': round(tokens_per_sec, 1)
                 }
                 self.wfile.write(json.dumps(response).encode())
         except Exception as e:
@@ -407,37 +418,10 @@ def load_model(model_name, adapter_path=None):
     try:
         logger.info(f"Loading model {model_name} with adapter {adapter_path}")
         
-        # Convert published model names to actual local paths
-        actual_model_path = model_name
-        if model_name.startswith('published/'):
-            # Convert published/model_name to actual cache path
-            from pathlib import Path
-            cache_path = Path.home() / '.cache' / 'huggingface' / 'hub'
-            
-            # Remove the "published/" prefix
-            published_model_name = model_name.replace('published/', '')
-            
-            # Handle different published model name formats
-            published_parts = published_model_name.split('/')
-            if len(published_parts) >= 2:
-                # Format: published/model_part/timestamp_part
-                model_part = published_parts[0]
-                timestamp_part = published_parts[1]
-                expected_dir = f"models--published--{model_part}--{timestamp_part}"
-            else:
-                # Format: published/full_model_name (single part)
-                expected_dir = f"models--published--{published_model_name}"
-            
-            actual_path = cache_path / expected_dir
-            
-            if actual_path.exists():
-                actual_model_path = str(actual_path)
-                logger.info(f"Converted published model path: {model_name} -> {actual_model_path}")
-            else:
-                # For published models, if not found in cache, it's an error - never try to download from HF
-                error_msg = f"Published model directory not found: {actual_path}. Published models must be local only."
-                logger.error(error_msg)
-                raise FileNotFoundError(error_msg)
+        # Use ModelManager to resolve the model path - this ensures we only use local models
+        from forgellm.models.model_manager import ModelManager
+        model_manager = ModelManager()
+        actual_model_path = model_manager._resolve_model_path(model_name)
         
         # Unload previous model first to free memory
         if MODEL is not None:

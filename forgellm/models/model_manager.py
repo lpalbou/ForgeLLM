@@ -479,8 +479,16 @@ class ModelManager:
             cache_root = Path.home() / '.cache' / 'huggingface' / 'hub'
             candidate = cache_root / ('models--published--' + actual_model_name.replace('/', '--'))
             if candidate.exists():
-                logger.info(f"Found published model in HF cache: {candidate}")
-                return str(candidate)
+                # Published models store files directly in the main directory (no snapshots)
+                # Check if config.json exists to confirm it's a valid model directory
+                config_file = candidate / 'config.json'
+                if config_file.exists():
+                    logger.info(f"Found published model in HF cache: {candidate}")
+                    return str(candidate)
+                else:
+                    error_msg = f"Published model directory exists but no config.json found: {candidate}"
+                    logger.error(error_msg)
+                    raise FileNotFoundError(error_msg)
             else:
                 # For published models, if not found in cache, it's an error - never try to download from HF
                 error_msg = f"Published model not found in local cache: {candidate}. Published models must be local only."
@@ -498,16 +506,29 @@ class ModelManager:
             cache_root = Path.home() / '.cache' / 'huggingface' / 'hub'
             candidate = cache_root / ('models--' + model_name.replace('/', '--'))
             if candidate.exists():
-                logger.info(f"Found model in HF cache: {candidate}")
-                return str(candidate)
+                # Find the snapshots directory and get the latest snapshot
+                snapshots_dir = candidate / 'snapshots'
+                if snapshots_dir.exists():
+                    # Get all snapshot directories (usually just one)
+                    snapshot_dirs = [d for d in snapshots_dir.iterdir() if d.is_dir()]
+                    if snapshot_dirs:
+                        # Use the first (and usually only) snapshot
+                        actual_model_path = str(snapshot_dirs[0])
+                        logger.info(f"Found model in HF cache: {actual_model_path}")
+                        return actual_model_path
+                    else:
+                        logger.error(f"No snapshots found in HF cache: {snapshots_dir}")
+                else:
+                    logger.error(f"No snapshots directory in HF cache: {candidate}")
             else:
-                logger.info(f"Model not found in HF cache, will download from HF Hub: {model_name}")
+                logger.error(f"Model not found in HF cache: {candidate}")
         except Exception as e:
             logger.warning(f"Error checking HF cache: {e}")
             
-        # Return original name (might be a HF model ID)
-        logger.info(f"Using original model name: {model_name}")
-        return model_name
+        # NEVER download from HuggingFace - only use local models
+        error_msg = f"Model '{model_name}' not found in any local cache. Only local models are supported. Available locations checked: local path, published directory, HuggingFace cache."
+        logger.error(error_msg)
+        raise FileNotFoundError(error_msg)
 
     def _is_base_model(self, model_name: str) -> bool:
         """Detect if a model is a base model (not instruction-tuned) using SOTA practices.

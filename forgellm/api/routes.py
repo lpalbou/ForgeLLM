@@ -1242,13 +1242,39 @@ def setup_api(app: Flask) -> Blueprint:
                 model_dirs = list(cache_path.glob('models--*'))
                 for model_dir in model_dirs:
                     try:
-                            
                         model_name = model_dir.name.replace('models--', '').replace('--', '/')
+                        
+                        # Determine the correct model path
+                        actual_model_path = str(model_dir)
+                        
+                        # Check if this is a published model (files directly in main directory)
+                        if model_name.startswith('published'):
+                            config_file = model_dir / 'config.json'
+                            if config_file.exists():
+                                actual_model_path = str(model_dir)
+                            else:
+                                # Skip if no config.json found
+                                continue
+                        else:
+                            # Regular model - check for snapshots directory
+                            snapshots_dir = model_dir / 'snapshots'
+                            if snapshots_dir.exists():
+                                # Get all snapshot directories (usually just one)
+                                snapshot_dirs = [d for d in snapshots_dir.iterdir() if d.is_dir()]
+                                if snapshot_dirs:
+                                    # Use the first (and usually only) snapshot
+                                    actual_model_path = str(snapshot_dirs[0])
+                                else:
+                                    # Skip if no snapshots found
+                                    continue
+                            else:
+                                # Skip if no snapshots directory
+                                continue
                         
                         # Calculate model size
                         try:
                             result = subprocess.run(
-                                ['du', '-sh', str(model_dir)],
+                                ['du', '-sh', actual_model_path],
                                 capture_output=True, 
                                 text=True, 
                                 check=False
@@ -1275,14 +1301,14 @@ def setup_api(app: Flask) -> Blueprint:
                                 else:
                                     size_gb = 0
                             else:
-                                size_gb = sum(f.stat().st_size for f in model_dir.glob('**/*') if f.is_file()) / (1024**3)
+                                size_gb = sum(f.stat().st_size for f in Path(actual_model_path).glob('**/*') if f.is_file()) / (1024**3)
                         except Exception as e:
                             logger.warning(f"Error calculating size for {model_name}: {e}")
                             size_gb = 0
                         
                         base_models.append({
                             "name": model_name,
-                            "path": str(model_dir),
+                            "path": actual_model_path,
                             "size": round(size_gb, 2)
                         })
                     except Exception as e:
@@ -1301,7 +1327,7 @@ def setup_api(app: Flask) -> Blueprint:
                 all_models.append({
                     "id": model.get("name", ""),
                     "name": model.get("name", ""),
-                    "path": model.get("path", model.get("name", "")),  # Include actual path for folder opening
+                    "path": model.get("path", ""),
                     "type": "base",
                     "size": model.get("size", 0)
                 })
