@@ -5,6 +5,90 @@ All notable changes to ForgetLLM will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2025-01-03
+
+### 🎨 Complete Dark Theme Implementation
+- **Professional Dark Theme Toggle**: Beautiful moon/sun icon button in navigation bar
+  - Persistent theme selection using localStorage
+  - Smooth 0.3s transitions for all color changes
+  - Comprehensive CSS variable system for theming
+  - WCAG-compliant contrast ratios for accessibility
+
+- **Comprehensive UI Theming**: Every interface element properly themed
+  - Navigation bar with gradient backgrounds adapted for both themes
+  - Card components with proper surface colors and shadows
+  - Form controls (inputs, selects, textareas) with themed backgrounds
+  - Chat interface with distinct user/assistant message styling
+  - Code blocks and markdown content with syntax highlighting
+  - Progress bars, badges, and status indicators
+
+### ⚡ Enhanced User Experience
+- **Quantization Functionality Fixes**: Complete overhaul of model quantization
+  - Fixed page refresh issues caused by form submission
+  - Harmonized model selection dropdown with emoji icons (⚡ base, 🤖 instruct)
+  - Proper event handling with Bootstrap tab integration
+  - Fixed API parameter format issues
+  - Enhanced local model path detection and HuggingFace cache handling
+  - Graceful error handling for model card creation failures
+
+- **Generation Interface Improvements**: 
+  - **Tokens per second display**: Real-time performance metrics
+  - **Prompt/completion breakdown**: Token usage statistics for all modes
+  - **Fullscreen mode**: Dedicated fullscreen view for Generation Output panel
+  - **Context window stats**: Immediate updates when changing context size
+  - **Improved chat scrolling**: Fixed fullscreen scrolling functionality
+
+### 🛠️ Technical Improvements
+- **Model Path Generation**: Robust handling of HuggingFace cache models
+  - Fixed double "models--" prefix issues in quantized model paths
+  - Proper namespace separation for published models
+  - Enhanced folder opening API integration
+  - Improved model detection for Gemma models
+
+- **API Response Format**: Enhanced model manager to return full response objects
+  - Token calculation and speed metrics
+  - Consistent response format across streaming and non-streaming modes
+  - Better error handling and status reporting
+
+- **UI Layout Enhancements**:
+  - Card-based design for quantized models with proper text wrapping
+  - Responsive Bootstrap grid layouts
+  - Badge system for metadata display
+  - Visual hierarchy improvements with icons and spacing
+
+### 🎯 Model Management
+- **Quantization Workflow**: End-to-end quantization process improvements
+  - Model filtering to exclude already-quantized models
+  - Consistent emoji icons across all model dropdowns
+  - Real-time progress tracking and status updates
+  - Custom metadata file generation for quantized models
+
+- **Model Detection**: Enhanced model type detection
+  - Proper Gemma model identification for system prompts
+  - Improved base vs instruct model categorization
+  - Better handling of published model variants
+
+### 🐛 Critical Bug Fixes
+- **Import Error Resolution**: Fixed startup-breaking import issues
+  - Removed non-existent function imports
+  - Proper logging configuration
+- **Event Handler Conflicts**: Resolved duplicate event listeners
+- **API Parameter Mismatches**: Fixed quantization API call format
+- **Fullscreen Target Issues**: Corrected fullscreen panel targeting
+- **Sorting Errors**: Fixed NoneType comparison in model sorting
+- **Theme Text Visibility**: Comprehensive text color fixes for dark mode
+
+### 🎨 Visual Polish
+- **Form Element Consistency**: All input elements properly themed
+  - Training tab: Fixed "Layers to Fine-tune" input styling
+  - Testing tab: Fixed white rectangle issues in parameter controls
+  - Quantization tab: Proper background and text colors
+- **Training Estimates**: Maintained readability with theme-appropriate colors
+- **Chat Input**: Lighter placeholder text for better UX in dark mode
+- **Fullscreen Adjustments**: Improved spacing and layout in fullscreen mode
+
+---
+
 ## [0.2.0] - 2025-06-30
 
 ### 🎨 Enhanced User Interface

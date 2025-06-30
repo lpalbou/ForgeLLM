@@ -20,7 +20,7 @@ ForgeLLM is a comprehensive platform for continued pre-training and instruction 
 pip install forgellm
 
 # Install specific version
-pip install forgellm==0.2.0
+pip install forgellm==0.3.0
 
 # Upgrade existing installation
 pip install --upgrade forgellm

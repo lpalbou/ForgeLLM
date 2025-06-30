@@ -740,9 +740,9 @@ No checkpoint analysis available - this may indicate insufficient validation dat
         """Get ForgeLLM version"""
         try:
             import forgellm
-            return getattr(forgellm, '__version__', '0.2.0')
+            return getattr(forgellm, '__version__', '0.3.0')
         except:
-            return '0.2.0'
+            return '0.3.0'
     
     def _extract_model_architecture(self, base_model: str) -> str:
         """Extract model architecture from model name"""
