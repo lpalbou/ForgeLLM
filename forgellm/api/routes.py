@@ -13,7 +13,7 @@ import tempfile
 import shutil
 import subprocess
 from datetime import datetime
-from flask import Flask, Blueprint, request, jsonify, current_app, send_file
+from flask import Flask, Blueprint, request, jsonify, current_app, send_file, Response
 import time
 
 from ..models import ModelManager, ModelPublisher, ModelQuantizer
@@ -355,20 +355,60 @@ def setup_api(app: Flask) -> Blueprint:
             model_name = data.get('model_name') or data.get('model')
             adapter_path = data.get('adapter_path') or data.get('adapter')
             
+            # If adapter_path is provided but no model_name, try to auto-detect base model
+            if not model_name and adapter_path:
+                logger.info(f"🔍 No model_name provided, attempting auto-detection from adapter: {adapter_path}")
+                try:
+                    # Extract directory from adapter path if it's a .safetensors file
+                    adapter_dir = adapter_path
+                    if adapter_path.endswith('.safetensors'):
+                        adapter_dir = adapter_path.rsplit('/', 1)[0]
+                        logger.info(f"📁 Extracted adapter directory: {adapter_dir}")
+                    
+                    # Look for training config file
+                    import glob
+                    config_files = glob.glob(os.path.join(adapter_dir, 'CPT_*.json'))
+                    if config_files:
+                        config_file = config_files[0]
+                        logger.info(f"📋 Found training config: {config_file}")
+                        
+                        with open(config_file, 'r') as f:
+                            import json
+                            config = json.load(f)
+                        
+                        base_model = config.get('base_model') or config.get('model')
+                        if base_model:
+                            model_name = base_model
+                            logger.info(f"✅ Auto-detected base model: {model_name}")
+                        else:
+                            logger.warning(f"❌ No base_model found in config file")
+                    else:
+                        logger.warning(f"❌ No CPT_*.json config file found in {adapter_dir}")
+                        
+                except Exception as e:
+                    logger.warning(f"❌ Auto-detection failed: {e}")
+            
             if not model_name:
                 return jsonify({
                     'success': False,
-                    'error': 'Missing model_name'
+                    'error': 'Missing model_name (could not auto-detect from adapter)'
                 }), 400
             
-            success = model_manager.load(model_name, adapter_path)
+            # If adapter_path is a .safetensors file, pass the directory to MLX-LM
+            final_adapter_path = adapter_path
+            if adapter_path and adapter_path.endswith('.safetensors'):
+                final_adapter_path = adapter_path.rsplit('/', 1)[0]
+                logger.info(f"📂 Using adapter directory for MLX-LM: {final_adapter_path}")
+            
+            success = model_manager.load(model_name, final_adapter_path)
             
             if success:
                 return jsonify({
                     'success': True,
                     'message': f'Model {model_name} loading started',
                     'model_name': model_name,
-                    'adapter_path': adapter_path
+                    'adapter_path': final_adapter_path,
+                    'original_adapter_selection': adapter_path  # For debugging
                 })
             else:
                 return jsonify({
@@ -438,13 +478,40 @@ def setup_api(app: Flask) -> Blueprint:
                 }), 400
             
             if streaming:
-                # For streaming, we need to handle it differently
-                # This would require implementing Server-Sent Events (SSE) or WebSocket
-                # For now, let's return an error for streaming requests to the web API
-                return jsonify({
-                    'success': False,
-                    'error': 'Streaming not supported via web API. Use model server directly.'
-                }), 400
+                # Handle streaming by forwarding to model manager's streaming endpoint
+                try:
+                    # Forward the streaming request to the model manager
+                    import requests
+                    response = requests.post(
+                        f"http://{model_manager.server_host}:{model_manager.server_port}/api/model/generate",
+                        json={
+                            'prompt': prompt,
+                            'max_tokens': max_tokens,
+                            'temperature': temperature,
+                            'history': history,
+                            'top_p': top_p,
+                            'repetition_penalty': repetition_penalty,
+                            'max_kv_size': max_kv_size,
+                            'system_prompt': system_prompt,
+                            'streaming': True,
+                            'is_base_model': is_base_model
+                        },
+                        stream=True
+                    )
+                    
+                    # Forward the streaming response
+                    def generate():
+                        for chunk in response.iter_content(chunk_size=1024):
+                            if chunk:
+                                yield chunk
+                    
+                    return Response(generate(), mimetype='text/plain')
+                except Exception as e:
+                    logger.error(f"Error forwarding streaming request: {e}")
+                    return jsonify({
+                        'success': False,
+                        'error': f'Streaming error: {str(e)}'
+                    }), 500
             else:
                 # Generate text (non-streaming)
                 start_time = time.time()
@@ -1441,6 +1508,73 @@ def setup_api(app: Flask) -> Blueprint:
                 'error': str(e)
             }), 500
     
+    @bp.route('/directories/contents', methods=['POST'])
+    def get_directory_contents():
+        """Get contents of a directory."""
+        try:
+            data = request.get_json()
+            path = data.get('path')
+            
+            if not path:
+                return jsonify({'success': False, 'error': 'Path is required'}), 400
+            
+            # Security check
+            abs_path = os.path.abspath(path)
+            project_root = os.path.abspath(os.getcwd())
+            
+            # Allow access within project directory
+            if not abs_path.startswith(project_root):
+                return jsonify({'success': False, 'error': 'Access denied'}), 403
+            
+            if not os.path.exists(abs_path) or not os.path.isdir(abs_path):
+                return jsonify({'success': False, 'error': 'Directory does not exist'}), 404
+            
+            contents = []
+            for item_name in os.listdir(abs_path):
+                item_path = os.path.join(abs_path, item_name)
+                contents.append({
+                    'name': item_name,
+                    'path': item_path,
+                    'is_directory': os.path.isdir(item_path)
+                })
+            
+            return jsonify({'success': True, 'contents': contents})
+            
+        except Exception as e:
+            logger.error(f"Error getting directory contents: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @bp.route('/directories/read-file', methods=['POST'])
+    def read_file():
+        """Read contents of a file."""
+        try:
+            data = request.get_json()
+            path = data.get('path')
+            
+            if not path:
+                return jsonify({'success': False, 'error': 'Path is required'}), 400
+            
+            # Security check
+            abs_path = os.path.abspath(path)
+            project_root = os.path.abspath(os.getcwd())
+            
+            # Allow access within project directory
+            if not abs_path.startswith(project_root):
+                return jsonify({'success': False, 'error': 'Access denied'}), 403
+            
+            if not os.path.exists(abs_path) or not os.path.isfile(abs_path):
+                return jsonify({'success': False, 'error': 'File does not exist'}), 404
+            
+            # Read file content
+            with open(abs_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            
+            return jsonify({'success': True, 'content': content})
+            
+        except Exception as e:
+            logger.error(f"Error reading file: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+
     @bp.route('/filesystem/browse', methods=['GET'])
     def browse_filesystem():
         """Browse filesystem directories for file selection."""

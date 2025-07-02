@@ -416,12 +416,13 @@ def load_model(model_name, adapter_path=None):
     global MODEL, TOKENIZER, IS_LOADING, LOADING_ERROR
     
     try:
-        logger.info(f"Loading model {model_name} with adapter {adapter_path}")
+        logger.info(f"🚀 Loading model {model_name} with adapter {adapter_path}")
         
         # Use ModelManager to resolve the model path - this ensures we only use local models
         from forgellm.models.model_manager import ModelManager
         model_manager = ModelManager()
         actual_model_path = model_manager._resolve_model_path(model_name)
+        logger.info(f"📁 Resolved model path: {actual_model_path}")
         
         # Unload previous model first to free memory
         if MODEL is not None:
@@ -444,12 +445,31 @@ def load_model(model_name, adapter_path=None):
         start_time = time.time()
         
         try:
-            # Try to load with adapter first
-            model, tokenizer = load(actual_model_path, adapter_path=adapter_path)
+            if adapter_path:
+                logger.info(f"📂 Attempting to load with adapter: {adapter_path}")
+                # Check if adapter_config.json exists before trying to load
+                adapter_config_path = os.path.join(adapter_path, 'adapter_config.json')
+                if os.path.exists(adapter_config_path):
+                    logger.info(f"✅ Found adapter_config.json at: {adapter_config_path}")
+                    model, tokenizer = load(actual_model_path, adapter_path=adapter_path)
+                    logger.info(f"✅ Successfully loaded model with adapter!")
+                else:
+                    logger.warning(f"❌ adapter_config.json not found at: {adapter_config_path}")
+                    logger.warning(f"Directory contents:")
+                    try:
+                        for item in os.listdir(adapter_path):
+                            logger.warning(f"  - {item}")
+                    except Exception as e:
+                        logger.warning(f"  Could not list directory: {e}")
+                    logger.warning(f"Loading model without adapter")
+                    model, tokenizer = load(actual_model_path, adapter_path=None)
+            else:
+                logger.info(f"📂 Loading model without adapter")
+                model, tokenizer = load(actual_model_path, adapter_path=None)
         except FileNotFoundError as e:
             if "adapter_config.json" in str(e):
                 # Handle missing adapter_config.json by loading without adapter
-                logger.warning(f"adapter_config.json not found, loading model without adapter: {e}")
+                logger.warning(f"❌ adapter_config.json not found, loading model without adapter: {e}")
                 model, tokenizer = load(actual_model_path, adapter_path=None)
             else:
                 # Re-raise if it's a different file not found error

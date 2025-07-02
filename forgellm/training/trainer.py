@@ -234,6 +234,27 @@ class ContinuedPretrainer:
             "dataset_total_tokens": dataset_tokens,
         }
         
+        # Add LoRA/DoRA specific parameters if needed
+        if self.config.fine_tune_type in ["lora", "dora"]:
+            lora_params = {
+                "lora_parameters": {
+                    "rank": self.config.lora_rank,
+                    "dropout": self.config.lora_dropout,
+                    "scale": self.config.lora_scale
+                }
+            }
+            
+            # Add target modules configuration
+            if self.config.lora_modules == "all_linear":
+                lora_params["lora_parameters"]["keys"] = ["self_attn.q_proj", "self_attn.k_proj", "self_attn.v_proj", "self_attn.o_proj", "mlp.gate_proj", "mlp.up_proj", "mlp.down_proj"]
+            elif self.config.lora_modules == "attention_only":
+                lora_params["lora_parameters"]["keys"] = ["self_attn.q_proj", "self_attn.k_proj", "self_attn.v_proj", "self_attn.o_proj"]
+            elif self.config.lora_modules == "default":
+                lora_params["lora_parameters"]["keys"] = ["self_attn.q_proj", "self_attn.v_proj"]
+            # For custom, let MLX-LM use its defaults
+            
+            mlx_config.update(lora_params)
+        
         # Create MLX-LM YAML configuration file in output directory
         config_filename = f"mlx_config_{int(time.time())}.yaml"
         config_file = Path(self.config.output_dir) / config_filename
@@ -287,6 +308,11 @@ class ContinuedPretrainer:
                 "grad_checkpoint": True,
                 "mask_prompt": False,
                 "dataset_total_tokens": dataset_tokens,
+                # LoRA parameters
+                "lora_rank": self.config.lora_rank,
+                "lora_scale": self.config.lora_scale,
+                "lora_dropout": self.config.lora_dropout,
+                "lora_modules": self.config.lora_modules,
             }
             
             # Build command string for logging

@@ -98,25 +98,32 @@ class TrainingInterface {
             const fineTuneType = e.target.value;
             const numLayersInput = document.getElementById('num-layers');
             const numLayersContainer = numLayersInput.closest('.col-md-4');
+            const loraParamsSection = document.getElementById('lora-params-section');
             
             // For full fine-tuning, set to -1 and disable
             if (fineTuneType === 'full') {
                 numLayersInput.value = '-1';
                 numLayersInput.disabled = true;
+                loraParamsSection.style.display = 'none';
             } else {
                 // For LoRA/DoRA, enable and set to 16 if currently -1
                 numLayersInput.disabled = false;
                 if (numLayersInput.value === '-1') {
                     numLayersInput.value = '16';
                 }
+                loraParamsSection.style.display = 'flex';
             }
         });
         
         // Initialize the num-layers state based on current fine-tune-type
         const initFineTuneType = document.getElementById('fine-tune-type').value;
+        const loraParamsSection = document.getElementById('lora-params-section');
         if (initFineTuneType === 'full') {
             document.getElementById('num-layers').value = '-1';
             document.getElementById('num-layers').disabled = true;
+            loraParamsSection.style.display = 'none';
+        } else {
+            loraParamsSection.style.display = 'flex';
         }
         
         // Model loading form
@@ -319,18 +326,41 @@ class TrainingInterface {
             }
         });
         
-        // When adapter is selected, check for dashboard
+        // When adapter is selected, check for dashboard and optionally clear base model
         document.getElementById('adapter-path').addEventListener('change', (e) => {
-            const modelPath = document.getElementById('test-model-select').value;
+            const modelSelect = document.getElementById('test-model-select');
+            const modelPath = modelSelect.value;
             const adapterPath = e.target.value;
+            
+            console.log(`🔄 Adapter selection changed:`);
+            console.log(`   📂 Selected adapter: ${adapterPath}`);
+            console.log(`   🤖 Current base model: ${modelPath}`);
             
             // If an adapter is selected, check its path for a dashboard
             if (adapterPath) {
                 this.checkForTrainingDashboard(adapterPath);
+                
+                // Optionally clear base model selection to indicate adapter-only loading
+                // (User can still select both if they want to override)
+                // modelSelect.value = '';  // Uncomment to auto-clear base model
             } else if (modelPath) {
                 // If no adapter but model is selected, check model path
                 this.checkForTrainingDashboard(modelPath);
             }
+        });
+        
+        // Handle form submission to prevent default behavior and preserve selections
+        document.getElementById('model-load-form').addEventListener('submit', (e) => {
+            e.preventDefault();
+            console.log('🚫 Form submission prevented - using button click handler instead');
+            return false;
+        });
+        
+        // Handle load model button click
+        document.getElementById('load-model-btn').addEventListener('click', (e) => {
+            e.preventDefault();
+            console.log('🔘 Load model button clicked');
+            this.loadModel();
         });
     }
     
@@ -765,12 +795,31 @@ class TrainingInterface {
                     const option = document.createElement('option');
                     option.value = checkpoint.path;
                     
-                    // Format the display name
+                    // Format the display name with adapter type info
                     const modelName = checkpoint.model || 'Unknown';
                     const iteration = checkpoint.iteration || 0;
                     const size = checkpoint.size ? `${checkpoint.size.toFixed(1)}MB` : '';
                     
-                    option.textContent = `${modelName} - iter ${iteration} ${size}`;
+                    // Extract training type and fine-tune type if available
+                    let typeInfo = '';
+                    if (checkpoint.path) {
+                        const pathParts = checkpoint.path.split('/');
+                        // Look for CPT or IFT in path
+                        if (pathParts.some(part => part.includes('cpt'))) {
+                            typeInfo = ' [CPT]';
+                        } else if (pathParts.some(part => part.includes('ift'))) {
+                            typeInfo = ' [IFT]';
+                        }
+                        
+                        // Look for fine-tune type hints in path
+                        if (pathParts.some(part => part.includes('lora'))) {
+                            typeInfo += ' LoRA';
+                        } else if (pathParts.some(part => part.includes('dora'))) {
+                            typeInfo += ' DoRA';
+                        }
+                    }
+                    
+                    option.textContent = `${modelName}${typeInfo} - iter ${iteration} ${size}`;
                     select.appendChild(option);
                 });
             }
@@ -810,6 +859,12 @@ class TrainingInterface {
             validation_fast_pct: parseFloat(document.getElementById('val-fast-pct').value),
             validation_split: parseFloat(document.getElementById('validation-split').value),
             enable_early_stopping: document.getElementById('enable-early-stopping').checked,
+            
+            // Add LoRA parameters (only used if fine_tune_type is 'lora' or 'dora')
+            lora_rank: parseInt(document.getElementById('lora-rank').value),
+            lora_scale: parseFloat(document.getElementById('lora-scale').value),
+            lora_dropout: parseFloat(document.getElementById('lora-dropout').value),
+            lora_modules: document.getElementById('lora-modules').value,
             
             // Add missing required parameters with default values
             data_dir: 'data/pretraining',
@@ -1226,14 +1281,42 @@ class TrainingInterface {
         const adapter = adapterSelect.value;
         const prompt = systemPrompt.value;
         
-        if (!model) {
-            this.showAlert('Please select a model', 'warning');
+        console.log(`🚀 loadModel() called with:`);
+        console.log(`   🤖 Base model: "${model}"`);
+        console.log(`   📂 Adapter: "${adapter}"`);
+        console.log(`   💬 System prompt: "${prompt}"`);
+        console.log(`   📊 Form element states:`);
+        console.log(`      - Model select has ${modelSelect.options.length} options`);
+        console.log(`      - Adapter select has ${adapterSelect.options.length} options`);
+        console.log(`      - Model select index: ${modelSelect.selectedIndex}`);
+        console.log(`      - Adapter select index: ${adapterSelect.selectedIndex}`);
+        
+        // If adapter is selected but no base model, let the server handle auto-detection
+        if (adapter && !model) {
+            console.log('🔄 Adapter-only selection detected, sending to server for auto-detection');
+            // Continue with normal loading - server will auto-detect base model
+        }
+        
+        if (!model && !adapter) {
+            this.showAlert('Please select a base model or adapter', 'warning');
             return;
         }
         
         this.showLoading('Loading model...');
         
         try {
+            // If adapter is a .safetensors file, use its directory for MLX-LM
+            const actualAdapterPath = adapter && adapter.endsWith('.safetensors') 
+                ? adapter.substring(0, adapter.lastIndexOf('/'))
+                : adapter;
+            
+            console.log(`🚀 Loading model: ${model}`);
+            if (adapter) {
+                console.log(`📂 Original adapter selection: ${adapter}`);
+                console.log(`📂 Using adapter directory for MLX-LM: ${actualAdapterPath}`);
+                console.log(`📂 Is .safetensors file: ${adapter.endsWith('.safetensors')}`);
+            }
+            
             const response = await fetch('/api/model/load', {
                 method: 'POST',
                 headers: {
@@ -1241,7 +1324,7 @@ class TrainingInterface {
                 },
                 body: JSON.stringify({
                     model_name: model,
-                    adapter_path: adapter,
+                    adapter_path: actualAdapterPath,
                     system_prompt: prompt
                 })
             });
@@ -1251,8 +1334,24 @@ class TrainingInterface {
             if (data.success) {
                 this.modelLoaded = true;
                 this.updateModelButtons(true);
-                this.updateModelStatus(model, adapter);
-                this.showAlert('Model loaded successfully', 'success');
+                
+                // Use the actual model name and adapter path from the server response
+                const actualModel = data.model_name || model;
+                const actualAdapter = data.adapter_path || adapter;
+                
+                this.updateModelStatus(actualModel, actualAdapter);
+                
+                // Show appropriate success message
+                if (!model && adapter && data.model_name) {
+                    this.showAlert(
+                        `✅ Adapter loaded successfully!\n` +
+                        `Auto-detected base model: ${data.model_name}\n` +
+                        `Adapter: ${adapter.split('/').pop()}`, 
+                        'success'
+                    );
+                } else {
+                    this.showAlert('Model loaded successfully', 'success');
+                }
                 
                 // Check for training dashboard
                 this.checkForTrainingDashboard(model);
@@ -1286,6 +1385,142 @@ class TrainingInterface {
         } catch (error) {
             console.error('Error loading model:', error);
             this.showAlert('Failed to load model', 'danger');
+        } finally {
+            this.hideLoading();
+        }
+    }
+
+    async loadAdapterWithAutoDetectedBase(adapterPath, systemPrompt) {
+        this.showLoading('Auto-detecting base model from adapter...');
+        
+        try {
+            // Extract the directory from adapter path to find training config
+            // If adapterPath is a .safetensors file, get its directory
+            let adapterDir = adapterPath;
+            if (adapterPath.endsWith('.safetensors')) {
+                adapterDir = adapterPath.substring(0, adapterPath.lastIndexOf('/'));
+            }
+            
+            console.log(`🔍 Original adapter file selection: ${adapterPath}`);
+            console.log(`📁 Extracting adapter directory: ${adapterDir}`);
+            console.log(`📁 Is .safetensors file: ${adapterPath.endsWith('.safetensors')}`);
+            
+            // Try to find the training config JSON file
+            const response = await fetch('/api/directories/contents', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ path: adapterDir })
+            });
+            
+            const data = await response.json();
+            
+            if (data.success && data.contents) {
+                // Look for CPT_*.json file
+                const configFile = data.contents.find(file => 
+                    file.name.startsWith('CPT_') && file.name.endsWith('.json')
+                );
+                
+                if (configFile) {
+                    // Read the config file to get base model
+                    const configResponse = await fetch('/api/directories/read-file', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ 
+                            path: `${adapterDir}/${configFile.name}` 
+                        })
+                    });
+                    
+                    const configData = await configResponse.json();
+                    
+                    if (configData.success) {
+                        const trainingConfig = JSON.parse(configData.content);
+                        const baseModel = trainingConfig.base_model;
+                        
+                        if (baseModel) {
+                            // Load the adapter with the detected base model
+                            // Use the directory path for MLX-LM (it expects the directory, not the .safetensors file)
+                            const actualAdapterPath = adapterPath.endsWith('.safetensors') ? adapterDir : adapterPath;
+                            
+                            console.log(`🚀 Auto-detected base model: ${baseModel}`);
+                            console.log(`📂 Original adapter selection: ${adapterPath}`);
+                            console.log(`📂 Using adapter directory for MLX-LM: ${actualAdapterPath}`);
+                            
+                            const loadPayload = {
+                                model_name: baseModel,
+                                adapter_path: actualAdapterPath,
+                                system_prompt: systemPrompt
+                            };
+                            console.log(`📡 Sending to server:`, loadPayload);
+                            
+                            const loadResponse = await fetch('/api/model/load', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify(loadPayload)
+                            });
+                            
+                            const loadData = await loadResponse.json();
+                            
+                            if (loadData.success) {
+                                this.modelLoaded = true;
+                                this.updateModelButtons(true);
+                                this.updateModelStatus(baseModel, adapterPath);
+                                
+                                // Show success message with base model info
+                                const adapterName = adapterPath.split('/').pop();
+                                this.showAlert(
+                                    `✅ Adapter loaded successfully!\n` +
+                                    `Base Model: ${baseModel}\n` +
+                                    `Adapter: ${adapterName}`, 
+                                    'success'
+                                );
+                                
+                                // Check for training dashboard
+                                this.checkForTrainingDashboard(adapterPath);
+                                
+                                // Initialize chat if not already done
+                                if (!this.chatInitialized) {
+                                    this.initChatToolbar();
+                                    this.chatInitialized = true;
+                                }
+                                
+                                // Clear any existing chat history and show ready message
+                                document.getElementById('chat-history').innerHTML = `
+                                    <div class="text-center text-muted mt-3 mb-3">
+                                        <i class="fas fa-robot fa-2x mb-3"></i>
+                                        <p>Model ready! Type a message below to start the conversation.</p>
+                                    </div>
+                                `;
+                                
+                                // Reset all token counters
+                                this.currentTokenCount = 0;
+                                this.promptTokens = 0;
+                                this.completionTokens = 0;
+                                this.conversationTokens = 0;
+                                this.updateChatStats();
+                                
+                                // Enable chat buttons
+                                document.getElementById('clear-chat-btn').disabled = false;
+                                
+                                return;
+                            } else {
+                                this.showAlert(`Error loading adapter: ${loadData.error}`, 'danger');
+                                return;
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Fallback: if auto-detection fails, show helpful error
+            this.showAlert(
+                'Could not auto-detect base model from adapter.<br>' +
+                'Please manually select both base model and adapter.', 
+                'warning'
+            );
+            
+        } catch (error) {
+            console.error('Error auto-detecting base model:', error);
+            this.showAlert('Failed to auto-detect base model from adapter', 'danger');
         } finally {
             this.hideLoading();
         }
@@ -2023,9 +2258,9 @@ ${content.trim()}
             if (streaming) {
                 // Handle streaming response
                 await this.handleStreamingGeneration(requestBody, botBubble);
-            } else {
-                // Handle non-streaming response (original behavior)
-                const response = await fetch('/api/model/generate', {
+                    } else {
+            // Handle non-streaming response (use model server directly)
+            const response = await fetch('http://localhost:5001/api/model/generate', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(requestBody)
@@ -2059,7 +2294,7 @@ ${content.trim()}
     
     async handleStreamingGeneration(requestBody, botBubble) {
         try {
-            // Connect directly to model server for streaming
+            // Connect directly to model server for streaming (temporary fix)
             const response = await fetch('http://localhost:5001/api/model/generate', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },

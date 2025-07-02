@@ -1038,6 +1038,49 @@
                                         </div>
                                     </div>
                                     
+                                    <!-- LoRA/DoRA Parameters (only shown when LoRA/DoRA is selected) -->
+                                    <div class="row" id="lora-params-section" style="display: none;">
+                                        <div class="col-12">
+                                            <div class="alert alert-info">
+                                                <i class="fas fa-info-circle me-2"></i>
+                                                <strong>LoRA/DoRA Parameters:</strong> These settings control the adapter training behavior
+                                            </div>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <div class="mb-3">
+                                                <label for="lora-rank" class="form-label">LoRA Rank</label>
+                                                <input type="number" class="form-control" id="lora-rank" value="8" min="1" max="512" step="1">
+                                                <small class="form-text text-muted">Higher rank = more parameters, better quality (8-64 typical)</small>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <div class="mb-3">
+                                                <label for="lora-scale" class="form-label">LoRA Scale</label>
+                                                <input type="number" class="form-control" id="lora-scale" value="20.0" min="0.1" max="100" step="0.1">
+                                                <small class="form-text text-muted">Scaling factor for adapter weights (10-30 typical)</small>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <div class="mb-3">
+                                                <label for="lora-dropout" class="form-label">LoRA Dropout</label>
+                                                <input type="number" class="form-control" id="lora-dropout" value="0.0" min="0.0" max="0.9" step="0.01">
+                                                <small class="form-text text-muted">Dropout rate for regularization (0.0-0.1 typical)</small>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <div class="mb-3">
+                                                <label for="lora-modules" class="form-label">Target Modules</label>
+                                                <select class="form-select" id="lora-modules">
+                                                    <option value="default" selected>Default (q_proj, v_proj)</option>
+                                                    <option value="all_linear">All Linear Layers</option>
+                                                    <option value="attention_only">Attention Only</option>
+                                                    <option value="custom">Custom</option>
+                                                </select>
+                                                <small class="form-text text-muted">Which layers to apply LoRA to</small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
                                     <div class="row">
                                         <div class="col-md-4">
                                             <div class="mb-3">
@@ -1565,11 +1608,11 @@
                                 <i class="fas fa-cogs me-2"></i>Model Configuration
                             </div>
                             <div class="card-body">
-                                <form id="model-load-form">
+                                <form id="model-load-form" onsubmit="return false;">
                                     <div class="mb-3">
                                         <label for="test-model-select" class="form-label">Base Model</label>
                                         <div class="input-group">
-                                            <select class="form-select" id="test-model-select" required>
+                                            <select class="form-select" id="test-model-select">
                                                 <option value="">Select model...</option>
                                             </select>
                                             <button class="btn btn-outline-secondary" type="button" id="copy-model-path-btn" title="Copy full model path">
@@ -1593,6 +1636,10 @@
                                                 <i class="fas fa-copy"></i>
                                             </button>
                                         </div>
+                                        <small class="form-text text-muted">
+                                            <i class="fas fa-lightbulb"></i> 
+                                            <strong>Tip:</strong> You can select just an adapter to automatically load it with its base model!
+                                        </small>
                                     </div>
                                     <div class="mb-3">
                                         <label for="system-prompt" class="form-label">System Prompt</label>
@@ -1663,7 +1710,7 @@
                                         <button type="button" class="btn btn-danger me-md-2" id="unload-model-btn" disabled>
                                             <i class="fas fa-times me-2"></i>Unload Model
                                         </button>
-                                        <button type="submit" class="btn btn-primary" id="load-model-btn">
+                                        <button type="button" class="btn btn-primary" id="load-model-btn">
                                             <i class="fas fa-download me-2"></i>Load Model
                                         </button>
                                     </div>

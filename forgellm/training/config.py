@@ -33,6 +33,12 @@ class TrainingConfig:
     fine_tune_type: str = "full"  # "full", "lora", or "dora"
     num_layers: int = -1  # -1 for all layers
     
+    # LoRA/DoRA parameters (only used when fine_tune_type is "lora" or "dora")
+    lora_rank: int = 16
+    lora_scale: float = 20.0
+    lora_dropout: float = 0.0
+    lora_modules: str = "default"  # "default", "all_linear", "attention_only", "custom"
+    
     # Data mixture strategy
     data_mixture_ratio: float = 0.95  # 95% domain data, 5% general data
     
