@@ -72,7 +72,13 @@ class TrainingInterface {
             this.startTraining();
         });
         
-        document.getElementById('stop-training-btn').addEventListener('click', () => {
+        // Stop training button in training form
+        document.getElementById('stop-training-form-btn').addEventListener('click', () => {
+            this.stopTraining();
+        });
+        
+        // Stop training button in monitoring section
+        document.getElementById('stop-training-monitor-btn').addEventListener('click', () => {
             this.stopTraining();
         });
         
@@ -959,8 +965,23 @@ class TrainingInterface {
     }
     
     updateTrainingButtons(isTraining) {
+        // Update training form buttons
         document.getElementById('start-training-btn').disabled = isTraining;
-        document.getElementById('stop-training-btn').disabled = !isTraining;
+        
+        const formStopBtn = document.getElementById('stop-training-form-btn');
+        if (formStopBtn) {
+            formStopBtn.disabled = !isTraining;
+        }
+        
+        // Update monitoring section stop button visibility
+        const monitoringStopBtn = document.getElementById('stop-training-monitor-btn');
+        if (monitoringStopBtn) {
+            if (isTraining) {
+                monitoringStopBtn.style.display = 'inline-block';
+            } else {
+                monitoringStopBtn.style.display = 'none';
+            }
+        }
     }
     
     updateTrainingStatus(data) {
