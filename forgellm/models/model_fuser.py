@@ -185,6 +185,25 @@ class ModelFuser:
         # Otherwise, it's invalid
         return False
     
+    def _resolve_adapter_path(self, adapter_path: str) -> Tuple[str, str]:
+        """
+        Resolve adapter path to handle both directory paths and specific adapter files.
+        Returns: (actual_adapter_path_for_mlx, adapter_directory_for_validation)
+        """
+        # If the path ends with a specific adapter file, extract the directory
+        if adapter_path.endswith('.safetensors') or adapter_path.endswith('.npz'):
+            # This is a specific adapter file path
+            adapter_dir = os.path.dirname(adapter_path)
+            
+            # For MLX-LM, we need to pass the directory, not the specific file
+            actual_adapter_path = adapter_dir
+            
+            logger.info(f"Resolved adapter file {adapter_path} to directory {actual_adapter_path}")
+            return actual_adapter_path, adapter_dir
+        else:
+            # This is already a directory path
+            return adapter_path, adapter_path
+    
     def _create_readme(self, output_path: str, job_info: Dict[str, Any]) -> None:
         """Create a README.md file for the fused model."""
         try:
@@ -198,7 +217,7 @@ class ModelFuser:
             adapter_name = os.path.basename(job_info["adapter_path"])
             
             # Create README content
-            readme_content = f"""# {job_info['output_name']}
+            readme_content = f"""# published/{job_info['output_name']}
 
 ## Model Description
 
@@ -210,16 +229,17 @@ class ModelFuser:
 - **Adapter**: {adapter_name}
 - **Fusion Method**: MLX-LM Fuse
 - **Created**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+- **Published Path**: `published/{job_info['output_name']}`
 
 ## Usage
 
-This model was created by fusing a base model with a LoRA/DoRA adapter using MLX-LM.
+This model was created by fusing a base model with a LoRA/DoRA adapter using MLX-LM and follows the published model pattern.
 
 ```python
 # Load the model using MLX-LM
 from mlx_lm import load, generate
 
-model, tokenizer = load("{job_info['output_name']}")
+model, tokenizer = load("published/{job_info['output_name']}")
 response = generate(model, tokenizer, prompt="Your prompt here", max_tokens=100)
 print(response)
 ```
@@ -228,7 +248,8 @@ print(response)
 
 - **Fusion Process**: The base model and adapter were fused using the MLX-LM fuse command
 - **Output Format**: HuggingFace compatible format
-- **Storage Location**: HuggingFace cache directory
+- **Storage Location**: HuggingFace cache directory under `models--published--` prefix
+- **Model Pattern**: Published models follow the `published/model_name` convention
 
 ---
 
@@ -254,42 +275,43 @@ print(response)
             if not self._is_valid_base_model(base_model_path):
                 return {"success": False, "error": f"Base model path does not exist: {base_model_path}"}
             
-            if not os.path.exists(adapter_path):
-                return {"success": False, "error": f"Adapter path does not exist: {adapter_path}"}
+            # Handle both directory paths and specific adapter file paths
+            actual_adapter_path, adapter_dir = self._resolve_adapter_path(adapter_path)
+            
+            if not os.path.exists(actual_adapter_path):
+                return {"success": False, "error": f"Adapter path does not exist: {actual_adapter_path}"}
             
             # Check if adapter has the required files (both .npz and .safetensors formats)
-            adapter_files_npz = glob.glob(os.path.join(adapter_path, 'adapters.npz'))
-            adapter_files_safetensors = glob.glob(os.path.join(adapter_path, 'adapters.safetensors'))
+            adapter_files_npz = glob.glob(os.path.join(adapter_dir, 'adapters.npz'))
+            adapter_files_safetensors = glob.glob(os.path.join(adapter_dir, 'adapters.safetensors'))
             
             if not adapter_files_npz and not adapter_files_safetensors:
-                return {"success": False, "error": f"No adapters.npz or adapters.safetensors found in: {adapter_path}"}
+                return {"success": False, "error": f"No adapters.npz or adapters.safetensors found in: {adapter_dir}"}
             
-            # Generate output path
-            adapter_name = os.path.basename(adapter_path)
+            # Generate output path following the published model pattern
+            adapter_name = os.path.basename(adapter_dir)
             
-            # Determine the base name for the fused model
+            # Extract base model name from path
             if "/" in base_model_path and not base_model_path.startswith("/"):
                 # This is a HuggingFace model name (e.g., "mlx-community/gemma-3-4b-it-bf16")
-                base_name = base_model_path
+                base_model_name = base_model_path.split("/")[-1]  # Get the last part after /
             else:
                 # This is a local path
                 base_model_name = os.path.basename(base_model_path)
                 if base_model_name.startswith("models--"):
                     # Input is from HF cache, extract the actual model name
-                    base_name = base_model_name[8:].replace("--", "/")
-                else:
-                    # Input is from local models directory
-                    base_name = base_model_name
+                    base_model_name = base_model_name[8:].replace("--", "/").split("/")[-1]
             
-            # Create the fused model name
-            fused_name = f"{base_name}_fused_{adapter_name}"
+            # Create the fused model name using the published pattern
+            # Format: base_model_fused_lora_adapter_details + suffix
+            fused_name = f"{base_model_name}_fused_lora_{adapter_name}"
             
             # Add suffix if provided
             if suffix:
                 fused_name += suffix
             
-            # Convert to HF cache format
-            hf_output_name = f"models--{fused_name.replace('/', '--')}"
+            # Use the published model pattern: models--published--{model_name}
+            hf_output_name = f"models--published--{fused_name}"
             output_path = os.path.join(self.hf_cache_dir, hf_output_name)
             
             # Check if output already exists
@@ -301,7 +323,8 @@ print(response)
             self.current_job = {
                 "id": job_id,
                 "base_model_path": base_model_path,
-                "adapter_path": adapter_path,
+                "adapter_path": actual_adapter_path,  # Use the resolved path for MLX-LM
+                "original_adapter_path": adapter_path,  # Keep original for reference
                 "output_path": output_path,
                 "output_name": fused_name,
                 "suffix": suffix,
@@ -452,6 +475,7 @@ print(response)
                 "base_model_path": self.current_job["base_model_path"],
                 "adapter_path": self.current_job["adapter_path"],
                 "output_name": self.current_job["output_name"],
+                "output_path": self.current_job["output_path"],
                 "start_time": self.current_job["start_time"]
             })
             

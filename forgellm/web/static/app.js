@@ -115,6 +115,11 @@ class TrainingInterface {
             this.stopFusion();
         });
         
+        // Open fusion folder button
+        document.getElementById('open-fusion-folder-btn').addEventListener('click', () => {
+            this.openFusionFolder();
+        });
+        
         // Fuse adapter selection change - update output name preview
         const fuseAdapterSelect = document.getElementById('fuse-adapter-select');
         
@@ -1369,6 +1374,10 @@ class TrainingInterface {
         
         this.showLoading('Loading model...');
         
+        // Disable the load button during loading
+        const loadButton = document.getElementById('load-model-btn');
+        loadButton.disabled = true;
+        
         try {
             // If adapter is a .safetensors file, use its directory for MLX-LM
             const actualAdapterPath = adapter && adapter.endsWith('.safetensors') 
@@ -1397,6 +1406,7 @@ class TrainingInterface {
             const data = await response.json();
             
             if (data.success) {
+                // Model is now fully loaded (API waits for completion)
                 this.modelLoaded = true;
                 this.updateModelButtons(true);
                 
@@ -1406,16 +1416,17 @@ class TrainingInterface {
                 
                 this.updateModelStatus(actualModel, actualAdapter);
                 
-                // Show appropriate success message
+                // Show appropriate success message with loading time
+                const loadingTime = data.loading_time ? ` (${data.loading_time}s)` : '';
                 if (!model && adapter && data.model_name) {
                     this.showAlert(
-                        `✅ Adapter loaded successfully!\n` +
+                        `✅ Adapter loaded successfully!${loadingTime}\n` +
                         `Auto-detected base model: ${data.model_name}\n` +
                         `Adapter: ${adapter.split('/').pop()}`, 
                         'success'
                     );
                 } else {
-                    this.showAlert('Model loaded successfully', 'success');
+                    this.showAlert(`Model loaded successfully${loadingTime}`, 'success');
                 }
                 
                 // Check for training dashboard
@@ -1452,6 +1463,10 @@ class TrainingInterface {
             this.showAlert('Failed to load model', 'danger');
         } finally {
             this.hideLoading();
+            
+            // Re-enable the load button
+            const loadButton = document.getElementById('load-model-btn');
+            loadButton.disabled = false;
         }
     }
 
@@ -2399,9 +2414,9 @@ ${content.trim()}
                                 botBubble.innerText = completion;
                                 botBubble.setAttribute('data-raw-text', completion);
                                 
-                                // Auto-scroll to bottom
+                                // Smart auto-scroll: only scroll to bottom if user is already at/near the bottom
                                 const chatHistory = document.getElementById('chat-history');
-                                chatHistory.scrollTop = chatHistory.scrollHeight;
+                                this.smartScrollToBottom(chatHistory);
                             } else if (data.type === 'complete') {
                                 // Generation complete - capture token counts
                                 console.log(`🎉 Streaming generation completed in ${data.generation_time?.toFixed(2)}s`);
@@ -2484,7 +2499,9 @@ ${content.trim()}
             botBubble.classList.add('list-group-item-danger');
             botBubble.innerText = `Error: ${data.error}`;
         }
-        chatHistory.scrollTop = chatHistory.scrollHeight;
+        
+        // Smart auto-scroll: only scroll to bottom if user is already at/near the bottom
+        this.smartScrollToBottom(chatHistory);
     }
     
     cleanCompletion(completion) {
@@ -2540,8 +2557,14 @@ ${content.trim()}
             }
         }
     }
-    
 
+    // Helper method for smart scrolling - only scrolls if user is already at/near the bottom
+    smartScrollToBottom(chatHistory) {
+        const isNearBottom = chatHistory.scrollTop + chatHistory.clientHeight >= chatHistory.scrollHeight - 50;
+        if (isNearBottom) {
+            chatHistory.scrollTop = chatHistory.scrollHeight;
+        }
+    }
     
     handleTrainingFinished(data) {
         this.isTraining = false;
@@ -4499,10 +4522,49 @@ console.log('code block');
                     successDiv.style.display = 'block';
                     const successMessage = document.getElementById('fuse-success-message');
                     if (successMessage) {
-                        successMessage.textContent = data.status_message || 'Fusion completed successfully!';
+                        // Display the published model name
+                        const modelName = data.output_name ? `published/${data.output_name}` : 'Unknown';
+                        successMessage.innerHTML = `
+                            <div>${data.status_message || 'Fusion completed successfully!'}</div>
+                            <div class="mt-2 p-2 bg-light rounded">
+                                <small class="text-muted">Model: </small>
+                                <code class="text-break" style="word-break: break-all; white-space: pre-wrap; font-size: 0.85em;">${modelName}</code>
+                            </div>
+                        `;
+                    }
+                    
+                    // Store the output path for the open folder button
+                    if (data.output_path) {
+                        this.fusionOutputPath = data.output_path;
                     }
                 }
             }
+        }
+    }
+    
+    async openFusionFolder() {
+        if (!this.fusionOutputPath) {
+            this.showAlert('No fusion output path available', 'warning');
+            return;
+        }
+        
+        try {
+            const response = await fetch('/api/open_folder', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ path: this.fusionOutputPath })
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                this.showAlert('Opened fusion folder', 'success');
+            } else {
+                this.showAlert(data.error || 'Failed to open folder', 'danger');
+            }
+        } catch (error) {
+            console.error('Error opening fusion folder:', error);
+            this.showAlert('Error opening folder (this feature only works for locally trained models)', 'warning');
         }
     }
 }

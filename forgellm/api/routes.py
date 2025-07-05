@@ -406,21 +406,54 @@ def setup_api(app: Flask) -> Blueprint:
                 final_adapter_path = adapter_path.rsplit('/', 1)[0]
                 logger.info(f"📂 Using adapter directory for MLX-LM: {final_adapter_path}")
             
-            success = model_manager.load(model_name, final_adapter_path)
+            # Start loading the model
+            load_started = model_manager.load(model_name, final_adapter_path)
             
-            if success:
-                return jsonify({
-                    'success': True,
-                    'message': f'Model {model_name} loading started',
-                    'model_name': model_name,
-                    'adapter_path': final_adapter_path,
-                    'original_adapter_selection': adapter_path  # For debugging
-                })
-            else:
+            if not load_started:
                 return jsonify({
                     'success': False,
-                    'error': f'Failed to load model: {model_manager.error}'
+                    'error': f'Failed to start loading model: {model_manager.error}'
                 }), 500
+            
+            # Wait for the model to actually load (with timeout)
+            max_wait_time = 60  # 60 seconds timeout
+            poll_interval = 0.5  # Poll every 500ms
+            start_time = time.time()
+            
+            while time.time() - start_time < max_wait_time:
+                status = model_manager.get_status()
+                
+                if status.get('loaded'):
+                    # Model successfully loaded
+                    return jsonify({
+                        'success': True,
+                        'message': f'Model {model_name} loaded successfully',
+                        'model_name': model_name,
+                        'adapter_path': final_adapter_path,
+                        'original_adapter_selection': adapter_path,
+                        'loading_time': round(time.time() - start_time, 2)
+                    })
+                elif status.get('error'):
+                    # Loading failed with error
+                    return jsonify({
+                        'success': False,
+                        'error': f'Model loading failed: {status.get("error")}'
+                    }), 500
+                elif not status.get('is_loading', True):
+                    # Not loading anymore but not loaded either
+                    return jsonify({
+                        'success': False,
+                        'error': 'Model loading stopped unexpectedly'
+                    }), 500
+                
+                # Still loading, wait and check again
+                time.sleep(poll_interval)
+            
+            # Timeout reached
+            return jsonify({
+                'success': False,
+                'error': f'Model loading timed out after {max_wait_time} seconds'
+            }), 500
         except Exception as e:
             logger.error(f"Error loading model: {e}")
             return jsonify({
