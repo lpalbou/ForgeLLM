@@ -19,6 +19,7 @@ class TrainingInterface {
         this.lastRefreshTime = 0;    // Throttle dashboard refreshes
         this.refreshThrottleMs = 2000; // Minimum 2 seconds between refreshes
         this.lastCheckpointsUpdate = 0; // Track checkpoint updates
+        this.detectedBaseModel = null; // Store auto-detected base model for fusion
         
         this.init();
     }
@@ -81,6 +82,48 @@ class TrainingInterface {
         document.getElementById('stop-training-monitor-btn').addEventListener('click', () => {
             this.stopTraining();
         });
+        
+        // Fuse form submission
+        document.getElementById('fuse-form').addEventListener('submit', (e) => {
+            e.preventDefault();
+            this.startFusion();
+        });
+        
+        // Start fusion button - show modal first
+        document.getElementById('start-fuse-btn').addEventListener('click', () => {
+            this.showFusionConfigModal();
+        });
+        
+        // Fusion config modal confirm button
+        document.getElementById('fusion-config-confirm').addEventListener('click', () => {
+            this.confirmFusion();
+        });
+        
+        // Fusion suffix input - update preview in real-time
+        document.getElementById('fusion-suffix').addEventListener('input', () => {
+            this.updateFusionPreview();
+        });
+        
+        // Update output preview when adapter selection changes
+        document.getElementById('fuse-adapter-select').addEventListener('change', () => {
+            this.detectBaseModelForFusion();
+            this.updateFuseOutputPreview();
+        });
+        
+        // Stop fusion button
+        document.getElementById('stop-fuse-btn').addEventListener('click', () => {
+            this.stopFusion();
+        });
+        
+        // Fuse adapter selection change - update output name preview
+        const fuseAdapterSelect = document.getElementById('fuse-adapter-select');
+        
+        if (fuseAdapterSelect) {
+            fuseAdapterSelect.addEventListener('change', () => {
+                this.detectBaseModelForFusion();
+                this.updateFuseOutputPreview();
+            });
+        }
         
         // Add event listeners for training parameter changes to update estimates
         const parameterInputs = ['batch-size', 'max-iterations', 'max-seq-length', 'save-every', 'eval-every', 'val-fast-pct', 'input-dir'];
@@ -376,6 +419,7 @@ class TrainingInterface {
         await this.checkTrainingStatus();
         this.updateTrainingEstimates();
         this.updateLearningRateChart();
+        await this.loadFuseModels();
     }
     
     startPeriodicUpdates() {
@@ -4029,6 +4073,436 @@ console.log('code block');
             }
         } catch (e) {
             // Tooltip might not be initialized yet
+        }
+    }
+    
+    // Fusion methods
+    async loadFuseModels() {
+        try {
+            // Load adapters using the same checkpoints API as Testing tab
+            const adaptersResponse = await fetch('/api/checkpoints');
+            const adaptersData = await adaptersResponse.json();
+            
+            if (adaptersData.success && adaptersData.checkpoints) {
+                this.updateFuseAdapterDropdown(adaptersData.checkpoints);
+            }
+        } catch (error) {
+            console.error('Error loading fuse models:', error);
+            this.showAlert('Failed to load fusion models', 'danger');
+        }
+    }
+    
+
+    
+    updateFuseAdapterDropdown(checkpoints) {
+        const select = document.getElementById('fuse-adapter-select');
+        if (!select) return;
+        
+        // Clear existing options except the first one
+        const firstOption = select.firstElementChild;
+        select.innerHTML = '';
+        if (firstOption) {
+            select.appendChild(firstOption);
+        }
+        
+        // Add checkpoints using the same format as Testing tab
+        checkpoints.forEach(checkpoint => {
+            const option = document.createElement('option');
+            option.value = checkpoint.path;
+            
+            // Format the display name with adapter type info (same as Testing tab)
+            const modelName = checkpoint.model || 'Unknown';
+            const iteration = checkpoint.iteration || 0;
+            const size = checkpoint.size ? `${checkpoint.size.toFixed(1)}MB` : '';
+            
+            // Extract training type and fine-tune type if available
+            let typeInfo = '';
+            if (checkpoint.path) {
+                const pathParts = checkpoint.path.split('/');
+                // Look for CPT or IFT in path
+                if (pathParts.some(part => part.includes('cpt'))) {
+                    typeInfo = ' [CPT]';
+                } else if (pathParts.some(part => part.includes('ift'))) {
+                    typeInfo = ' [IFT]';
+                }
+                
+                // Look for fine-tune type hints in path
+                if (pathParts.some(part => part.includes('lora'))) {
+                    typeInfo += ' LoRA';
+                } else if (pathParts.some(part => part.includes('dora'))) {
+                    typeInfo += ' DoRA';
+                }
+            }
+            
+            option.textContent = `${modelName}${typeInfo} - iter ${iteration} ${size}`;
+            select.appendChild(option);
+        });
+    }
+    
+    async detectBaseModelForFusion() {
+        const adapterSelect = document.getElementById('fuse-adapter-select');
+        const baseModelInfo = document.getElementById('fuse-base-model-info');
+        const detectedBaseModel = document.getElementById('fuse-detected-base-model');
+        
+        if (!adapterSelect || !baseModelInfo || !detectedBaseModel) return;
+        
+        const adapterPath = adapterSelect.value;
+        
+        if (!adapterPath) {
+            baseModelInfo.style.display = 'none';
+            this.detectedBaseModel = null;
+            return;
+        }
+        
+        try {
+            // Extract the directory from adapter path to find training config
+            let adapterDir = adapterPath;
+            if (adapterPath.endsWith('.safetensors')) {
+                adapterDir = adapterPath.substring(0, adapterPath.lastIndexOf('/'));
+            }
+            
+            console.log(`🔍 Detecting base model for adapter: ${adapterPath}`);
+            console.log(`📁 Adapter directory: ${adapterDir}`);
+            
+            // Try to find the training config JSON file
+            const response = await fetch('/api/directories/contents', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ path: adapterDir })
+            });
+            
+            const data = await response.json();
+            
+            if (data.success && data.contents) {
+                // Look for CPT_*.json file
+                const configFile = data.contents.find(file => 
+                    file.name.startsWith('CPT_') && file.name.endsWith('.json')
+                );
+                
+                if (configFile) {
+                    // Read the config file to get base model
+                    const configResponse = await fetch('/api/directories/read-file', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ 
+                            path: `${adapterDir}/${configFile.name}` 
+                        })
+                    });
+                    
+                    const configData = await configResponse.json();
+                    
+                    if (configData.success) {
+                        const trainingConfig = JSON.parse(configData.content);
+                        const baseModel = trainingConfig.base_model;
+                        
+                        if (baseModel) {
+                            console.log(`🤖 Auto-detected base model: ${baseModel}`);
+                            this.detectedBaseModel = baseModel;
+                            detectedBaseModel.textContent = baseModel;
+                            baseModelInfo.style.display = 'block';
+                            return;
+                        }
+                    }
+                }
+            }
+            
+            // If we get here, detection failed
+            console.log('❌ Could not detect base model from adapter');
+            this.detectedBaseModel = null;
+            detectedBaseModel.textContent = 'Could not detect base model';
+            baseModelInfo.style.display = 'block';
+            
+        } catch (error) {
+            console.error('Error detecting base model:', error);
+            this.detectedBaseModel = null;
+            detectedBaseModel.textContent = 'Error detecting base model';
+            baseModelInfo.style.display = 'block';
+        }
+    }
+    
+    updateFuseOutputPreview() {
+        const adapterSelect = document.getElementById('fuse-adapter-select');
+        const outputInfo = document.getElementById('fuse-output-info');
+        const outputName = document.getElementById('fuse-output-model-name');
+        
+        if (adapterSelect && outputInfo && outputName) {
+            const adapterPath = adapterSelect.value;
+            
+            if (adapterPath && this.detectedBaseModel) {
+                // Extract base model name
+                const baseModelName = this.detectedBaseModel.split('/').pop();
+                
+                // Extract adapter name from checkpoint path
+                const adapterText = adapterSelect.options[adapterSelect.selectedIndex].text;
+                const adapterName = adapterText.split(' ')[0];
+                
+                const fusedName = `${baseModelName}_fused_${adapterName}`;
+                outputName.textContent = fusedName;
+                outputInfo.style.display = 'block';
+            } else {
+                outputInfo.style.display = 'none';
+            }
+        }
+    }
+    
+    showFusionConfigModal() {
+        const adapterPath = document.getElementById('fuse-adapter-select').value;
+        
+        if (!adapterPath) {
+            this.showAlert('Please select an adapter', 'warning');
+            return;
+        }
+        
+        if (!this.detectedBaseModel) {
+            this.showAlert('Base model could not be detected from adapter', 'warning');
+            return;
+        }
+        
+        // Update preview with current selection
+        this.updateFusionPreview();
+        
+        // Show modal
+        const modal = new bootstrap.Modal(document.getElementById('fusion-config-modal'));
+        modal.show();
+    }
+    
+    updateFusionPreview() {
+        const adapterSelect = document.getElementById('fuse-adapter-select');
+        const suffix = document.getElementById('fusion-suffix').value;
+        
+        if (adapterSelect && this.detectedBaseModel) {
+            const adapterPath = adapterSelect.value;
+            
+            if (adapterPath) {
+                // Extract base model name
+                const baseModelName = this.detectedBaseModel.split('/').pop();
+                
+                // Extract adapter name from checkpoint path
+                const adapterText = adapterSelect.options[adapterSelect.selectedIndex].text;
+                const adapterName = adapterText.split(' ')[0];
+                
+                let fusedName = `${baseModelName}_fused_${adapterName}`;
+                if (suffix) {
+                    fusedName += suffix;
+                }
+                
+                document.getElementById('fusion-preview-name').textContent = fusedName;
+            }
+        }
+    }
+    
+    confirmFusion() {
+        // Get values from modal
+        const suffix = document.getElementById('fusion-suffix').value;
+        const description = document.getElementById('fusion-description').value;
+        
+        // Close modal
+        const modal = bootstrap.Modal.getInstance(document.getElementById('fusion-config-modal'));
+        modal.hide();
+        
+        // Start fusion with config
+        this.startFusion(suffix, description);
+    }
+    
+    async startFusion(suffix = '', description = '') {
+        const adapterPath = document.getElementById('fuse-adapter-select').value;
+        
+        if (!adapterPath) {
+            this.showAlert('Please select an adapter', 'warning');
+            return;
+        }
+        
+        if (!this.detectedBaseModel) {
+            this.showAlert('Base model could not be detected from adapter', 'warning');
+            return;
+        }
+        
+        this.showLoading('Starting fusion...');
+        
+        try {
+            const response = await fetch('/api/fusion/start', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    base_model_path: this.detectedBaseModel,
+                    adapter_path: adapterPath,
+                    suffix: suffix,
+                    description: description
+                })
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                this.showAlert('Fusion started successfully!', 'success');
+                this.startFusionProgressMonitoring();
+            } else {
+                this.showAlert(data.error || 'Failed to start fusion', 'danger');
+            }
+        } catch (error) {
+            console.error('Error starting fusion:', error);
+            this.showAlert('Error starting fusion', 'danger');
+        } finally {
+            this.hideLoading();
+        }
+    }
+    
+    async stopFusion() {
+        this.showLoading('Stopping fusion...');
+        
+        try {
+            const response = await fetch('/api/fusion/stop', {
+                method: 'POST'
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                this.showAlert('Fusion stopped', 'info');
+                this.stopFusionProgressMonitoring();
+            } else {
+                this.showAlert(data.error || 'Failed to stop fusion', 'danger');
+            }
+        } catch (error) {
+            console.error('Error stopping fusion:', error);
+            this.showAlert('Error stopping fusion', 'danger');
+        } finally {
+            this.hideLoading();
+        }
+    }
+    
+    startFusionProgressMonitoring() {
+        this.stopFusionProgressMonitoring(); // Stop any existing monitoring
+        
+        this.fusionProgressInterval = setInterval(() => {
+            this.updateFusionProgress();
+        }, 2000); // Update every 2 seconds
+        
+        // Initial update
+        this.updateFusionProgress();
+    }
+    
+    stopFusionProgressMonitoring() {
+        if (this.fusionProgressInterval) {
+            clearInterval(this.fusionProgressInterval);
+            this.fusionProgressInterval = null;
+        }
+    }
+    
+    async updateFusionProgress() {
+        try {
+            const response = await fetch('/api/fusion/status');
+            const data = await response.json();
+            
+            if (data.success) {
+                this.displayFusionProgress(data);
+                
+                // Stop monitoring if fusion is complete or stopped
+                if (!data.is_fusing) {
+                    this.stopFusionProgressMonitoring();
+                }
+            }
+        } catch (error) {
+            console.error('Error updating fusion progress:', error);
+        }
+    }
+    
+    displayFusionProgress(data) {
+        const idleDiv = document.getElementById('fuse-idle');
+        const activeDiv = document.getElementById('fuse-active');
+        const errorDiv = document.getElementById('fuse-error');
+        const successDiv = document.getElementById('fuse-success');
+        const startBtn = document.getElementById('start-fuse-btn');
+        const stopBtn = document.getElementById('stop-fuse-btn');
+        
+        if (data.is_fusing) {
+            // Show active state
+            if (idleDiv) idleDiv.style.display = 'none';
+            if (activeDiv) activeDiv.style.display = 'block';
+            if (errorDiv) errorDiv.style.display = 'none';
+            if (successDiv) successDiv.style.display = 'none';
+            if (startBtn) startBtn.style.display = 'none';
+            if (stopBtn) stopBtn.style.display = 'block';
+            
+            // Update progress
+            const progressBar = document.getElementById('fuse-progress-bar');
+            const progressPercentage = document.getElementById('fuse-progress-percentage');
+            const statusMessage = document.getElementById('fuse-status-message');
+            
+            if (progressBar) {
+                progressBar.style.width = `${data.progress}%`;
+                progressBar.setAttribute('aria-valuenow', data.progress);
+            }
+            
+            if (progressPercentage) {
+                progressPercentage.textContent = Math.round(data.progress);
+            }
+            
+            if (statusMessage) {
+                statusMessage.textContent = data.status_message || 'Processing...';
+            }
+            
+            // Update time information
+            if (data.elapsed_time) {
+                const elapsedElement = document.getElementById('fuse-elapsed-time');
+                if (elapsedElement) {
+                    const minutes = Math.floor(data.elapsed_time / 60);
+                    const seconds = Math.floor(data.elapsed_time % 60);
+                    elapsedElement.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+                }
+            }
+            
+            if (data.estimated_remaining) {
+                const remainingElement = document.getElementById('fuse-estimated-remaining');
+                if (remainingElement) {
+                    const minutes = Math.floor(data.estimated_remaining / 60);
+                    const seconds = Math.floor(data.estimated_remaining % 60);
+                    remainingElement.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+                }
+            }
+            
+            // Update job information
+            const baseModelElement = document.getElementById('fuse-current-base-model');
+            const adapterElement = document.getElementById('fuse-current-adapter');
+            const outputElement = document.getElementById('fuse-current-output-model');
+            
+            if (baseModelElement && data.base_model_path) {
+                baseModelElement.textContent = data.base_model_path.split('/').pop();
+            }
+            
+            if (adapterElement && data.adapter_path) {
+                adapterElement.textContent = data.adapter_path.split('/').pop();
+            }
+            
+            if (outputElement && data.output_name) {
+                outputElement.textContent = data.output_name;
+            }
+            
+        } else {
+            // Show idle state
+            if (idleDiv) idleDiv.style.display = 'block';
+            if (activeDiv) activeDiv.style.display = 'none';
+            if (startBtn) startBtn.style.display = 'block';
+            if (stopBtn) stopBtn.style.display = 'none';
+            
+            // Show error or success if applicable
+            if (data.error) {
+                if (errorDiv) {
+                    errorDiv.style.display = 'block';
+                    const errorMessage = document.getElementById('fuse-error-message');
+                    if (errorMessage) {
+                        errorMessage.textContent = data.error;
+                    }
+                }
+            } else if (data.progress === 100) {
+                if (successDiv) {
+                    successDiv.style.display = 'block';
+                    const successMessage = document.getElementById('fuse-success-message');
+                    if (successMessage) {
+                        successMessage.textContent = data.status_message || 'Fusion completed successfully!';
+                    }
+                }
+            }
         }
     }
 }

@@ -403,4 +403,46 @@ body {
     .chat-assistant table {
         font-size: 0.875rem;
     }
+}
+
+/* Modal theme support */
+.modal-content {
+    background-color: var(--surface-color);
+    border-color: var(--border-color);
+    color: var(--text-color);
+    transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
+}
+
+.modal-header {
+    border-bottom-color: var(--border-color);
+    color: var(--text-color);
+    transition: border-color 0.3s ease, color 0.3s ease;
+}
+
+.modal-footer {
+    border-top-color: var(--border-color);
+    transition: border-color 0.3s ease;
+}
+
+.modal-title {
+    color: var(--text-color);
+    transition: color 0.3s ease;
+}
+
+.modal-body {
+    color: var(--text-color);
+    transition: color 0.3s ease;
+}
+
+/* Alert in modal */
+.modal-body .alert {
+    background-color: var(--info-color);
+    border-color: var(--info-color);
+    color: white;
+}
+
+[data-theme="dark"] .modal-body .alert {
+    background-color: rgba(23, 162, 184, 0.2);
+    border-color: var(--info-color);
+    color: var(--text-color);
 } 

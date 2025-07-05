@@ -913,6 +913,11 @@
                 </button>
             </li>
             <li class="nav-item" role="presentation">
+                <button class="nav-link" id="fuse-tab" data-bs-toggle="tab" data-bs-target="#fuse" type="button" role="tab">
+                    <i class="fas fa-layer-group me-2"></i>Fuse
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
                 <button class="nav-link" id="quantization-tab" data-bs-toggle="tab" data-bs-target="#quantization" type="button" role="tab">
                     <i class="fas fa-compress-alt me-2"></i>Quantization
                 </button>
@@ -1406,6 +1411,137 @@
                                 <div class="mt-3 small text-muted">
                                     <i class="fas fa-info-circle me-1"></i>
                                     This list shows all available checkpoints for the selected training session.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Fuse Tab -->
+            <div class="tab-pane fade" id="fuse" role="tabpanel">
+                <div class="row">
+                    <div class="col-lg-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <i class="fas fa-layer-group me-2"></i>Model Fusion
+                            </div>
+                            <div class="card-body">
+                                <form id="fuse-form">
+                                    <div class="mb-3">
+                                        <label for="fuse-adapter-select" class="form-label">LoRA/DoRA Adapter</label>
+                                        <select class="form-select" id="fuse-adapter-select" required>
+                                            <option value="">Select adapter...</option>
+                                        </select>
+                                        <div class="form-text">Choose the trained adapter to fuse. The base model will be automatically detected from the adapter's configuration.</div>
+                                    </div>
+                                    
+                                    <div class="mb-3" id="fuse-base-model-info" style="display: none;">
+                                        <label class="form-label">Detected Base Model</label>
+                                        <div class="alert alert-info">
+                                            <i class="fas fa-robot me-2"></i>
+                                            <span id="fuse-detected-base-model">None detected</span>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="mb-3" id="fuse-output-info" style="display: none;">
+                                        <label class="form-label">Output Model Name</label>
+                                        <div class="alert alert-info">
+                                            <i class="fas fa-info-circle me-2"></i>
+                                            <span id="fuse-output-model-name">model_name_fused</span>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="d-grid">
+                                        <button type="button" class="btn btn-primary" id="start-fuse-btn">
+                                            <i class="fas fa-layer-group me-2"></i>Start Fusion
+                                        </button>
+                                        <button type="button" class="btn btn-danger mt-2" id="stop-fuse-btn" style="display: none;">
+                                            <i class="fas fa-stop me-2"></i>Stop Fusion
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-lg-6">
+                        <!-- Progress Card -->
+                        <div class="card">
+                            <div class="card-header">
+                                <i class="fas fa-tasks me-2"></i>Fusion Progress
+                            </div>
+                            <div class="card-body">
+                                <div id="fuse-progress-container">
+                                    <div class="text-center text-muted py-4" id="fuse-idle">
+                                        <i class="fas fa-layer-group fa-3x mb-3" style="color: var(--text-muted);"></i>
+                                        <h5>Ready for Fusion</h5>
+                                        <p>Select a trained adapter, then click "Start Fusion" to begin. The base model will be automatically detected.</p>
+                                    </div>
+                                    
+                                    <div id="fuse-active" style="display: none;">
+                                        <!-- Progress Bar -->
+                                        <div class="mb-3">
+                                            <div class="d-flex justify-content-between mb-1">
+                                                <span class="text-muted">Progress</span>
+                                                <span class="text-muted"><span id="fuse-progress-percentage">0</span>%</span>
+                                            </div>
+                                            <div class="progress" style="height: 20px;">
+                                                <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                                                     id="fuse-progress-bar" 
+                                                     role="progressbar" 
+                                                     style="width: 0%">
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        <!-- Status Message -->
+                                        <div class="mb-3">
+                                            <label class="form-label">Status</label>
+                                            <div class="alert alert-info mb-0">
+                                                <i class="fas fa-info-circle me-2"></i>
+                                                <span id="fuse-status-message">Initializing...</span>
+                                            </div>
+                                        </div>
+                                        
+                                        <!-- Time Information -->
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <div class="metric-card">
+                                                    <div class="metric-value" id="fuse-elapsed-time">00:00</div>
+                                                    <div class="metric-label">Elapsed Time</div>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <div class="metric-card">
+                                                    <div class="metric-value" id="fuse-estimated-remaining">--:--</div>
+                                                    <div class="metric-label">Est. Remaining</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        <!-- Job Information -->
+                                        <div class="mt-3">
+                                            <h6>Current Job</h6>
+                                            <div class="small text-muted">
+                                                <div><strong>Base Model:</strong> <span id="fuse-current-base-model">-</span></div>
+                                                <div><strong>Adapter:</strong> <span id="fuse-current-adapter">-</span></div>
+                                                <div><strong>Output:</strong> <span id="fuse-current-output-model">-</span></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Error Display -->
+                                    <div id="fuse-error" class="alert alert-danger" style="display: none;">
+                                        <i class="fas fa-exclamation-triangle me-2"></i>
+                                        <span id="fuse-error-message">An error occurred</span>
+                                    </div>
+                                    
+                                    <!-- Success Display -->
+                                    <div id="fuse-success" class="alert alert-success" style="display: none;">
+                                        <i class="fas fa-check-circle me-2"></i>
+                                        <span id="fuse-success-message">Fusion completed successfully!</span>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -1907,6 +2043,46 @@
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                     <button type="button" class="btn btn-primary" id="browser-select-btn" disabled>
                         <i class="fas fa-check"></i> Select Directory
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Fusion Configuration Modal -->
+    <div class="modal fade" id="fusion-config-modal" tabindex="-1" aria-labelledby="fusion-config-title" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="fusion-config-title">
+                        <i class="fas fa-layer-group me-2"></i>Configure Fusion
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="fusion-config-form">
+                        <div class="mb-3">
+                            <label for="fusion-suffix" class="form-label">Model Suffix</label>
+                            <input type="text" class="form-control" id="fusion-suffix" placeholder="e.g., _math, _it, _reasoning">
+                            <div class="form-text">Optional suffix to add to the fused model name (e.g., _math, _it, _reasoning)</div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="fusion-description" class="form-label">Description</label>
+                            <textarea class="form-control" id="fusion-description" rows="4" placeholder="Describe what this fused model is for..."></textarea>
+                            <div class="form-text">Optional description that will be added to the model's README.md</div>
+                        </div>
+                        
+                        <div class="alert alert-info">
+                            <i class="fas fa-info-circle me-2"></i>
+                            <strong>Preview:</strong> <span id="fusion-preview-name">model_name_fused_adapter_name</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="fusion-config-confirm">
+                        <i class="fas fa-layer-group me-2"></i>Start Fusion
                     </button>
                 </div>
             </div>

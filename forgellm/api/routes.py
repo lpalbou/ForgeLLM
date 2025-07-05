@@ -16,7 +16,7 @@ from datetime import datetime
 from flask import Flask, Blueprint, request, jsonify, current_app, send_file, Response
 import time
 
-from ..models import ModelManager, ModelPublisher, ModelQuantizer
+from ..models import ModelManager, ModelPublisher, ModelQuantizer, ModelFuser
 from ..training.config import TrainingConfig
 from ..training.trainer import ContinuedPretrainer
 from ..training.process_manager import TrainingProcessManager
@@ -58,6 +58,12 @@ def setup_api(app: Flask) -> Blueprint:
     if quantizer is None:
         quantizer = ModelQuantizer()
         app.quantizer = quantizer
+    
+    # Get fuser
+    fuser = getattr(app, 'fuser', None)
+    if fuser is None:
+        fuser = ModelFuser()
+        app.fuser = fuser
     
     @bp.route('/cpt_models', methods=['GET'])
     def get_cpt_models():
@@ -1745,6 +1751,79 @@ def setup_api(app: Flask) -> Blueprint:
             return jsonify({"success": True, "models": models})
         except Exception as e:
             logger.error(f"Error getting quantized models: {e}")
+            return jsonify({"success": False, "error": str(e)}), 500
+    
+    # Fusion endpoints
+    @bp.route('/fusion/base_models', methods=['GET'])
+    def get_fusable_base_models():
+        """Get list of base models available for fusion."""
+        try:
+            models = fuser.get_available_base_models()
+            return jsonify({"success": True, "models": models})
+        except Exception as e:
+            logger.error(f"Error getting fusable base models: {e}")
+            return jsonify({"success": False, "error": str(e)}), 500
+    
+    @bp.route('/fusion/adapters', methods=['GET'])
+    def get_fusable_adapters():
+        """Get list of adapters available for fusion."""
+        try:
+            adapters = fuser.get_available_adapters()
+            return jsonify({"success": True, "adapters": adapters})
+        except Exception as e:
+            logger.error(f"Error getting fusable adapters: {e}")
+            return jsonify({"success": False, "error": str(e)}), 500
+    
+    @bp.route('/fusion/start', methods=['POST'])
+    def start_fusion():
+        """Start model fusion."""
+        try:
+            data = request.get_json()
+            base_model_path = data.get('base_model_path')
+            adapter_path = data.get('adapter_path')
+            suffix = data.get('suffix', '')
+            description = data.get('description', '')
+            
+            if not base_model_path:
+                return jsonify({"success": False, "error": "Base model path is required"}), 400
+            
+            if not adapter_path:
+                return jsonify({"success": False, "error": "Adapter path is required"}), 400
+            
+            result = fuser.start_fusion(base_model_path, adapter_path, suffix, description)
+            return jsonify(result)
+        except Exception as e:
+            logger.error(f"Error starting fusion: {e}")
+            return jsonify({"success": False, "error": str(e)}), 500
+    
+    @bp.route('/fusion/status', methods=['GET'])
+    def get_fusion_status():
+        """Get current fusion status."""
+        try:
+            status = fuser.get_fusion_status()
+            return jsonify({"success": True, **status})
+        except Exception as e:
+            logger.error(f"Error getting fusion status: {e}")
+            return jsonify({"success": False, "error": str(e)}), 500
+    
+    @bp.route('/fusion/stop', methods=['POST'])
+    def stop_fusion():
+        """Stop current fusion."""
+        try:
+            result = fuser.stop_fusion()
+            return jsonify(result)
+        except Exception as e:
+            logger.error(f"Error stopping fusion: {e}")
+            return jsonify({"success": False, "error": str(e)}), 500
+    
+    @bp.route('/fusion/fused_models', methods=['GET'])
+    def get_fused_models():
+        """Get list of fused models."""
+        try:
+            models = fuser.get_fused_models()
+            return jsonify({"success": True, "models": models})
+        except Exception as e:
+            logger.error(f"Error getting fused models: {e}")
             return jsonify({"success": False, "error": str(e)}), 500
     
     return bp 
