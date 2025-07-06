@@ -19,6 +19,10 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+# Avoid importing ProcessTracker in utility modules to prevent singleton conflicts
+# ProcessTracker is a singleton that manages long-running training processes
+# and should not be imported by utility scripts that might exit and trigger cleanup
+
 
 class TextStatsCalculator:
     """

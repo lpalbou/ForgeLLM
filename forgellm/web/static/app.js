@@ -12,7 +12,7 @@ class TrainingInterface {
         this.currentTokenCount = 0;  // Track total token count for the current conversation
         this.promptTokens = 0;       // Track prompt tokens
         this.completionTokens = 0;   // Track completion tokens
-        this.conversationTokens = 0; // Track total tokens across entire conversation
+        this.conversationTokens = 0; // Track actual conversation content tokens (not cumulative prompt)
         this.lastTokensPerSec = null; // Track latest tokens per second
         this.trainingStartTime = null; // Store training start time for timing calculations
         this.markdownEnabled = true; // Enable markdown rendering by default
@@ -2336,6 +2336,14 @@ ${content.trim()}
         console.log(`❌ No markdown patterns detected in text`);
         return false;
     }
+
+    // Helper method to estimate user message tokens
+    estimateUserMessageTokens(text) {
+        // Simple estimation: ~1.3 tokens per word for English text
+        // This matches our centralized token counting fallback estimation
+        const words = text.trim().split(/\s+/).length;
+        return Math.ceil(words * 1.3);
+    }
     
     async generateTextFromInput() {
         const chatInput = document.getElementById('chat-input');
@@ -2489,6 +2497,11 @@ ${content.trim()}
         userBubble.innerText = prompt;
         chatHistory.appendChild(userBubble);
         
+        // Add user message tokens to conversation total
+        const userMessageTokens = this.estimateUserMessageTokens(prompt);
+        this.conversationTokens += userMessageTokens;
+        console.log(`👤 User message: ${userMessageTokens} tokens (conversation total: ${this.conversationTokens})`);
+        
         // Update stats immediately after user prompt is added
         this.updateChatStats();
         
@@ -2609,10 +2622,11 @@ ${content.trim()}
                                     this.currentTokenCount = data.total_tokens;
                                     this.lastTokensPerSec = data.tokens_per_sec || null;
                                     
-                                    // Add to conversation total
-                                    this.conversationTokens += this.currentTokenCount;
+                                    // Add only completion tokens to conversation total (not total_tokens which includes cumulative prompt)
+                                    this.conversationTokens += this.completionTokens;
                                     
-                                    console.log(`📊 Tokens: ${this.promptTokens} prompt + ${this.completionTokens} completion = ${this.currentTokenCount} total (conversation: ${this.conversationTokens})`);
+                                    console.log(`🤖 Assistant response: ${this.completionTokens} tokens (conversation total: ${this.conversationTokens})`);
+                                    console.log(`📊 Server reported: ${this.promptTokens} prompt + ${this.completionTokens} completion = ${this.currentTokenCount} total`);
                                     if (this.lastTokensPerSec) {
                                         console.log(`⚡ Generation speed: ${this.lastTokensPerSec} tokens/sec`);
                                     }
@@ -2668,10 +2682,11 @@ ${content.trim()}
             this.currentTokenCount = data.total_tokens || (this.promptTokens + this.completionTokens);
             this.lastTokensPerSec = data.tokens_per_sec || null;
             
-            // Add to conversation total
-            this.conversationTokens += this.currentTokenCount;
+            // Add only completion tokens to conversation total (not total_tokens which includes cumulative prompt)
+            this.conversationTokens += this.completionTokens;
             
-            console.log(`📊 Tokens: ${this.promptTokens} prompt + ${this.completionTokens} completion = ${this.currentTokenCount} total (conversation: ${this.conversationTokens})`);
+            console.log(`🤖 Assistant response: ${this.completionTokens} tokens (conversation total: ${this.conversationTokens})`);
+            console.log(`📊 Server reported: ${this.promptTokens} prompt + ${this.completionTokens} completion = ${this.currentTokenCount} total`);
             if (this.lastTokensPerSec) {
                 console.log(`⚡ Generation speed: ${this.lastTokensPerSec} tokens/sec`);
             }
@@ -2702,8 +2717,12 @@ ${content.trim()}
         let statsHtml = '';
         if (this.conversationTokens > 0) {
             const contextWindow = parseInt(document.getElementById('max-kv-size').value);
+            
+            // For context window usage, use the last prompt tokens (which includes system prompt + full conversation)
+            // This gives a more accurate view of actual LLM context usage
+            const actualContextUsage = this.promptTokens || this.conversationTokens;
             const tokenPercentage = contextWindow ? 
-                ` [${Math.round((this.conversationTokens / contextWindow) * 100)}%]` : '';
+                ` [${Math.round((actualContextUsage / contextWindow) * 100)}%]` : '';
             
             statsHtml = `${turns} turn${turns !== 1 ? 's' : ''} | ${this.conversationTokens} tokens${tokenPercentage}`;
             
@@ -2712,9 +2731,9 @@ ${content.trim()}
                 statsHtml += ` | ${this.lastTokensPerSec} tk/s`;
             }
             
-            // Add breakdown if we have prompt/completion details
+            // Add breakdown if we have prompt/completion details from last exchange
             if (this.promptTokens && this.completionTokens) {
-                statsHtml += `<br><i style="font-size: 0.85em;">(prompt: ${this.promptTokens}, completion: ${this.completionTokens})</i>`;
+                statsHtml += `<br><i style="font-size: 0.85em;">(last: ${this.promptTokens} prompt, ${this.completionTokens} completion)</i>`;
             }
         } else {
             statsHtml = `${turns} turn${turns !== 1 ? 's' : ''}`;
@@ -2723,13 +2742,15 @@ ${content.trim()}
         const chatStats = document.getElementById('chat-stats');
         chatStats.innerHTML = statsHtml;
         
-        // Visual indicator for token usage (based on conversation total)
+        // Visual indicator for context window usage (based on actual prompt tokens, not just conversation content)
         chatStats.classList.remove('text-warning', 'text-danger');
         
         if (this.conversationTokens) {
             const contextWindow = parseInt(document.getElementById('max-kv-size').value);
             if (contextWindow) {
-                const tokenRatio = this.conversationTokens / contextWindow;
+                // Use actual context usage (prompt tokens) for warning thresholds
+                const actualContextUsage = this.promptTokens || this.conversationTokens;
+                const tokenRatio = actualContextUsage / contextWindow;
                 if (tokenRatio > 0.9) {
                     chatStats.classList.add('text-danger');
                 } else if (tokenRatio > 0.7) {
@@ -3638,8 +3659,10 @@ ${content.trim()}
                 }
             }
 
-            // Load conversation messages
+            // Load conversation messages and count tokens
             let messageCount = 0;
+            this.conversationTokens = 0; // Reset conversation token count
+            
             for (const message of historyData.messages) {
                 if (message.role === 'system') {
                     // System messages are already handled above
@@ -3659,8 +3682,29 @@ ${content.trim()}
                     
                     chatHistory.appendChild(bubble);
                     messageCount++;
+                    
+                    // Count tokens for this message
+                    const messageTokens = this.estimateUserMessageTokens(message.content);
+                    this.conversationTokens += messageTokens;
                 }
             }
+
+            // Restore token count from metadata if available (more accurate than estimation)
+            if (historyData.metadata && historyData.metadata.token_count) {
+                console.log(`📁 Loaded chat with metadata token count: ${historyData.metadata.token_count}`);
+                console.log(`📊 Estimated token count: ${this.conversationTokens}`);
+                // Use the metadata token count if it seems reasonable (not too different from estimation)
+                const estimatedTokens = this.conversationTokens;
+                const metadataTokens = historyData.metadata.token_count;
+                if (Math.abs(metadataTokens - estimatedTokens) / estimatedTokens < 0.5) {
+                    this.conversationTokens = metadataTokens;
+                    console.log(`✅ Using metadata token count: ${this.conversationTokens}`);
+                } else {
+                    console.log(`⚠️ Metadata token count seems inaccurate, using estimation: ${this.conversationTokens}`);
+                }
+            }
+
+            console.log(`📁 Loaded conversation: ${messageCount} messages, ${this.conversationTokens} tokens`);
 
             // Scroll to bottom
             chatHistory.scrollTop = chatHistory.scrollHeight;
@@ -3669,7 +3713,11 @@ ${content.trim()}
             if (messageCount > 0) {
                 document.getElementById('save-chat-btn').disabled = false;
                 document.getElementById('clear-chat-btn').disabled = false;
+                this.chatInitialized = true;
             }
+            
+            // Update chat stats to reflect loaded conversation
+            this.updateChatStats();
 
             // Show success message
             const modelInfo = historyData.metadata.model?.display_name || historyData.metadata.model?.name || 'Unknown';
