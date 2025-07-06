@@ -11,8 +11,14 @@ ForgeLLM is a comprehensive platform for continued pre-training and instruction 
 - **💬 Chat & Test**: Interactive chat with models and adapters via CLI or web
 - **📦 Publish**: Convert and publish trained models with comprehensive documentation
 
+### Screenshots
+Training:
 ![Training](docs/assets/training-tab.png)
+
+Monitoring:
 ![Monitoring](docs/assets/monitoring-tab.png)
+
+Testing:
 ![Testing](docs/assets/testing-tab.png)
 
 ## Quick Start
@@ -26,7 +32,7 @@ ForgeLLM is a comprehensive platform for continued pre-training and instruction 
 pip install forgellm
 
 # Install specific version
-pip install forgellm==0.3.5
+pip install forgellm==0.3.6
 
 # Upgrade existing installation
 pip install --upgrade forgellm

@@ -21,6 +21,7 @@ from ..training.config import TrainingConfig
 from ..training.trainer import ContinuedPretrainer
 from ..training.process_manager import TrainingProcessManager
 from ..training.dashboard import create_comprehensive_dashboard, identify_best_checkpoints, load_training_data, generate_web_chart_data
+from ..utils.text_stats import count_tokens_accurate
 
 logger = logging.getLogger(__name__)
 
@@ -1488,14 +1489,14 @@ def setup_api(app: Flask) -> Blueprint:
             total_files = 0
             supported_extensions = {'.txt', '.md', '.rst', '.py', '.json'}
             
-            # Count tokens in all supported files
+            # Count tokens in all supported files using accurate token counting
             for file_path in dataset_dir.rglob('*'):
                 if file_path.is_file() and file_path.suffix.lower() in supported_extensions:
                     try:
                         with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
                             content = f.read()
-                            # Simple token estimation: split by whitespace and punctuation
-                            tokens = len(re.findall(r'\b\w+\b', content))
+                            # Use accurate token counting instead of regex word matching
+                            tokens = count_tokens_accurate(content)
                             total_tokens += tokens
                             total_files += 1
                     except Exception as e:
@@ -1536,7 +1537,7 @@ def setup_api(app: Flask) -> Blueprint:
         return jsonify({
             'success': True,
             'status': 'ok',
-            'version': '0.3.5'
+            'version': '0.3.6'
         })
     
     @bp.route('/model/status', methods=['GET'])

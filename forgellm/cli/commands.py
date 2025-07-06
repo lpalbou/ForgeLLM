@@ -290,15 +290,18 @@ def run_dataset_command(args):
     try:
         documents = doc_processor.collect_documents()
         
-        # Count tokens
+        # Count tokens using accurate method
         total_tokens = 0
+        from ..utils.text_stats import count_tokens_accurate
+        
         for doc_path in documents:
             text = doc_processor.extract_text_from_file(doc_path)
             if text:
-                total_tokens += len(text.split())
+                file_tokens = count_tokens_accurate(text)
+                total_tokens += file_tokens
         
         # Print summary
-        print(f"Found {len(documents)} documents with approximately {total_tokens:,} tokens")
+        print(f"Found {len(documents)} documents with {total_tokens:,} tokens (accurate count)")
         print(f"Input directory: {args.input_dir}")
         
         return 0

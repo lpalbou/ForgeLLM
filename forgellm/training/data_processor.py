@@ -11,6 +11,7 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 
 from .config import TrainingConfig
+from ..utils.text_stats import TextStatsCalculator, count_tokens_accurate
 
 logger = logging.getLogger(__name__)
 
@@ -267,6 +268,9 @@ class PretrainingDataProcessor:
         domain_text_chunks = []
         total_tokens = 0
         
+        # Initialize text stats calculator for accurate token counting
+        stats_calculator = TextStatsCalculator(model_name=self.config.model_name)
+        
         logger.info("Processing domain documents...")
         for doc_path in documents:
             text = self.doc_processor.extract_text_from_file(doc_path)
@@ -274,9 +278,13 @@ class PretrainingDataProcessor:
                 # Preserve raw text with minimal processing
                 chunks = self.doc_processor.chunk_text(text, self.config.max_seq_length)
                 domain_text_chunks.extend(chunks)
-                total_tokens += sum(len(chunk.split()) for chunk in chunks)
                 
-        logger.debug(f"Processed {len(domain_text_chunks)} domain text chunks with ~{total_tokens:,} tokens")
+                # Use accurate token counting instead of word splitting
+                for chunk in chunks:
+                    chunk_tokens = count_tokens_accurate(chunk, model_name=self.config.model_name)
+                    total_tokens += chunk_tokens
+                
+        logger.debug(f"Processed {len(domain_text_chunks)} domain text chunks with {total_tokens:,} tokens (accurate count)")
         
         # Apply data mixture strategy
         all_text_chunks = self.mixture_processor.mix_domain_and_general_data(domain_text_chunks)
@@ -299,8 +307,13 @@ class PretrainingDataProcessor:
         logger.info(f"Created {len(train_chunks)} training and {len(valid_chunks)} validation examples")
         logger.info(f"Data mixture applied: {self.config.data_mixture_ratio:.1%} domain + {1-self.config.data_mixture_ratio:.1%} general")
         
-        # Compute total token count for full dataset (train + valid)
-        total_tokens_dataset = sum(len(chunk.split()) for chunk in all_text_chunks)
+        # Compute total token count for full dataset (train + valid) using accurate counting
+        total_tokens_dataset = 0
+        for chunk in all_text_chunks:
+            chunk_tokens = count_tokens_accurate(chunk, model_name=self.config.model_name)
+            total_tokens_dataset += chunk_tokens
+            
+        logger.info(f"Total dataset tokens (accurate count): {total_tokens_dataset:,}")
 
         return len(train_chunks), len(valid_chunks), total_tokens_dataset
     

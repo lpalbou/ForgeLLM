@@ -684,10 +684,11 @@ def start_repl(model_name, adapter_path=None, max_tokens=100, temperature=0.7):
                     'content': response_text.strip()
                 })
                 
-                # Update stats (rough token estimates)
+                # Update stats (accurate token counts using the tokenizer)
                 session_stats['turns'] += 1
-                session_stats['prompt_tokens'] += len(full_prompt.split())
-                session_stats['response_tokens'] += len(response_text.split())
+                # Use the actual tokenizer for accurate token counting
+                session_stats['prompt_tokens'] += len(tokenizer.encode(full_prompt))
+                session_stats['response_tokens'] += len(tokenizer.encode(response_text))
                 
             except KeyboardInterrupt:
                 print("\n\n👋 Goodbye!")

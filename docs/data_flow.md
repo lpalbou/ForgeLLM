@@ -6,7 +6,104 @@ This document provides a detailed explanation of how data flows through ForgeLLM
 
 ## Core Data Flow Patterns
 
-### 1. Training Data Flow
+### 1. Text Statistics & Token Counting
+
+ForgeLLM uses a centralized text statistics system to ensure consistent and accurate token counting across all components.
+
+```mermaid
+graph TB
+    subgraph "Text Input Sources"
+        DATASET["📂 Dataset Files"]
+        CHAT["💬 Chat Messages"]
+        TRAINING["🚀 Training Data"]
+        CLI["⌨️ CLI Commands"]
+    end
+    
+    subgraph "Centralized Text Statistics"
+        CALCULATOR["🧮 TextStatsCalculator<br/>forgellm/utils/text_stats.py"]
+        TOKENIZER_MLX["🔧 MLX Tokenizer<br/>(Most Accurate)"]
+        TOKENIZER_HF["🔧 HuggingFace Tokenizer<br/>(Fallback)"]
+        TIKTOKEN["🔧 TikToken<br/>(GPT-4 Style)"]
+        WORD_EST["📝 Word Estimation<br/>(Last Resort)"]
+    end
+    
+    subgraph "Output Statistics"
+        TOKENS["🎯 Accurate Token Count"]
+        WORDS["📝 Word Count"]
+        LINES["📏 Line Count"]
+        PAGES["📄 Page Estimate"]
+        METADATA["📊 Tokenizer Used"]
+    end
+    
+    DATASET --> CALCULATOR
+    CHAT --> CALCULATOR
+    TRAINING --> CALCULATOR
+    CLI --> CALCULATOR
+    
+    CALCULATOR --> TOKENIZER_MLX
+    CALCULATOR --> TOKENIZER_HF
+    CALCULATOR --> TIKTOKEN
+    CALCULATOR --> WORD_EST
+    
+    TOKENIZER_MLX --> TOKENS
+    TOKENIZER_HF --> TOKENS
+    TIKTOKEN --> TOKENS
+    WORD_EST --> TOKENS
+    
+    CALCULATOR --> WORDS
+    CALCULATOR --> LINES
+    CALCULATOR --> PAGES
+    CALCULATOR --> METADATA
+    
+    style CALCULATOR fill:#e3f2fd
+    style TOKENS fill:#e8f5e8
+    style TOKENIZER_MLX fill:#fff3e0
+```
+
+#### Token Counting Priority System
+
+1. **MLX Tokenizer** (Highest Accuracy)
+   - Uses the actual model's tokenizer
+   - Perfect alignment with training/inference
+   - Available when model is loaded
+
+2. **HuggingFace Tokenizer** (High Accuracy)
+   - Model-specific tokenization
+   - Good fallback when MLX unavailable
+   - Supports most model architectures
+
+3. **TikToken** (Good Approximation)
+   - GPT-4 style tokenization
+   - Consistent cross-model estimates
+   - Available without model loading
+
+4. **Word Estimation** (Last Resort)
+   - 1.4x word count multiplier
+   - Used when no tokenizer available
+   - Consistent but less accurate
+
+#### Usage Examples
+
+```python
+# Basic token counting
+from forgellm.utils.text_stats import count_tokens_accurate
+tokens = count_tokens_accurate("Your text here")
+
+# Comprehensive statistics
+from forgellm.utils.text_stats import get_text_stats
+stats = get_text_stats("Your text here")
+# Returns: tokens, words, lines, pages, chars, tokenizer_used
+
+# With specific tokenizer
+tokens = count_tokens_accurate("Text", tokenizer=model_tokenizer)
+
+# Validation against old methods
+from forgellm.utils.text_stats import validate_token_count
+validation = validate_token_count("Text", old_count=50)
+# Returns accuracy analysis and recommendations
+```
+
+### 2. Training Data Flow
 
 ```mermaid
 graph TB
@@ -78,7 +175,7 @@ graph TB
    # Maintains general capabilities
    ```
 
-### 2. Model Inference Data Flow
+### 3. Model Inference Data Flow
 
 ```mermaid
 sequenceDiagram
@@ -138,7 +235,7 @@ sequenceDiagram
            return prompt  # BASE model - use as-is
    ```
 
-### 3. Training Workflow
+### 4. Training Workflow
 
 ```mermaid
 graph TB
