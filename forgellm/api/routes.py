@@ -422,31 +422,37 @@ def setup_api(app: Flask) -> Blueprint:
             
             while time.time() - start_time < max_wait_time:
                 status = model_manager.get_status()
+                elapsed = round(time.time() - start_time, 2)
+                logger.info(f"🔄 Polling status at {elapsed}s: {status}")
                 
                 if status.get('loaded'):
                     # Model successfully loaded
+                    logger.info(f"✅ Model loaded after {elapsed}s")
                     return jsonify({
                         'success': True,
                         'message': f'Model {model_name} loaded successfully',
                         'model_name': model_name,
                         'adapter_path': final_adapter_path,
                         'original_adapter_selection': adapter_path,
-                        'loading_time': round(time.time() - start_time, 2)
+                        'loading_time': elapsed
                     })
                 elif status.get('error'):
                     # Loading failed with error
+                    logger.error(f"❌ Model loading failed after {elapsed}s: {status.get('error')}")
                     return jsonify({
                         'success': False,
                         'error': f'Model loading failed: {status.get("error")}'
                     }), 500
                 elif not status.get('is_loading', True):
                     # Not loading anymore but not loaded either
+                    logger.error(f"❌ Model loading stopped unexpectedly after {elapsed}s")
                     return jsonify({
                         'success': False,
                         'error': 'Model loading stopped unexpectedly'
                     }), 500
                 
                 # Still loading, wait and check again
+                logger.info(f"⏳ Still loading at {elapsed}s, waiting...")
                 time.sleep(poll_interval)
             
             # Timeout reached

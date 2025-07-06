@@ -1343,6 +1343,12 @@ class TrainingInterface {
     }
     
     async loadModel() {
+        // Prevent multiple simultaneous load operations
+        if (this.isLoadingModel) {
+            console.log('🚫 Model loading already in progress, ignoring click');
+            return;
+        }
+        
         const modelSelect = document.getElementById('test-model-select');
         const adapterSelect = document.getElementById('adapter-path');
         const systemPrompt = document.getElementById('system-prompt');
@@ -1354,48 +1360,52 @@ class TrainingInterface {
         console.log(`🚀 loadModel() called with:`);
         console.log(`   🤖 Base model: "${model}"`);
         console.log(`   📂 Adapter: "${adapter}"`);
-        console.log(`   💬 System prompt: "${prompt}"`);
-        console.log(`   📊 Form element states:`);
-        console.log(`      - Model select has ${modelSelect.options.length} options`);
-        console.log(`      - Adapter select has ${adapterSelect.options.length} options`);
-        console.log(`      - Model select index: ${modelSelect.selectedIndex}`);
-        console.log(`      - Adapter select index: ${adapterSelect.selectedIndex}`);
-        
-        // If adapter is selected but no base model, let the server handle auto-detection
-        if (adapter && !model) {
-            console.log('🔄 Adapter-only selection detected, sending to server for auto-detection');
-            // Continue with normal loading - server will auto-detect base model
-        }
         
         if (!model && !adapter) {
             this.showAlert('Please select a base model or adapter', 'warning');
             return;
         }
         
-        this.showLoading('Loading model...');
+        // Set loading state immediately
+        this.isLoadingModel = true;
         
-        // Disable the load button during loading
-        const loadButton = document.getElementById('load-model-btn');
-        loadButton.disabled = true;
+        // Show loading and disable UI immediately
+        this.showLoading('Preparing to load model...');
+        this.setLoadingState(true);
         
         try {
-            // If adapter is a .safetensors file, use its directory for MLX-LM
+            // Step 1: Force unload with visible feedback
+            console.log('🔄 Step 1: Unloading any existing model...');
+            this.showLoading('Unloading existing model...');
+            
+            const unloadResponse = await fetch('/api/model/unload', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            });
+            
+            if (unloadResponse.ok) {
+                console.log('✅ Model unloaded successfully');
+            } else {
+                console.log('⚠️ Unload failed, continuing anyway');
+            }
+            
+            // Small delay to ensure unload is processed
+            await new Promise(resolve => setTimeout(resolve, 100));
+            
+            // Step 2: Load new model with visible feedback
+            console.log('🔄 Step 2: Loading new model...');
+            this.showLoading('Loading model...');
+            
             const actualAdapterPath = adapter && adapter.endsWith('.safetensors') 
                 ? adapter.substring(0, adapter.lastIndexOf('/'))
                 : adapter;
             
-            console.log(`🚀 Loading model: ${model}`);
-            if (adapter) {
-                console.log(`📂 Original adapter selection: ${adapter}`);
-                console.log(`📂 Using adapter directory for MLX-LM: ${actualAdapterPath}`);
-                console.log(`📂 Is .safetensors file: ${adapter.endsWith('.safetensors')}`);
-            }
+            const startTime = Date.now();
+            console.log(`⏱️ Starting model load at: ${startTime}`);
             
             const response = await fetch('/api/model/load', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     model_name: model,
                     adapter_path: actualAdapterPath,
@@ -1403,20 +1413,21 @@ class TrainingInterface {
                 })
             });
             
+            const endTime = Date.now();
+            const duration = endTime - startTime;
+            console.log(`⏱️ Model load completed in: ${duration}ms`);
+            
             const data = await response.json();
+            console.log(`📡 Load response:`, data);
             
             if (data.success) {
-                // Model is now fully loaded (API waits for completion)
                 this.modelLoaded = true;
                 this.updateModelButtons(true);
                 
-                // Use the actual model name and adapter path from the server response
                 const actualModel = data.model_name || model;
                 const actualAdapter = data.adapter_path || adapter;
-                
                 this.updateModelStatus(actualModel, actualAdapter);
                 
-                // Show appropriate success message with loading time
                 const loadingTime = data.loading_time ? ` (${data.loading_time}s)` : '';
                 if (!model && adapter && data.model_name) {
                     this.showAlert(
@@ -1429,16 +1440,13 @@ class TrainingInterface {
                     this.showAlert(`Model loaded successfully${loadingTime}`, 'success');
                 }
                 
-                // Check for training dashboard
                 this.checkForTrainingDashboard(model);
                 
-                // Initialize chat if not already done
                 if (!this.chatInitialized) {
                     this.initChatToolbar();
                     this.chatInitialized = true;
                 }
                 
-                // Clear any existing chat history and show ready message
                 document.getElementById('chat-history').innerHTML = `
                     <div class="text-center text-muted mt-3 mb-3">
                         <i class="fas fa-robot fa-2x mb-3"></i>
@@ -1446,28 +1454,51 @@ class TrainingInterface {
                     </div>
                 `;
                 
-                // Reset all token counters
                 this.currentTokenCount = 0;
                 this.promptTokens = 0;
                 this.completionTokens = 0;
                 this.conversationTokens = 0;
                 this.updateChatStats();
                 
-                // Enable chat buttons
                 document.getElementById('clear-chat-btn').disabled = false;
             } else {
+                console.error(`❌ Model loading failed:`, data.error);
                 this.showAlert(`Error: ${data.error}`, 'danger');
             }
+            
         } catch (error) {
-            console.error('Error loading model:', error);
+            console.error('❌ Error in model loading process:', error);
             this.showAlert('Failed to load model', 'danger');
         } finally {
+            // Always clean up state
+            this.isLoadingModel = false;
             this.hideLoading();
-            
-            // Re-enable the load button
-            const loadButton = document.getElementById('load-model-btn');
-            loadButton.disabled = false;
+            this.setLoadingState(false);
+            console.log('🔄 Model loading process completed');
         }
+    }
+    
+    setLoadingState(loading) {
+        const loadButton = document.getElementById('load-model-btn');
+        const unloadButton = document.getElementById('unload-model-btn');
+        const generateButton = document.getElementById('send-message-btn');
+        
+        if (loadButton) {
+            loadButton.disabled = loading;
+            loadButton.innerHTML = loading 
+                ? '<i class="fas fa-spinner fa-spin me-2"></i>Loading...' 
+                : '<i class="fas fa-download me-2"></i>Load Model';
+        }
+        
+        if (unloadButton) {
+            unloadButton.disabled = loading;
+        }
+        
+        if (generateButton) {
+            generateButton.disabled = loading;
+        }
+        
+        console.log(`🔘 Set loading state: ${loading}`);
     }
 
     async loadAdapterWithAutoDetectedBase(adapterPath, systemPrompt) {
@@ -2594,23 +2625,33 @@ ${content.trim()}
     }
     
     showLoading(message = 'Loading...') {
+        console.log(`🔄 showLoading called with message: "${message}"`);
         const loadingOverlay = document.getElementById('loading-overlay');
         const loadingMessage = document.getElementById('loading-message');
         
+        console.log(`🔄 Loading overlay element: ${loadingOverlay ? 'found' : 'NOT FOUND'}`);
+        console.log(`🔄 Loading message element: ${loadingMessage ? 'found' : 'NOT FOUND'}`);
+        
         if (loadingMessage) {
             loadingMessage.textContent = message;
+            console.log(`🔄 Set loading message to: "${loadingMessage.textContent}"`);
         }
         
         if (loadingOverlay) {
             loadingOverlay.classList.remove('d-none');
+            console.log(`🔄 Removed d-none class. Current classes: "${loadingOverlay.className}"`);
         }
     }
     
     hideLoading() {
+        console.log(`🔄 hideLoading called`);
         const loadingOverlay = document.getElementById('loading-overlay');
+        
+        console.log(`🔄 Loading overlay element: ${loadingOverlay ? 'found' : 'NOT FOUND'}`);
         
         if (loadingOverlay) {
             loadingOverlay.classList.add('d-none');
+            console.log(`🔄 Added d-none class. Current classes: "${loadingOverlay.className}"`);
         }
     }
     

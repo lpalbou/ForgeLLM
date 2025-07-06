@@ -145,6 +145,14 @@ class ModelManager:
         # Check if the model server is running
         self._ensure_server_running()
         
+        # CRITICAL: Reset state immediately when starting a new load
+        logger.info(f"🔄 Resetting ModelManager state for new load: {model_name}")
+        self.model_name = model_name
+        self.adapter_path = adapter_path
+        self.loading = True
+        self.loaded = False
+        self.error = None
+        
         # Send request to load the model
         data = {
             'model_name': model_name,
@@ -163,13 +171,6 @@ class ModelManager:
                 if result.get('success'):
                     logger.info(f"Model {model_name} loading started")
                     
-                    # Update state
-                    self.model_name = model_name
-                    self.adapter_path = adapter_path
-                    self.loading = True
-                    self.loaded = False
-                    self.error = None
-                    
                     # Start a thread to check loading status
                     threading.Thread(target=self._check_loading_status).start()
                     
@@ -177,14 +178,17 @@ class ModelManager:
                 else:
                     logger.error(f"Failed to load model: {result.get('error')}")
                     self.error = result.get('error')
+                    self.loading = False
                     return False
             else:
                 logger.error(f"Failed to load model: {response.status_code} {response.text}")
                 self.error = f"HTTP error: {response.status_code}"
+                self.loading = False
                 return False
         except Exception as e:
             logger.error(f"Error loading model: {e}")
             self.error = str(e)
+            self.loading = False
             return False
     
     def _check_loading_status(self):
@@ -320,11 +324,35 @@ class ModelManager:
         Returns:
             dict: Status information.
         """
+        # If we're in the middle of loading, return our internal state
+        # This prevents race conditions with the model server status
+        if self.loading:
+            logger.info(f"🔄 ModelManager in loading state, returning internal status")
+            return {
+                'success': True,
+                'loaded': self.loaded,
+                'is_loading': self.loading,
+                'model_name': self.model_name,
+                'adapter_path': self.adapter_path,
+                'error': self.error
+            }
+        
+        # Otherwise, get status from model server
         try:
             response = requests.get(f"{self.server_url}/api/model/status", timeout=5)
             
             if response.status_code == 200:
-                return response.json()
+                server_status = response.json()
+                
+                # Update our internal state to match server
+                if not self.loading:
+                    self.loaded = server_status.get('loaded', False)
+                    if server_status.get('model_name'):
+                        self.model_name = server_status.get('model_name')
+                    if server_status.get('adapter_path') is not None:
+                        self.adapter_path = server_status.get('adapter_path')
+                
+                return server_status
             else:
                 logger.error(f"Failed to get status: {response.status_code} {response.text}")
                 return {
