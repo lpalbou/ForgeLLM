@@ -4,10 +4,16 @@ ForgeLLM is a comprehensive platform for continued pre-training and instruction 
 
 ## What ForgeLLM Does
 
-- **🚀 Training**: Continued pre-training (CPT) via web interface *(IFT coming soon - see [Development Perspectives](docs/perspectives.md))*
-- **💬 Chat & Testing**: Interactive chat with models and adapters via CLI or web
-- **📊 Monitoring**: Real-time training dashboards and checkpoint management
-- **📦 Publishing**: Convert and publish trained models with comprehensive documentation
+- **🚀 Train**: Continued pre-training (CPT) via web interface *(IFT coming soon - see [Development Perspectives](docs/perspectives.md))*
+- **📊 Monitor**: Real-time training dashboards and checkpoint management
+- **🔗 Fuse**: Merge LoRA/DoRA adapters with base models for deployment
+- **⚡ Quantize**: Convert models to 8-bit or 4-bit precision for efficient deployment
+- **💬 Chat & Test**: Interactive chat with models and adapters via CLI or web
+- **📦 Publish**: Convert and publish trained models with comprehensive documentation
+
+![Training](docs/assets/training-tab.png)
+![Monitoring](docs/assets/monitoring-tab.png)
+![Testing](docs/assets/testing-tab.png)
 
 ## Quick Start
 
