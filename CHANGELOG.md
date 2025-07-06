@@ -5,7 +5,7 @@ All notable changes to ForgetLLM will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.3.5] - 2025-07-01 (ongoing)
+## [0.3.5] - 2025-07-05
 
 ### 🧠 Enhanced Markdown Rendering
 - **Thinking Blocks Feature**: Revolutionary `<think></think>` tag support in chat interface
@@ -30,6 +30,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Fixed model dropdown population issues in test interface
   - Enhanced model filtering to skip invalid model directories
 
+- **Synchronous Model Loading**: Complete overhaul of model loading in Testing tab
+  - Fixed missing loading indicators by implementing synchronous API responses
+  - Added proper progress monitoring with status polling until model is fully loaded
+  - Enhanced user feedback with loading overlays and button state management
+  - Eliminated premature success messages while models were still loading on server
+
 ### ⚡ Performance Metrics Restoration
 - **Token Speed Display**: Fixed missing tokens/second in generation stats
   - Restored `tokens_per_sec` calculation in both streaming and non-streaming responses
@@ -49,11 +55,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Improved thinking block styling for dark mode
   - Better color consistency across all UI elements
 
+- **Smart Scrolling for Streaming**: Intelligent chat auto-scroll behavior
+  - Only auto-scrolls during streaming when user is already at bottom of chat
+  - Preserves user's scroll position when reading earlier messages
+  - Maintains smooth UX without interrupting user interaction
+  - Applied to both streaming and non-streaming responses
+
+### 🔄 Model Fusion System
+- **Complete Fusion Implementation**: Full MLX-LM model fusion capability
+  - **Fusion Tab**: New dedicated interface for fusing foundation models with LoRA/DoRA adapters
+  - **Auto-Detection**: Automatic base model detection from adapter configuration files
+  - **Published Model Pattern**: Proper `models--published--` output path structure
+  - **Configuration Modal**: User-friendly interface for fusion customization
+    - Model suffix input (e.g., `_math`, `_reasoning`, `_mnemosyne`)
+    - Description field for README.md generation
+    - Real-time preview of final model name
+    - Enhanced text wrapping and layout for long model names
+
+- **Fusion Progress Monitoring**: Real-time fusion tracking
+  - Live progress bar with percentage completion
+  - Status messages and elapsed/remaining time estimates
+  - Background thread processing with MLX-LM fuse command
+  - Comprehensive error handling and user feedback
+
+- **Enhanced Success Display**: Professional completion interface
+  - Display of published model name in `published/model_name` format
+  - "Open Folder" button with tooltip for local model access
+  - Responsive layout handling long model names with proper text wrapping
+  - Cross-platform folder opening (macOS, Windows, Linux support)
+
 ### 🔧 Technical Infrastructure
 - **Model Directory Structure Analysis**: Comprehensive investigation of HuggingFace vs local model storage
   - Documented differences between HF cache symlink structure and local flat directories
   - Enhanced understanding of MLX-LM model saving patterns
   - Improved model path resolution logic for different storage types
+
+- **ModelFuser Architecture**: Robust fusion processing system
+  - Thread-safe background processing with progress tracking
+  - Intelligent adapter path resolution for both files and directories
+  - Comprehensive validation of base models and adapter files
+  - Automatic README.md generation with usage examples and metadata
 
 ### 🐛 Critical Bug Fixes
 - **Streaming Response Handling**: Fixed token count and speed display timing issues
@@ -61,11 +102,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CSS Specificity**: Resolved styling conflicts in chat interface
 - **Markdown Processing**: Fixed thinking block rendering interference with marked.js
 - **Cache Directory Navigation**: Proper handling of HuggingFace cache structure
+- **Modal Theme Support**: Fixed fusion configuration modal theme inheritance
+- **Text Overflow Issues**: Resolved layout problems with long model names in modals and success displays
+- **Duplicate Element IDs**: Fixed HTML validation issues with duplicate loading message elements
 
 ### 💡 Developer Experience
 - **Enhanced Error Messages**: Clear feedback when models aren't found locally
 - **Improved Logging**: Better debugging information for model loading and training processes
 - **Code Organization**: Cleaner separation between model types and storage patterns
+- **API Unification**: Consistent endpoint patterns across quantization and fusion systems
+- **Robust General-Purpose Logic**: Designed solutions to work for all inputs, not just test cases
 
 ## [0.3.0] - 2025-06-30
 
