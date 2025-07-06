@@ -416,6 +416,13 @@ class TrainingInterface {
             console.log('🔘 Load model button clicked');
             this.loadModel();
         });
+        
+        // Handle reset config button click
+        document.getElementById('reset-config-btn').addEventListener('click', (e) => {
+            e.preventDefault();
+            console.log('🔄 Reset config button clicked');
+            this.resetModelConfiguration();
+        });
     }
     
     async loadInitialData() {
@@ -498,6 +505,9 @@ class TrainingInterface {
         const select = document.getElementById(selectId);
         if (!select) return;
         
+        // Remember currently selected value so we can restore it after refresh
+        const previousValue = select.value;
+        
         // Clear existing options except the first one
         const firstOption = select.firstElementChild;
         select.innerHTML = '';
@@ -576,6 +586,12 @@ class TrainingInterface {
             option.textContent = `${icon}${model.name}${sizeStr}`;
             select.appendChild(option);
         });
+        
+        // Restore previous selection if it still exists
+        if (previousValue && [...select.options].some(o => o.value === previousValue)) {
+            select.value = previousValue;
+            console.log(`🔄 Restored model selection for ${selectId}: ${previousValue}`);
+        }
     }
     
     async loadCheckpoints() {
@@ -832,10 +848,18 @@ class TrainingInterface {
     
     updateAdapterSelect(trainingSessions) {
         const select = document.getElementById('adapter-path');
+        
+        // Remember currently selected value so we can restore it after refresh
+        const previousValue = select.value;
+        
         select.innerHTML = '<option value="">No adapter (base model only)</option>';
         
         // Load checkpoints separately from the checkpoints API
         this.loadAdapterCheckpoints();
+        
+        // Restore previous selection if still present after loading checkpoints
+        // We'll do this in loadAdapterCheckpoints() since it's async
+        this.previousAdapterSelection = previousValue;
     }
     
     async loadAdapterCheckpoints() {
@@ -877,6 +901,15 @@ class TrainingInterface {
                     option.textContent = `${modelName}${typeInfo} - iter ${iteration} ${size}`;
                     select.appendChild(option);
                 });
+                
+                // Restore previous selection if it was saved and still exists
+                if (this.previousAdapterSelection && [...select.options].some(o => o.value === this.previousAdapterSelection)) {
+                    select.value = this.previousAdapterSelection;
+                    console.log(`🔄 Restored adapter selection: ${this.previousAdapterSelection}`);
+                }
+                
+                // Clear the stored selection
+                this.previousAdapterSelection = null;
             }
         } catch (error) {
             console.error('Error loading adapter checkpoints:', error);
@@ -1658,6 +1691,123 @@ class TrainingInterface {
         } catch (error) {
             console.error('Error unloading model:', error);
             this.showAlert('Error unloading model', 'danger');
+        } finally {
+            this.hideLoading();
+        }
+    }
+    
+    async resetModelConfiguration() {
+        console.log('🔄 Resetting model configuration to defaults...');
+        
+        // Show confirmation dialog
+        if (!confirm('Are you sure you want to reset all model configuration to defaults? This will unload any currently loaded model and clear all selections.')) {
+            return;
+        }
+        
+        this.showLoading('Resetting configuration...');
+        
+        try {
+            // First, unload any currently loaded model
+            if (this.modelLoaded) {
+                console.log('🔄 Unloading current model before reset...');
+                await fetch('/api/model/unload', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+            }
+            
+            // Reset model selections
+            console.log('🔄 Resetting model and adapter selections...');
+            const modelSelect = document.getElementById('test-model-select');
+            const adapterSelect = document.getElementById('adapter-path');
+            const systemPrompt = document.getElementById('system-prompt');
+            
+            if (modelSelect) {
+                modelSelect.value = '';
+                console.log('✅ Reset base model selection');
+            }
+            
+            if (adapterSelect) {
+                adapterSelect.value = '';
+                console.log('✅ Reset adapter selection');
+            }
+            
+            if (systemPrompt) {
+                systemPrompt.value = '';
+                console.log('✅ Reset system prompt');
+            }
+            
+            // Reset generation parameters to defaults
+            console.log('🔄 Resetting generation parameters to defaults...');
+            const maxTokens = document.getElementById('max-tokens');
+            const maxKvSize = document.getElementById('max-kv-size');
+            const temperature = document.getElementById('temperature');
+            const topP = document.getElementById('top-p');
+            const repetitionPenalty = document.getElementById('repetition-penalty');
+            const streaming = document.getElementById('streaming-toggle');
+            
+            if (maxTokens) {
+                maxTokens.value = '2000';
+                console.log('✅ Reset max tokens to 2000');
+            }
+            
+            if (maxKvSize) {
+                maxKvSize.value = '16384';
+                console.log('✅ Reset context window to 16K');
+            }
+            
+            if (temperature) {
+                temperature.value = '0.7';
+                console.log('✅ Reset temperature to 0.7');
+            }
+            
+            if (topP) {
+                topP.value = '0.9';
+                console.log('✅ Reset top-p to 0.9');
+            }
+            
+            if (repetitionPenalty) {
+                repetitionPenalty.value = '1.1';
+                console.log('✅ Reset repetition penalty to 1.1');
+            }
+            
+            if (streaming) {
+                streaming.checked = true;
+                console.log('✅ Reset streaming to enabled');
+            }
+            
+            // Reset model state
+            this.modelLoaded = false;
+            this.updateModelButtons(false);
+            this.updateModelStatus();
+            
+            // Clear chat history
+            console.log('🔄 Clearing chat history...');
+            document.getElementById('chat-history').innerHTML = `
+                <div class="d-flex flex-column align-items-center justify-content-center h-100 text-muted" id="chat-welcome">
+                    <i class="fas fa-robot fa-3x mb-3" style="color: var(--text-muted);"></i>
+                    <p class="text-center">Load a model to start chatting!</p>
+                </div>
+            `;
+            
+            // Reset chat stats
+            this.currentTokenCount = 0;
+            this.promptTokens = 0;
+            this.completionTokens = 0;
+            this.conversationTokens = 0;
+            this.updateChatStats();
+            
+            // Hide chat input container and disable buttons
+            document.getElementById('chat-input-container').classList.add('d-none');
+            document.getElementById('clear-chat-btn').disabled = true;
+            document.getElementById('save-chat-btn').disabled = true;
+            
+            this.showAlert('Configuration reset to defaults successfully', 'success');
+            console.log('✅ Model configuration reset completed');
+            
+        } catch (error) {
+            console.error('❌ Error resetting configuration:', error);
+            this.showAlert('Failed to reset configuration', 'danger');
         } finally {
             this.hideLoading();
         }

@@ -1856,13 +1856,18 @@
                                         </div>
                                     </div>
                                     
-                                    <div class="d-grid gap-2 d-md-flex justify-content-md-end">
-                                        <button type="button" class="btn btn-danger me-md-2" id="unload-model-btn" disabled>
-                                            <i class="fas fa-times me-2"></i>Unload Model
+                                    <div class="d-grid gap-2 d-md-flex justify-content-md-start">
+                                        <button type="button" class="btn btn-warning me-md-2" id="reset-config-btn" title="Reset all parameters to defaults and unload current model">
+                                            <i class="fas fa-undo me-2"></i>Reset
                                         </button>
-                                        <button type="button" class="btn btn-primary" id="load-model-btn">
-                                            <i class="fas fa-download me-2"></i>Load Model
-                                        </button>
+                                        <div class="ms-auto d-flex gap-2">
+                                            <button type="button" class="btn btn-danger me-md-2" id="unload-model-btn" disabled>
+                                                <i class="fas fa-times me-2"></i>Unload Model
+                                            </button>
+                                            <button type="button" class="btn btn-primary" id="load-model-btn">
+                                                <i class="fas fa-download me-2"></i>Load Model
+                                            </button>
+                                        </div>
                                     </div>
                                 </form>
                             </div>
