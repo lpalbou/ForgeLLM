@@ -97,15 +97,13 @@ class TextStatsCalculator:
         Count tokens using the most accurate method available.
         
         Priority order:
-        1. Provided tokenizer (most accurate)
-        2. Fallback tokenizer for model
-        3. Estimated count using tiktoken (GPT-style)
-        4. Word-based estimation (least accurate, last resort)
+        1. Provided tokenizer (most accurate, if available)
+        2. tiktoken with cl100k_base (downloaded once, works for all models)
+        3. Word-based estimation (fallback)
         
-        Returns:
-            Tuple of (token_count, tokenizer_method_used)
+        NEVER DOWNLOADS MODEL-SPECIFIC TOKENIZERS - use tiktoken for all models.
         """
-        # Method 1: Use provided tokenizer (MLX or HuggingFace)
+        # Method 1: Use provided tokenizer if available (most accurate)
         if self.tokenizer is not None:
             try:
                 if hasattr(self.tokenizer, 'encode'):
@@ -120,58 +118,27 @@ class TextStatsCalculator:
             except Exception as e:
                 logger.warning(f"Failed to use provided tokenizer: {e}")
         
-        # Method 2: Try to load fallback tokenizer for the model
-        if self.model_name and not self._fallback_tokenizer:
-            try:
-                self._fallback_tokenizer = self._load_fallback_tokenizer()
-                if self._fallback_tokenizer:
-                    tokens = len(self._fallback_tokenizer.encode(text))
-                    return tokens, f"fallback_tokenizer_{self.model_name}"
-            except Exception as e:
-                logger.warning(f"Failed to load fallback tokenizer for {self.model_name}: {e}")
-        
-        # Method 3: Use tiktoken for GPT-style estimation (good general approximation)
+        # Method 2: Use tiktoken cl100k_base (downloaded once, works for all models)
         try:
             import tiktoken
-            # Use cl100k_base encoding (GPT-4 style) as a reasonable approximation
             enc = tiktoken.get_encoding("cl100k_base")
-            tokens = len(enc.encode(text))
-            return tokens, "tiktoken_cl100k_base"
-        except ImportError:
-            logger.debug("tiktoken not available, falling back to estimation")
+            tokens = enc.encode(text)
+            return len(tokens), "tiktoken_cl100k_base"
         except Exception as e:
-            logger.warning(f"tiktoken encoding failed: {e}")
+            logger.warning(f"Failed to use tiktoken: {e}")
         
-        # Method 4: Word-based estimation (least accurate, but consistent)
-        # Research shows that for English text, the average is ~1.3-1.5 tokens per word
-        # We use 1.4 as a reasonable middle ground
+        # Method 3: Word-based estimation (no downloads, always works)
         words = len(text.split())
-        estimated_tokens = int(words * 1.4)
-        return estimated_tokens, "word_estimation_1.4x"
+        estimated_tokens = int(words * 1.4)  # Conservative estimate
+        return estimated_tokens, "word_estimation"
     
     def _load_fallback_tokenizer(self):
         """
         Try to load a tokenizer for the current model as fallback.
+        NEVER DOWNLOAD MODEL-SPECIFIC TOKENIZERS - only use tiktoken's cl100k_base.
         """
-        if not self.model_name:
-            return None
-            
-        try:
-            # Try MLX tokenizer loading first
-            from mlx_lm import load
-            _, tokenizer = load(self.model_name)
-            return tokenizer
-        except Exception as e:
-            logger.debug(f"Failed to load MLX tokenizer for {self.model_name}: {e}")
-            
-        try:
-            # Try HuggingFace tokenizer loading
-            from transformers import AutoTokenizer
-            tokenizer = AutoTokenizer.from_pretrained(self.model_name)
-            return tokenizer
-        except Exception as e:
-            logger.debug(f"Failed to load HuggingFace tokenizer for {self.model_name}: {e}")
-            
+        # EXPLICITLY FORBIDDEN: Never download model-specific tokenizers
+        # tiktoken's cl100k_base is downloaded once and works for all models
         return None
     
     def _empty_stats(self) -> Dict[str, Union[int, float]]:
