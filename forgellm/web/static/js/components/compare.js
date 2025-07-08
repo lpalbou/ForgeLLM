@@ -25,9 +25,8 @@ async function restoreSelectedSessions() {
                 
                 // Then check each stored session ID and select it if available
                 for (const sessionId of sessionsArray) {
-                    const checkbox = document.getElementById(`session-${sessionId}`);
-                    if (checkbox) {
-                        checkbox.checked = true;
+                    const sessionCard = document.querySelector(`#session-card-${sessionId}`);
+                    if (sessionCard) {
                         await handleSessionChange(sessionId, true);
                     }
                 }
@@ -67,49 +66,45 @@ function sortSessions(sessions) {
 // Function to extract training parameters for tooltip
 function getTrainingParameters(session) {
     const sessionName = session.session_name || '';
-    const params = {
-        learningRate: 'Unknown',
-        batchSize: 'Unknown',
-        iterations: session.latest_iteration || 'Unknown',
-        sequenceLength: 'Unknown',
-        trainingType: 'Unknown'
-    };
     
-    // Extract from session name (pattern: model_lr_bs_iter_seq_date)
-    const parts = sessionName.split('_');
-    
-    // Look for learning rate (lr1e_05 -> 1e-05)
+    // Extract values directly from session name using regex
     const lrMatch = sessionName.match(/lr(\d+e?_?\d*)/i);
-    if (lrMatch) {
-        params.learningRate = lrMatch[1].replace('_', '-');
-    }
-    
-    // Look for batch size (bs5 -> 5)
     const bsMatch = sessionName.match(/bs(\d+)/i);
-    if (bsMatch) {
-        params.batchSize = bsMatch[1];
-    }
-    
-    // Look for sequence length (seq3072 -> 3072)
     const seqMatch = sessionName.match(/seq(\d+)/i);
-    if (seqMatch) {
-        params.sequenceLength = seqMatch[1];
-    }
     
     // Determine training type based on folder structure
+    let trainingType = '';
+    let fineTuneType = '';
+    
     if (session.log_file) {
         if (session.log_file.includes('/cpt/')) {
-            params.trainingType = 'CPT (Continued Pre-training)';
+            trainingType = 'CPT (Continued Pre-training)';
         } else if (session.log_file.includes('/ift/')) {
-            params.trainingType = 'IFT (Instruction Fine-tuning)';
-        } else if (session.log_file.includes('lora')) {
-            params.trainingType = 'LoRA';
+            trainingType = 'IFT (Instruction Fine-tuning)';
+        }
+        
+        if (session.log_file.includes('lora')) {
+            fineTuneType = 'LoRA';
         } else if (session.log_file.includes('dora')) {
-            params.trainingType = 'DoRA';
+            fineTuneType = 'DoRA';
+        } else {
+            fineTuneType = 'Full';
         }
     }
     
-    return params;
+    return {
+        learningRate: lrMatch ? lrMatch[1].replace('_', '-') : '',
+        batchSize: bsMatch ? bsMatch[1] : '',
+        iterations: session.latest_iteration || '',
+        sequenceLength: seqMatch ? seqMatch[1] : '',
+        trainingType: trainingType,
+        fineTuneType: fineTuneType
+    };
+}
+
+// Format values to avoid showing empty strings
+function formatValue(value) {
+    return value === '' ? '-' : value;
 }
 
 // Load and display sessions
@@ -121,12 +116,6 @@ async function loadSessions() {
         
         // Handle different API response formats
         let sessions = data.training_sessions || data.sessions || data || [];
-        
-        // Debug session structure
-        if (sessions.length > 0) {
-            console.log('First session structure:', sessions[0]);
-            console.log('Session ID format:', sessions[0].session_id || sessions[0].id);
-        }
         
         const container = document.getElementById('compare-sessions-list');
         if (!container) return;
@@ -144,9 +133,6 @@ async function loadSessions() {
             // The session ID is the full directory name
             const sessionId = session.session_id || session.id || '';
             
-            // Debug session ID
-            console.log(`Session ${session.session_name || 'unnamed'} has ID: ${sessionId}`);
-            
             // Clean up model name by removing "dataset_cpt_" prefix
             const cleanModelName = (session.model_name || 'Unknown').replace(/^dataset_cpt_/, '');
             
@@ -156,62 +142,81 @@ async function loadSessions() {
             // Get training parameters for tooltip
             const params = getTrainingParameters(session);
             
+            // Build a simple tooltip with parameters
             const tooltipContent = `Training Parameters:
-• Type: ${params.trainingType}
-• Learning Rate: ${params.learningRate}
-• Batch Size: ${params.batchSize}
-• Iterations: ${params.iterations}
-• Sequence Length: ${params.sequenceLength}`;
+• Type: ${formatValue(params.trainingType)}
+• Fine-tune Type: ${formatValue(params.fineTuneType)}
+• Learning Rate: ${formatValue(params.learningRate)}
+• Batch Size: ${formatValue(params.batchSize)}
+• Iterations: ${formatValue(params.iterations)}
+• Sequence Length: ${formatValue(params.sequenceLength)}`;
+            
+            // Check if this session is selected
+            const isSelected = selectedSessions.has(sessionId);
+            const selectedClass = isSelected ? 'selected-session-card' : '';
             
             return `
                 <div class="session-item mb-2">
-                    <div class="form-check">
-                        <input class="form-check-input session-checkbox" type="checkbox" 
-                               id="session-${sessionId}" 
-                               value="${sessionId}"
-                               onchange="handleSessionChange('${sessionId}', this.checked)">
-                        <label class="form-check-label w-100" for="session-${sessionId}">
-                            <div class="session-card">
-                                <div class="session-header">
-                                    <div class="session-name">${session.session_name || session.name || 'Unnamed Session'}</div>
-                                    <div class="session-status">
-                                        <span class="badge bg-secondary">${session.latest_iteration || session.iterations || 'N/A'} iter</span>
-                                    </div>
-                                </div>
-                                <div class="session-details">
-                                    <div class="detail-row">
-                                        <span class="detail-label">Model:</span>
-                                        <span class="detail-value">${cleanModelName}</span>
-                                    </div>
-                                    <div class="detail-row">
-                                        <span class="detail-label">Started:</span>
-                                        <span class="detail-value">${startDate}</span>
-                                    </div>
-                                    <div class="detail-row">
-                                        <span class="detail-label">LR:</span>
-                                        <span class="detail-value">${params.learningRate}</span>
-                                    </div>
-                                </div>
-                                <div class="session-actions mt-2 pt-2 border-top">
-                                    <button class="btn btn-sm btn-outline-secondary view-params-btn" 
-                                            onclick="showSessionParameters('${sessionId}'); event.preventDefault(); event.stopPropagation();"
-                                            title="View Parameters">
-                                        <i class="fas fa-file-code"></i>
-                                    </button>
-                                    <button class="btn btn-sm btn-outline-secondary test-session-btn" 
-                                            onclick="testSessionInPlayground('${sessionId}'); event.preventDefault(); event.stopPropagation();"
-                                            title="Test in Playground">
-                                        <i class="fas fa-vial"></i>
-                                    </button>
-                                </div>
+                    <div class="session-card ${selectedClass}" 
+                         id="session-card-${sessionId}" 
+                         data-session-id="${sessionId}"
+                         data-bs-toggle="tooltip" 
+                         data-bs-placement="right" 
+                         data-bs-html="false"
+                         title="${tooltipContent}"
+                         onclick="handleSessionChange('${sessionId}', !selectedSessions.has('${sessionId}'))">
+                        <div class="session-header">
+                            <div class="session-name">${session.session_name || session.name || 'Unnamed Session'}</div>
+                            <div class="session-status">
+                                <span class="badge bg-secondary">${session.latest_iteration || session.iterations || 'N/A'} iter</span>
                             </div>
-                        </label>
+                        </div>
+                        <div class="session-details">
+                            <div class="detail-row">
+                                <span class="detail-label">Model:</span>
+                                <span class="detail-value">${cleanModelName}</span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="detail-label">Type:</span>
+                                <span class="detail-value">${formatValue(params.fineTuneType)}</span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="detail-label">Started:</span>
+                                <span class="detail-value">${startDate}</span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="detail-label">LR:</span>
+                                <span class="detail-value">${formatValue(params.learningRate)}</span>
+                            </div>
+                        </div>
+                        <div class="session-actions mt-2 pt-2 border-top">
+                            <button class="btn btn-sm btn-outline-secondary view-params-btn" 
+                                    onclick="showSessionParameters('${sessionId}'); event.preventDefault(); event.stopPropagation();"
+                                    title="View Parameters">
+                                <i class="fas fa-file-code"></i>
+                            </button>
+                            <button class="btn btn-sm btn-outline-secondary test-session-btn" 
+                                    onclick="testSessionInPlayground('${sessionId}'); event.preventDefault(); event.stopPropagation();"
+                                    title="Test in Playground">
+                                <i class="fas fa-vial"></i>
+                            </button>
+                        </div>
                     </div>
                 </div>
             `;
         }).join('');
         
         console.log(`Loaded ${sessions.length} sessions`);
+        
+        // Initialize Bootstrap tooltips
+        const tooltips = document.querySelectorAll('[data-bs-toggle="tooltip"]');
+        tooltips.forEach(tooltip => {
+            new bootstrap.Tooltip(tooltip, {
+                html: false,
+                placement: 'right',
+                trigger: 'hover'
+            });
+        });
         
         // Add event listener for tab changes to store/restore selections
         document.addEventListener('shown.bs.tab', function(event) {
@@ -246,6 +251,24 @@ async function loadSessions() {
 
 // Handle session selection change
 async function handleSessionChange(sessionId, isSelected) {
+    // Check if dark mode is enabled
+    const isDarkMode = document.documentElement.getAttribute('data-theme') === 'dark' || document.body.getAttribute('data-theme') === 'dark';
+    const defaultBgColor = isDarkMode ? '#2d2d2d' : '#f8f9fa';
+
+    // First update the visual state immediately for better UX
+    const sessionCard = document.querySelector(`#session-card-${sessionId}`);
+    if (sessionCard) {
+        if (isSelected) {
+            sessionCard.classList.add('selected-session-card');
+            sessionCard.style.backgroundColor = 'rgba(13, 110, 253, 0.25)';
+            sessionCard.style.borderLeftColor = '#0d6efd';
+        } else {
+            sessionCard.classList.remove('selected-session-card');
+            sessionCard.style.backgroundColor = defaultBgColor;
+            sessionCard.style.borderLeftColor = 'transparent';
+        }
+    }
+
     if (isSelected) {
         try {
             const sessionsResponse = await fetch('/api/training/sessions');
@@ -289,36 +312,26 @@ async function handleSessionChange(sessionId, isSelected) {
 }
 
 function updateSessionColorsAndUI() {
-    const colors = getSessionColors();
+    // Check if dark mode is enabled
     const isDarkMode = document.documentElement.getAttribute('data-theme') === 'dark' || document.body.getAttribute('data-theme') === 'dark';
+    const defaultBgColor = isDarkMode ? '#2d2d2d' : '#f8f9fa';
     
     // Reset all session cards to their default, non-selected state
     document.querySelectorAll('.session-card').forEach(card => {
-        card.style.backgroundColor = '';
-        card.style.borderLeftColor = 'transparent';
         card.classList.remove('selected-session-card');
-        // Reset text color to default
-        card.querySelectorAll('.session-card-title, .session-card-text, .session-card-text-label').forEach(el => el.style.color = '');
+        card.style.backgroundColor = defaultBgColor;
+        card.style.borderLeftColor = 'transparent';
     });
 
-    let colorIndex = 0;
+    // Apply selected state to selected session cards
     for (const [sessionId, sessionData] of selectedSessions) {
-        const color = colors[colorIndex % colors.length];
-        sessionData.color = color; // Assign/update color in the session data map
-
-        const sessionCard = document.querySelector(`#session-${sessionId} + label .session-card`);
+        const sessionCard = document.querySelector(`#session-card-${sessionId}`);
         if (sessionCard) {
             sessionCard.classList.add('selected-session-card');
-            sessionCard.style.borderLeftColor = color;
-            sessionCard.style.backgroundColor = `${color}33`; // Use color with ~20% alpha
-
-            // Change text to be readable on the new background
-            const textColor = isDarkMode ? '#FFFFFF' : '#000000';
-            sessionCard.querySelectorAll('.session-card-title, .session-card-text, .session-card-text-label').forEach(el => {
-                el.style.color = textColor;
-            });
+            // Apply inline styles as well for maximum compatibility
+            sessionCard.style.backgroundColor = 'rgba(13, 110, 253, 0.25)';
+            sessionCard.style.borderLeftColor = '#0d6efd';
         }
-        colorIndex++;
     }
 }
 
@@ -446,6 +459,16 @@ async function generateComparison() {
     
     setTimeout(() => {
         try {
+            // Get colors for sessions
+            const colors = getSessionColors();
+            let colorIndex = 0;
+            
+            // Assign colors to sessions
+            for (const [sessionId, sessionData] of selectedSessions) {
+                sessionData.color = colors[colorIndex % colors.length];
+                colorIndex++;
+            }
+            
             // --- 1. Loss Comparison (VALIDATION) ---
             const lossTraces = [];
             for (const [sessionId, sessionData] of selectedSessions) {
@@ -594,10 +617,8 @@ function getSessionColors() {
 // Clear all selections
 function clearAllSelections() {
     selectedSessions.clear();
-    document.querySelectorAll('.session-checkbox').forEach(checkbox => {
-        checkbox.checked = false;
-    });
     updateSelectionSummary();
+    updateSessionColorsAndUI(); // Reset the UI for all cards
     hideComparison();
 }
 
@@ -649,28 +670,13 @@ async function showSessionParameters(sessionId) {
         
         // Show loading indicator
         const loadingOverlay = document.getElementById('loading-overlay');
-        const loadingMessage = document.getElementById('loading-message');
-        if (loadingOverlay && loadingMessage) {
-            loadingMessage.textContent = 'Loading training logs...';
+        if (loadingOverlay) {
             loadingOverlay.classList.remove('d-none');
         }
         
-        // Set a timeout to prevent infinite loading
-        const timeoutId = setTimeout(() => {
-            if (loadingOverlay) loadingOverlay.classList.add('d-none');
-            alert('Loading training logs is taking too long. Please try again.');
-        }, 30000); // 30 second timeout
-        
         // Find the log file for this session
         const sessionsResponse = await fetch('/api/training/sessions');
-        if (!sessionsResponse.ok) {
-            throw new Error(`Failed to load training sessions: ${sessionsResponse.status}`);
-        }
-        
         const sessionsData = await sessionsResponse.json();
-        if (!sessionsData.success || !sessionsData.training_sessions) {
-            throw new Error('Failed to load training sessions data');
-        }
         
         // Find the matching session
         const session = sessionsData.training_sessions.find(s => s.session_id === sessionId);
@@ -678,130 +684,58 @@ async function showSessionParameters(sessionId) {
             throw new Error(`Session ${sessionId} not found`);
         }
         
-        console.log('Found session:', session);
         const logFile = session.log_file;
         
-        // Use the /api/logs/raw endpoint with the exact log file path
+        // Get the raw logs
         const response = await fetch('/api/logs/raw', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ log_file: logFile })
         });
         
-        if (!response.ok) {
-            throw new Error(`Failed to load session parameters (${response.status}): ${response.statusText}`);
-        }
-        
         const sessionDetails = await response.json();
-        console.log('Session details:', sessionDetails);
-        
-        if (!sessionDetails.success) {
-            throw new Error(sessionDetails.error || 'Failed to load logs');
-        }
         
         // Parse the raw logs content
         let rawData;
         try {
             rawData = JSON.parse(sessionDetails.logs);
         } catch (e) {
-            // If parsing fails, treat as plain text
             rawData = { raw_content: sessionDetails.logs };
         }
         
-        // Extract metadata for display
-        let metadataHtml = '';
-        if (rawData.config || rawData.base_model) {
-            const config = rawData.config || {};
-            
-            // Get model name from top level or config
-            const modelName = rawData.base_model || config.base_model || rawData.model_name || config.model_name || 'N/A';
-            // Clean up model name (remove mlx-community/ prefix if present)
-            const cleanModelName = modelName.replace(/^mlx-community\//, '');
-            
-            metadataHtml = `
+        // Create a simple metadata display
+        const config = rawData.config || {};
+        const modelName = rawData.base_model || config.model_name || 'N/A';
+        const trainingType = rawData.training_type || config.training_type || 'N/A';
+        const fineTuneType = config.fine_tune_type || 'Full';
+        
+        // Display the parameters in the modal
+        const logsContent = document.getElementById('logs-content');
+        if (logsContent) {
+            logsContent.innerHTML = `
                 <div class="alert alert-info mb-3">
-                    <h6 class="mb-2"><i class="fas fa-info-circle me-2"></i>Training Metadata</h6>
+                    <h6 class="mb-2"><i class="fas fa-info-circle me-2"></i>Training Parameters</h6>
                     <div class="row">
                         <div class="col-md-6">
-                            <small><strong>Model:</strong> ${cleanModelName}</small><br>
-                            <small><strong>Type:</strong> ${rawData.training_type || config.training_type || 'N/A'}</small><br>
-                            <small><strong>Fine-tune Type:</strong> ${config.fine_tune_type || 'N/A'}</small>
+                            <small><strong>Model:</strong> ${modelName}</small><br>
+                            <small><strong>Type:</strong> ${trainingType}</small><br>
+                            <small><strong>Fine-tune Type:</strong> ${fineTuneType}</small><br>
+                            <small><strong>Batch Size:</strong> ${config.batch_size || 'N/A'}</small><br>
+                            <small><strong>Learning Rate:</strong> ${config.learning_rate || 'N/A'}</small>
                         </div>
                         <div class="col-md-6">
-                            <small><strong>Batch Size:</strong> ${config.batch_size || 'N/A'}</small><br>
-                            <small><strong>Learning Rate:</strong> ${config.learning_rate || 'N/A'}</small><br>
-                            <small><strong>Max Iterations:</strong> ${config.max_iterations || 'N/A'}</small>
+                            <small><strong>Max Iterations:</strong> ${config.max_iterations || 'N/A'}</small><br>
+                            <small><strong>Sequence Length:</strong> ${config.max_seq_length || 'N/A'}</small><br>
+                            <small><strong>Weight Decay:</strong> ${config.weight_decay || 'N/A'}</small><br>
+                            <small><strong>LR Schedule:</strong> ${config.lr_schedule || 'N/A'}</small><br>
+                            <small><strong>LR Decay Factor:</strong> ${config.lr_decay_factor || 'N/A'}</small>
                         </div>
                     </div>
                 </div>
+                <pre class="json-content bg-dark text-light p-3 rounded" style="white-space: pre-wrap; word-wrap: break-word; font-family: 'Courier New', monospace; font-size: 12px; line-height: 1.4; max-height: 60vh; overflow-y: auto; border: 1px solid #444;">
+${JSON.stringify(rawData, null, 2)}
+                </pre>
             `;
-        }
-        
-        // Show the formatted logs in the modal with metadata
-        const logsContent = document.getElementById('logs-content');
-        
-        // Clear existing content
-        if (logsContent) {
-            logsContent.innerHTML = '';
-            
-            // Add metadata section if available
-            if (metadataHtml) {
-                const metadataDiv = document.createElement('div');
-                metadataDiv.innerHTML = metadataHtml;
-                logsContent.appendChild(metadataDiv);
-            }
-            
-            // Add formatted JSON content
-            const jsonPre = document.createElement('pre');
-            jsonPre.className = 'json-content bg-dark text-light p-3 rounded';
-            jsonPre.style.cssText = 'white-space: pre-wrap; word-wrap: break-word; font-family: "Courier New", monospace; font-size: 12px; line-height: 1.4; max-height: 60vh; overflow-y: auto; border: 1px solid #444;';
-            
-            if (rawData.raw_content) {
-                // Plain text content
-                jsonPre.textContent = rawData.raw_content;
-            } else {
-                // Formatted JSON content with syntax highlighting
-                const formattedJson = JSON.stringify(rawData, null, 2);
-                jsonPre.innerHTML = syntaxHighlightJson(formattedJson);
-            }
-            
-            logsContent.appendChild(jsonPre);
-            
-            // Setup copy button (store rawData in closure)
-            const originalData = rawData;
-            document.getElementById('copy-logs-btn').onclick = () => {
-                // Get the JSON content from the pre element
-                const jsonElement = logsContent.querySelector('.json-content');
-                let textToCopy;
-                
-                if (jsonElement) {
-                    // For syntax highlighted JSON, we need to get the original text
-                    if (originalData.raw_content) {
-                        textToCopy = originalData.raw_content;
-                    } else {
-                        textToCopy = JSON.stringify(originalData, null, 2);
-                    }
-                } else {
-                    textToCopy = logsContent.textContent;
-                }
-                
-                navigator.clipboard.writeText(textToCopy)
-                    .then(() => {
-                        // Show success feedback
-                        const copyBtn = document.getElementById('copy-logs-btn');
-                        const originalText = copyBtn.innerHTML;
-                        copyBtn.innerHTML = '<i class="fas fa-check me-2"></i>Copied!';
-                        setTimeout(() => {
-                            copyBtn.innerHTML = originalText;
-                        }, 2000);
-                    })
-                    .catch(err => {
-                        console.error('Failed to copy logs:', err);
-                        alert('Failed to copy logs: ' + err);
-                    });
-            };
             
             // Update the modal title
             const modalTitle = document.querySelector('#logsModal .modal-title');
@@ -812,136 +746,79 @@ async function showSessionParameters(sessionId) {
             // Show the modal
             const logsModal = new bootstrap.Modal(document.getElementById('logsModal'));
             logsModal.show();
-            
-            // Hide loading and show success message
-            clearTimeout(timeoutId);
-            if (loadingOverlay) loadingOverlay.classList.add('d-none');
-            console.log(`Successfully loaded training logs from ${logFile}`);
-        } else {
-            console.error('Logs content element not found');
-            if (loadingOverlay) loadingOverlay.classList.add('d-none');
+        }
+        
+        // Hide loading indicator
+        if (loadingOverlay) {
+            loadingOverlay.classList.add('d-none');
         }
     } catch (error) {
         console.error('Error fetching session details:', error);
         alert('Failed to load session parameters: ' + error.message);
+        
         const loadingOverlay = document.getElementById('loading-overlay');
-        if (loadingOverlay) loadingOverlay.classList.add('d-none');
+        if (loadingOverlay) {
+            loadingOverlay.classList.add('d-none');
+        }
     }
 }
 
 // Function to test a session in the playground tab
 async function testSessionInPlayground(sessionId) {
     try {
-        console.log('Testing session in playground:', sessionId);
-        
-        // Find the log file for this session
+        // Get session data
         const sessionsResponse = await fetch('/api/training/sessions');
-        if (!sessionsResponse.ok) {
-            throw new Error(`Failed to load training sessions: ${sessionsResponse.status}`);
-        }
-        
         const sessionsData = await sessionsResponse.json();
-        if (!sessionsData.success || !sessionsData.training_sessions) {
-            throw new Error('Failed to load training sessions data');
-        }
-        
-        // Find the matching session
         const session = sessionsData.training_sessions.find(s => s.session_id === sessionId);
+        
         if (!session) {
             throw new Error(`Session ${sessionId} not found`);
         }
         
-        console.log('Found session:', session);
-        
-        // Determine if this is a CPT or IFT session
-        const sessionType = sessionId.includes('_it_') ? 'ift' : 'cpt';
-        
-        // Format the model name as seen in the screenshot
-        // Use the model_name from the session if available
-        const modelName = session.model_name || `dataset_${sessionType}_${sessionId.split('_')[0]}`;
-        
-        console.log('Using model name:', modelName);
-        
-        // For the adapter path, use the session directory
+        // Get adapter path from log file path
         const adapterPath = session.log_file.split('/').slice(0, -1).join('/');
         
-        console.log('Adapter path:', adapterPath);
-        
-        // Store the session configuration in localStorage for the testing tab to pick up
-        const testConfig = {
-            model: modelName,
+        // Store in localStorage for the testing tab
+        localStorage.setItem('forge-test-session', JSON.stringify({
+            model: session.model_name,
             adapter: adapterPath
-        };
+        }));
         
-        console.log('Test configuration:', testConfig);
-        localStorage.setItem('forge-test-session', JSON.stringify(testConfig));
-        
-        // Save current scroll position
-        const scrollPosition = window.scrollY;
-        
-        // Switch to the testing tab
+        // Switch to testing tab
         const testingTab = document.querySelector('[data-bs-target="#testing"]');
         if (testingTab) {
-            console.log('Clicking testing tab');
             testingTab.click();
             
             // Wait for tab to be shown before setting values
             setTimeout(() => {
-                // Restore scroll position to top
+                // Reset scroll position
                 window.scrollTo(0, 0);
                 
-                // Set the model and adapter values directly
-                const modelSelect = document.getElementById('test-model-select');
+                // Set the adapter value in the dropdown
                 const adapterSelect = document.getElementById('adapter-path');
-                
-                if (modelSelect) {
-                    // Find the option that contains the model name
-                    const modelOptions = Array.from(modelSelect.options);
-                    const modelOption = modelOptions.find(option => 
-                        option.textContent.toLowerCase().includes(modelName.toLowerCase())
-                    );
-                    
-                    if (modelOption) {
-                        modelSelect.value = modelOption.value;
-                        // Trigger change event
-                        modelSelect.dispatchEvent(new Event('change'));
-                    }
-                }
-                
                 if (adapterSelect) {
-                    // Find the option that contains the adapter path
-                    const adapterOptions = Array.from(adapterSelect.options);
-                    const adapterOption = adapterOptions.find(option => 
-                        option.value === adapterPath || 
-                        option.textContent.includes(adapterPath.split('/').pop())
-                    );
-                    
-                    if (adapterOption) {
-                        adapterSelect.value = adapterOption.value;
-                        // Trigger change event
-                        adapterSelect.dispatchEvent(new Event('change'));
-                    } else {
-                        // If adapter option not found, we need to wait for the adapter dropdown to be populated
-                        console.log('Adapter option not found, waiting for dropdown to populate...');
-                        
-                        // Add a new option if it doesn't exist
-                        const newOption = document.createElement('option');
-                        newOption.value = adapterPath;
-                        newOption.textContent = adapterPath.split('/').pop();
-                        adapterSelect.appendChild(newOption);
-                        adapterSelect.value = adapterPath;
-                        adapterSelect.dispatchEvent(new Event('change'));
+                    // Add option if it doesn't exist
+                    let found = false;
+                    for (let i = 0; i < adapterSelect.options.length; i++) {
+                        if (adapterSelect.options[i].value === adapterPath) {
+                            adapterSelect.selectedIndex = i;
+                            found = true;
+                            break;
+                        }
                     }
+                    
+                    if (!found) {
+                        const option = document.createElement('option');
+                        option.value = adapterPath;
+                        option.text = adapterPath.split('/').pop();
+                        adapterSelect.add(option);
+                        adapterSelect.value = adapterPath;
+                    }
+                    
+                    // Trigger change event
+                    adapterSelect.dispatchEvent(new Event('change'));
                 }
-                
-                // Focus the load model button for better UX
-                const loadModelBtn = document.getElementById('load-model-btn');
-                if (loadModelBtn) {
-                    loadModelBtn.focus();
-                }
-            }, 500); // Give the tab time to initialize
-        } else {
-            console.error('Testing tab button not found');
+            }, 500);
         }
     } catch (error) {
         console.error('Error preparing test session:', error);
@@ -1002,23 +879,34 @@ style.textContent = `
 
 /* Session Card Styling */
 .session-card {
-    transition: background-color 0.2s ease-in-out, border-left-color 0.2s ease-in-out;
+    transition: all 0.2s ease-in-out;
     border-left: 4px solid transparent;
+    padding: 10px;
+    border-radius: 6px;
+    margin-bottom: 8px;
+    cursor: pointer;
 }
 
-.session-card-title,
-.session-card-text,
-.session-card-text-label {
-    transition: color 0.2s ease-in-out;
+/* Light mode */
+:root:not([data-theme="dark"]) .session-card {
+    background-color: #f8f9fa;
+}
+
+/* Dark mode - using proper dark theme background */
+[data-theme="dark"] .session-card {
+    background-color: #2d2d2d;
+    border-color: #404040;
 }
 
 .session-card:hover {
-    background-color: var(--bs-tertiary-bg);
+    background-color: rgba(0, 123, 255, 0.1);
 }
 
-.btn-check:checked + label .session-card {
-    border-left-color: var(--bs-primary); /* Default border color */
-    background-color: var(--bs-tertiary-bg);
+/* Selected state styling - IMPORTANT: Make this very visible with blue background */
+.selected-session-card {
+    background-color: rgba(13, 110, 253, 0.25) !important;
+    border-left-color: #0d6efd !important;
+    box-shadow: 0 0 0 1px rgba(13, 110, 253, 0.25) !important;
 }
 
 /* Session Header */
@@ -1102,18 +990,13 @@ style.textContent = `
 }
 
 /* Dark Mode Enhancements */
-[data-theme="dark"] .session-card {
-    background: #2a2a2a !important;
-    border-color: #404040 !important;
-}
-
 [data-theme="dark"] .session-card:hover {
-    background: #333333 !important;
-    border-color: #007AFF !important;
+    background-color: #333333;
 }
 
-[data-theme="dark"] .form-check-input:checked + .form-check-label .session-card {
-    background: rgba(0, 122, 255, 0.15) !important;
+[data-theme="dark"] .selected-session-card {
+    background-color: rgba(13, 110, 253, 0.25) !important;
+    border-left-color: #0d6efd !important;
 }
 
 /* Selection Summary Styling */
