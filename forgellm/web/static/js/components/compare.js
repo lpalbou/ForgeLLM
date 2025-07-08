@@ -408,6 +408,13 @@ function renderComparisonChart(containerId, traces, layoutOptions) {
     const textColor = isDarkMode ? '#F5F5F5' : '#333333';
     const borderColor = isDarkMode ? '#555555' : '#DDDDDD';
 
+    // Ensure xaxis range starts at 0 for stability chart
+    if (containerId === 'stability-comparison-chart' || containerId === 'generalization-comparison-chart') {
+        if (!layoutOptions.xaxis) layoutOptions.xaxis = {};
+        layoutOptions.xaxis.range = [0, null];
+        layoutOptions.xaxis.fixedrange = true; // Prevent user from zooming/panning
+    }
+
     const layout = {
         width: containerWidth,
         height: containerHeight,
@@ -525,6 +532,15 @@ async function generateComparison() {
                     if (validationLoss?.x && validationLoss?.y) {
                         const windowSize = 10;
                         const varianceX = [], varianceY = [];
+                        
+                        // Add a zero point at iteration 0 if the data doesn't start at 0
+                        if (validationLoss.x.length > 0 && validationLoss.x[0] > 0) {
+                            varianceX.push(0);
+                            // Use the first available variance value or 0
+                            varianceY.push(validationLoss.y.length > windowSize ? 
+                                validationLoss.y.slice(0, windowSize).reduce((acc, val) => acc + Math.pow(val - validationLoss.y[0], 2), 0) / windowSize : 0);
+                        }
+                        
                         // Ensure there are enough points to calculate variance
                         if (validationLoss.y.length >= windowSize) {
                             for (let i = windowSize; i < validationLoss.y.length; i++) {
@@ -548,7 +564,11 @@ async function generateComparison() {
             renderComparisonChart('stability-comparison-chart', stabilityTraces, {
                 title: 'Validation Loss Stability',
                 xaxis: { title: 'Iterations', range: [0, null] },
-                yaxis: { title: 'Loss Variance', range: [0, 0.1] },
+                yaxis: { 
+                    title: 'Loss Variance', 
+                    range: [0, Math.max(0.1, ...stabilityTraces.flatMap(trace => trace.y).filter(val => val !== null && val !== undefined))],
+                    autorange: false
+                },
                 shapes: [
                     { type: 'rect', xref: 'paper', yref: 'y', x0: 0, y0: 0, x1: 1, y1: 0.005, fillcolor: 'rgba(40, 167, 69, 0.2)', line: { width: 0 }, layer: 'below' },
                     { type: 'rect', xref: 'paper', yref: 'y', x0: 0, y0: 0.005, x1: 1, y1: 0.02, fillcolor: 'rgba(255, 193, 7, 0.2)', line: { width: 0 }, layer: 'below' },
@@ -571,6 +591,18 @@ async function generateComparison() {
                         if (validationLoss?.x?.length > 0) {
                             const valMap = new Map(validationLoss.x.map((iter, i) => [iter, validationLoss.y[i]]));
                             const gapX = [], gapY = [];
+                            
+                            // Add a zero point at iteration 0 if the data doesn't start at 0
+                            if (trainingLoss.x.length > 0 && trainingLoss.x[0] > 0) {
+                                gapX.push(0);
+                                // Use the first available gap value or 0
+                                if (valMap.has(trainingLoss.x[0])) {
+                                    gapY.push(valMap.get(trainingLoss.x[0]) - trainingLoss.y[0]);
+                                } else {
+                                    gapY.push(0);
+                                }
+                            }
+                            
                             trainingLoss.x.forEach((iter, i) => {
                                 if (valMap.has(iter)) {
                                     gapX.push(iter);
@@ -585,8 +617,20 @@ async function generateComparison() {
                                 });
                             }
                         } else {
-                             gapTraces.push({
-                                x: trainingLoss.x, y: trainingLoss.x.map(() => 0), type: 'scatter', mode: 'lines',
+                            const gapX = [], gapY = [];
+                            
+                            // Add a zero point at iteration 0 if the data doesn't start at 0
+                            if (trainingLoss.x.length > 0 && trainingLoss.x[0] > 0) {
+                                gapX.push(0);
+                                gapY.push(0);
+                            }
+                            
+                            // Add the rest of the points
+                            gapX.push(...trainingLoss.x);
+                            gapY.push(...trainingLoss.x.map(() => 0));
+                            
+                            gapTraces.push({
+                                x: gapX, y: gapY, type: 'scatter', mode: 'lines',
                                 name: `${sessionData.session_name} (No Val)`,
                                 line: { color: sessionData.color, width: 2, dash: 'dash' } // Use assigned color
                             });
@@ -594,19 +638,38 @@ async function generateComparison() {
                     }
                 }
             }
+            
+            // Calculate appropriate y-range for generalization gap
+            let minGapValue = 0, maxGapValue = 0;
+            if (gapTraces.length > 0) {
+                const allGapValues = gapTraces.flatMap(trace => trace.y).filter(val => val !== null && val !== undefined);
+                if (allGapValues.length > 0) {
+                    minGapValue = Math.min(...allGapValues);
+                    maxGapValue = Math.max(...allGapValues);
+                    // Add 20% padding to the range
+                    const padding = Math.max(0.1, (maxGapValue - minGapValue) * 0.2);
+                    minGapValue = Math.min(-0.1, minGapValue - padding);
+                    maxGapValue = Math.max(0.1, maxGapValue + padding);
+                }
+            }
+            
             renderComparisonChart('generalization-comparison-chart', gapTraces, {
                 title: 'Generalization Gap',
-                xaxis: { title: 'Iterations' },
-                yaxis: { title: 'Val Loss - Train Loss', range: [-0.5, 0.5] },
+                xaxis: { title: 'Iterations', range: [0, null] },
+                yaxis: { 
+                    title: 'Val Loss - Train Loss', 
+                    range: [minGapValue, maxGapValue],
+                    autorange: false
+                },
                 shapes: [
-                    { type: 'rect', xref: 'paper', yref: 'y', x0: 0, y0: 0.1, x1: 1, y1: 0.5, fillcolor: 'rgba(255, 193, 7, 0.2)', line: { width: 0 }, layer: 'below' },
+                    { type: 'rect', xref: 'paper', yref: 'y', x0: 0, y0: 0.1, x1: 1, y1: maxGapValue, fillcolor: 'rgba(255, 193, 7, 0.2)', line: { width: 0 }, layer: 'below' },
                     { type: 'rect', xref: 'paper', yref: 'y', x0: 0, y0: -0.1, x1: 1, y1: 0.1, fillcolor: 'rgba(40, 167, 69, 0.2)', line: { width: 0 }, layer: 'below' },
-                    { type: 'rect', xref: 'paper', yref: 'y', x0: 0, y0: -0.5, x1: 1, y1: -0.1, fillcolor: 'rgba(220, 53, 69, 0.2)', line: { width: 0 }, layer: 'below' }
+                    { type: 'rect', xref: 'paper', yref: 'y', x0: 0, y0: minGapValue, x1: 1, y1: -0.1, fillcolor: 'rgba(220, 53, 69, 0.2)', line: { width: 0 }, layer: 'below' }
                 ],
                 annotations: [
-                    { text: 'Underfitting', x: 0.95, y: 0.3, xref: 'paper', yref: 'y', showarrow: false, font: { color: 'rgba(255, 193, 7, 0.9)', size: 10 }, xanchor: 'right' },
+                    { text: 'Underfitting', x: 0.95, y: Math.min(maxGapValue - 0.05, 0.3), xref: 'paper', yref: 'y', showarrow: false, font: { color: 'rgba(255, 193, 7, 0.9)', size: 10 }, xanchor: 'right' },
                     { text: 'Good Fit', x: 0.95, y: 0, xref: 'paper', yref: 'y', showarrow: false, font: { color: 'rgba(40, 167, 69, 0.9)', size: 10 }, xanchor: 'right' },
-                    { text: 'Overfitting', x: 0.95, y: -0.3, xref: 'paper', yref: 'y', showarrow: false, font: { color: 'rgba(220, 53, 69, 0.9)', size: 10 }, xanchor: 'right' }
+                    { text: 'Overfitting', x: 0.95, y: Math.max(minGapValue + 0.05, -0.3), xref: 'paper', yref: 'y', showarrow: false, font: { color: 'rgba(220, 53, 69, 0.9)', size: 10 }, xanchor: 'right' }
                 ]
             });
         } catch (error) {
