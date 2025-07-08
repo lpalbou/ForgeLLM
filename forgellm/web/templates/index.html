@@ -2291,6 +2291,27 @@
         </div>
     </div>
 
+    <!-- Add the parameters modal for viewing session parameters -->
+    <div class="modal fade" id="parameters-modal" tabindex="-1" aria-labelledby="parameters-modal-title" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="parameters-modal-title">Session Parameters</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="parameters-modal-body">
+                    <!-- Parameters will be loaded here -->
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" id="copy-parameters-btn">
+                        <i class="fas fa-copy me-2"></i>Copy to Clipboard
+                    </button>
+                    <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Fullscreen Overlay -->
     <div id="fullscreen-overlay" class="fullscreen-overlay">
         <!-- Chat panel will be moved here in fullscreen mode -->

@@ -91,6 +91,12 @@ async function loadSessions() {
         // Handle different API response formats
         let sessions = data.training_sessions || data.sessions || data || [];
         
+        // Debug session structure
+        if (sessions.length > 0) {
+            console.log('First session structure:', sessions[0]);
+            console.log('Session ID format:', sessions[0].session_id || sessions[0].id);
+        }
+        
         const container = document.getElementById('compare-sessions-list');
         if (!container) return;
         
@@ -104,6 +110,12 @@ async function loadSessions() {
         
         // Create compact session items with better layout and tooltips
         container.innerHTML = sessions.map(session => {
+            // The session ID is the full directory name
+            const sessionId = session.session_id || session.id || '';
+            
+            // Debug session ID
+            console.log(`Session ${session.session_name || 'unnamed'} has ID: ${sessionId}`);
+            
             // Clean up model name by removing "dataset_cpt_" prefix
             const cleanModelName = (session.model_name || 'Unknown').replace(/^dataset_cpt_/, '');
             
@@ -121,13 +133,13 @@ async function loadSessions() {
 • Sequence Length: ${params.sequenceLength}`;
             
             return `
-                <div class="session-item mb-2" title="${tooltipContent}">
+                <div class="session-item mb-2">
                     <div class="form-check">
                         <input class="form-check-input session-checkbox" type="checkbox" 
-                               id="session-${session.session_id || session.id}" 
-                               value="${session.session_id || session.id}"
-                               onchange="handleSessionChange('${session.session_id || session.id}', this.checked)">
-                        <label class="form-check-label w-100" for="session-${session.session_id || session.id}">
+                               id="session-${sessionId}" 
+                               value="${sessionId}"
+                               onchange="handleSessionChange('${sessionId}', this.checked)">
+                        <label class="form-check-label w-100" for="session-${sessionId}">
                             <div class="session-card">
                                 <div class="session-header">
                                     <div class="session-name">${session.session_name || session.name || 'Unnamed Session'}</div>
@@ -148,6 +160,18 @@ async function loadSessions() {
                                         <span class="detail-label">LR:</span>
                                         <span class="detail-value">${params.learningRate}</span>
                                     </div>
+                                </div>
+                                <div class="session-actions mt-2 pt-2 border-top">
+                                    <button class="btn btn-sm btn-outline-secondary view-params-btn" 
+                                            onclick="showSessionParameters('${sessionId}'); event.preventDefault(); event.stopPropagation();"
+                                            title="View Parameters">
+                                        <i class="fas fa-file-code"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-secondary test-session-btn" 
+                                            onclick="testSessionInPlayground('${sessionId}'); event.preventDefault(); event.stopPropagation();"
+                                            title="Test in Playground">
+                                        <i class="fas fa-vial"></i>
+                                    </button>
                                 </div>
                             </div>
                         </label>
@@ -560,6 +584,278 @@ document.addEventListener('shown.bs.tab', function(event) {
 
 console.log('Compare.js Plotly version loaded');
 
+// Add these functions to handle the button clicks
+
+// Function to show session parameters in a modal
+async function showSessionParameters(sessionId) {
+    try {
+        console.log('Showing parameters for session ID:', sessionId);
+        
+        // Show loading indicator
+        const loadingOverlay = document.getElementById('loading-overlay');
+        const loadingMessage = document.getElementById('loading-message');
+        if (loadingOverlay && loadingMessage) {
+            loadingMessage.textContent = 'Loading training logs...';
+            loadingOverlay.classList.remove('d-none');
+        }
+        
+        // Set a timeout to prevent infinite loading
+        const timeoutId = setTimeout(() => {
+            if (loadingOverlay) loadingOverlay.classList.add('d-none');
+            alert('Loading training logs is taking too long. Please try again.');
+        }, 30000); // 30 second timeout
+        
+        // Find the log file for this session
+        const sessionsResponse = await fetch('/api/training/sessions');
+        if (!sessionsResponse.ok) {
+            throw new Error(`Failed to load training sessions: ${sessionsResponse.status}`);
+        }
+        
+        const sessionsData = await sessionsResponse.json();
+        if (!sessionsData.success || !sessionsData.training_sessions) {
+            throw new Error('Failed to load training sessions data');
+        }
+        
+        // Find the matching session
+        const session = sessionsData.training_sessions.find(s => s.session_id === sessionId);
+        if (!session) {
+            throw new Error(`Session ${sessionId} not found`);
+        }
+        
+        console.log('Found session:', session);
+        const logFile = session.log_file;
+        
+        // Use the /api/logs/raw endpoint with the exact log file path
+        const response = await fetch('/api/logs/raw', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ log_file: logFile })
+        });
+        
+        if (!response.ok) {
+            throw new Error(`Failed to load session parameters (${response.status}): ${response.statusText}`);
+        }
+        
+        const sessionDetails = await response.json();
+        console.log('Session details:', sessionDetails);
+        
+        if (!sessionDetails.success) {
+            throw new Error(sessionDetails.error || 'Failed to load logs');
+        }
+        
+        // Parse the raw logs content
+        let rawData;
+        try {
+            rawData = JSON.parse(sessionDetails.logs);
+        } catch (e) {
+            // If parsing fails, treat as plain text
+            rawData = { raw_content: sessionDetails.logs };
+        }
+        
+        // Extract metadata for display
+        let metadataHtml = '';
+        if (rawData.config || rawData.base_model) {
+            const config = rawData.config || {};
+            
+            // Get model name from top level or config
+            const modelName = rawData.base_model || config.base_model || rawData.model_name || config.model_name || 'N/A';
+            // Clean up model name (remove mlx-community/ prefix if present)
+            const cleanModelName = modelName.replace(/^mlx-community\//, '');
+            
+            metadataHtml = `
+                <div class="alert alert-info mb-3">
+                    <h6 class="mb-2"><i class="fas fa-info-circle me-2"></i>Training Metadata</h6>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <small><strong>Model:</strong> ${cleanModelName}</small><br>
+                            <small><strong>Type:</strong> ${rawData.training_type || config.training_type || 'N/A'}</small><br>
+                            <small><strong>Fine-tune Type:</strong> ${config.fine_tune_type || 'N/A'}</small>
+                        </div>
+                        <div class="col-md-6">
+                            <small><strong>Batch Size:</strong> ${config.batch_size || 'N/A'}</small><br>
+                            <small><strong>Learning Rate:</strong> ${config.learning_rate || 'N/A'}</small><br>
+                            <small><strong>Max Iterations:</strong> ${config.max_iterations || 'N/A'}</small>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+        
+        // Show the formatted logs in the modal with metadata
+        const logsContent = document.getElementById('logs-content');
+        
+        // Clear existing content
+        if (logsContent) {
+            logsContent.innerHTML = '';
+            
+            // Add metadata section if available
+            if (metadataHtml) {
+                const metadataDiv = document.createElement('div');
+                metadataDiv.innerHTML = metadataHtml;
+                logsContent.appendChild(metadataDiv);
+            }
+            
+            // Add formatted JSON content
+            const jsonPre = document.createElement('pre');
+            jsonPre.className = 'json-content bg-dark text-light p-3 rounded';
+            jsonPre.style.cssText = 'white-space: pre-wrap; word-wrap: break-word; font-family: "Courier New", monospace; font-size: 12px; line-height: 1.4; max-height: 60vh; overflow-y: auto; border: 1px solid #444;';
+            
+            if (rawData.raw_content) {
+                // Plain text content
+                jsonPre.textContent = rawData.raw_content;
+            } else {
+                // Formatted JSON content with syntax highlighting
+                const formattedJson = JSON.stringify(rawData, null, 2);
+                jsonPre.innerHTML = syntaxHighlightJson(formattedJson);
+            }
+            
+            logsContent.appendChild(jsonPre);
+            
+            // Setup copy button (store rawData in closure)
+            const originalData = rawData;
+            document.getElementById('copy-logs-btn').onclick = () => {
+                // Get the JSON content from the pre element
+                const jsonElement = logsContent.querySelector('.json-content');
+                let textToCopy;
+                
+                if (jsonElement) {
+                    // For syntax highlighted JSON, we need to get the original text
+                    if (originalData.raw_content) {
+                        textToCopy = originalData.raw_content;
+                    } else {
+                        textToCopy = JSON.stringify(originalData, null, 2);
+                    }
+                } else {
+                    textToCopy = logsContent.textContent;
+                }
+                
+                navigator.clipboard.writeText(textToCopy)
+                    .then(() => {
+                        // Show success feedback
+                        const copyBtn = document.getElementById('copy-logs-btn');
+                        const originalText = copyBtn.innerHTML;
+                        copyBtn.innerHTML = '<i class="fas fa-check me-2"></i>Copied!';
+                        setTimeout(() => {
+                            copyBtn.innerHTML = originalText;
+                        }, 2000);
+                    })
+                    .catch(err => {
+                        console.error('Failed to copy logs:', err);
+                        alert('Failed to copy logs: ' + err);
+                    });
+            };
+            
+            // Update the modal title
+            const modalTitle = document.querySelector('#logsModal .modal-title');
+            if (modalTitle) {
+                modalTitle.textContent = `Training Logs: ${sessionId}`;
+            }
+            
+            // Show the modal
+            const logsModal = new bootstrap.Modal(document.getElementById('logsModal'));
+            logsModal.show();
+            
+            // Hide loading and show success message
+            clearTimeout(timeoutId);
+            if (loadingOverlay) loadingOverlay.classList.add('d-none');
+            console.log(`Successfully loaded training logs from ${logFile}`);
+        } else {
+            console.error('Logs content element not found');
+            if (loadingOverlay) loadingOverlay.classList.add('d-none');
+        }
+    } catch (error) {
+        console.error('Error fetching session details:', error);
+        alert('Failed to load session parameters: ' + error.message);
+        const loadingOverlay = document.getElementById('loading-overlay');
+        if (loadingOverlay) loadingOverlay.classList.add('d-none');
+    }
+}
+
+// Function to test a session in the playground tab
+async function testSessionInPlayground(sessionId) {
+    try {
+        console.log('Testing session in playground:', sessionId);
+        
+        // Find the log file for this session
+        const sessionsResponse = await fetch('/api/training/sessions');
+        if (!sessionsResponse.ok) {
+            throw new Error(`Failed to load training sessions: ${sessionsResponse.status}`);
+        }
+        
+        const sessionsData = await sessionsResponse.json();
+        if (!sessionsData.success || !sessionsData.training_sessions) {
+            throw new Error('Failed to load training sessions data');
+        }
+        
+        // Find the matching session
+        const session = sessionsData.training_sessions.find(s => s.session_id === sessionId);
+        if (!session) {
+            throw new Error(`Session ${sessionId} not found`);
+        }
+        
+        console.log('Found session:', session);
+        
+        // Determine if this is a CPT or IFT session
+        const sessionType = sessionId.includes('_it_') ? 'ift' : 'cpt';
+        
+        // Format the model name as seen in the screenshot
+        // Use the model_name from the session if available
+        const modelName = session.model_name || `dataset_${sessionType}_${sessionId.split('_')[0]}`;
+        
+        console.log('Using model name:', modelName);
+        
+        // For the adapter path, use the session directory
+        const adapterPath = session.log_file.split('/').slice(0, -1).join('/');
+        
+        console.log('Adapter path:', adapterPath);
+        
+        // Store the session configuration in localStorage for the testing tab to pick up
+        const testConfig = {
+            model: modelName,
+            adapter: adapterPath
+        };
+        
+        console.log('Test configuration:', testConfig);
+        localStorage.setItem('forge-test-session', JSON.stringify(testConfig));
+        
+        // Switch to the testing tab
+        const testingTab = document.querySelector('[data-bs-target="#testing"]');
+        if (testingTab) {
+            console.log('Clicking testing tab');
+            testingTab.click();
+        } else {
+            console.error('Testing tab button not found');
+        }
+    } catch (error) {
+        console.error('Error preparing test session:', error);
+        alert('Failed to prepare test session: ' + error.message);
+    }
+}
+
+// Syntax highlight function for JSON
+function syntaxHighlightJson(json) {
+    if (!json) return '';
+    
+    json = json.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return json.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, function (match) {
+        let cls = 'text-warning'; // number
+        if (/^"/.test(match)) {
+            if (/:$/.test(match)) {
+                cls = 'text-info'; // key
+            } else {
+                cls = 'text-success'; // string
+            }
+        } else if (/true|false/.test(match)) {
+            cls = 'text-primary'; // boolean
+        } else if (/null/.test(match)) {
+            cls = 'text-danger'; // null
+        }
+        return '<span class="' + cls + '">' + match + '</span>';
+    });
+}
+
 // Inject CSS for clean styling
 const style = document.createElement('style');
 style.textContent = `
@@ -780,6 +1076,15 @@ style.textContent = `
     padding: 0.75rem;
     border-top: 1px solid var(--bs-border-color);
     z-index: 1000;
+}
+
+.session-actions {
+    display: flex;
+    gap: 5px;
+}
+
+.session-actions .btn {
+    padding: 0.25rem 0.5rem;
 }
 `;
 document.head.appendChild(style); 
