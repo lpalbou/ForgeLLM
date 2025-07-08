@@ -7,6 +7,37 @@ function elementsExist() {
     return required.every(id => document.getElementById(id) !== null);
 }
 
+// Function to store selected sessions in localStorage
+function storeSelectedSessions() {
+    const sessionsArray = Array.from(selectedSessions.keys());
+    localStorage.setItem('compare-selected-sessions', JSON.stringify(sessionsArray));
+}
+
+// Function to restore selected sessions from localStorage
+async function restoreSelectedSessions() {
+    try {
+        const storedSessions = localStorage.getItem('compare-selected-sessions');
+        if (storedSessions) {
+            const sessionsArray = JSON.parse(storedSessions);
+            if (Array.isArray(sessionsArray) && sessionsArray.length > 0) {
+                // First clear any existing selections to avoid duplicates
+                clearAllSelections();
+                
+                // Then check each stored session ID and select it if available
+                for (const sessionId of sessionsArray) {
+                    const checkbox = document.getElementById(`session-${sessionId}`);
+                    if (checkbox) {
+                        checkbox.checked = true;
+                        await handleSessionChange(sessionId, true);
+                    }
+                }
+            }
+        }
+    } catch (error) {
+        console.error('Error restoring selected sessions:', error);
+    }
+}
+
 // Function to sort sessions by model name and size
 function sortSessions(sessions) {
     return sessions.sort((a, b) => {
@@ -182,6 +213,28 @@ async function loadSessions() {
         
         console.log(`Loaded ${sessions.length} sessions`);
         
+        // Add event listener for tab changes to store/restore selections
+        document.addEventListener('shown.bs.tab', function(event) {
+            // If we're leaving the compare tab, store the selections
+            if (event.relatedTarget && event.relatedTarget.id === 'compare-tab') {
+                storeSelectedSessions();
+            }
+            
+            // If we're entering the compare tab, restore the selections
+            if (event.target && event.target.id === 'compare-tab') {
+                setTimeout(() => {
+                    restoreSelectedSessions();
+                }, 100); // Short delay to ensure DOM is ready
+            }
+        });
+        
+        // Restore selections when the page loads
+        if (document.querySelector('#compare-tab.active')) {
+            setTimeout(() => {
+                restoreSelectedSessions();
+            }, 100);
+        }
+        
     } catch (error) {
         console.error('Error loading sessions:', error);
         const container = document.getElementById('compare-sessions-list');
@@ -230,6 +283,9 @@ async function handleSessionChange(sessionId, isSelected) {
     } else {
         hideComparison();
     }
+
+    // Store the updated selections
+    storeSelectedSessions();
 }
 
 function updateSessionColorsAndUI() {
@@ -820,11 +876,70 @@ async function testSessionInPlayground(sessionId) {
         console.log('Test configuration:', testConfig);
         localStorage.setItem('forge-test-session', JSON.stringify(testConfig));
         
+        // Save current scroll position
+        const scrollPosition = window.scrollY;
+        
         // Switch to the testing tab
         const testingTab = document.querySelector('[data-bs-target="#testing"]');
         if (testingTab) {
             console.log('Clicking testing tab');
             testingTab.click();
+            
+            // Wait for tab to be shown before setting values
+            setTimeout(() => {
+                // Restore scroll position to top
+                window.scrollTo(0, 0);
+                
+                // Set the model and adapter values directly
+                const modelSelect = document.getElementById('test-model-select');
+                const adapterSelect = document.getElementById('adapter-path');
+                
+                if (modelSelect) {
+                    // Find the option that contains the model name
+                    const modelOptions = Array.from(modelSelect.options);
+                    const modelOption = modelOptions.find(option => 
+                        option.textContent.toLowerCase().includes(modelName.toLowerCase())
+                    );
+                    
+                    if (modelOption) {
+                        modelSelect.value = modelOption.value;
+                        // Trigger change event
+                        modelSelect.dispatchEvent(new Event('change'));
+                    }
+                }
+                
+                if (adapterSelect) {
+                    // Find the option that contains the adapter path
+                    const adapterOptions = Array.from(adapterSelect.options);
+                    const adapterOption = adapterOptions.find(option => 
+                        option.value === adapterPath || 
+                        option.textContent.includes(adapterPath.split('/').pop())
+                    );
+                    
+                    if (adapterOption) {
+                        adapterSelect.value = adapterOption.value;
+                        // Trigger change event
+                        adapterSelect.dispatchEvent(new Event('change'));
+                    } else {
+                        // If adapter option not found, we need to wait for the adapter dropdown to be populated
+                        console.log('Adapter option not found, waiting for dropdown to populate...');
+                        
+                        // Add a new option if it doesn't exist
+                        const newOption = document.createElement('option');
+                        newOption.value = adapterPath;
+                        newOption.textContent = adapterPath.split('/').pop();
+                        adapterSelect.appendChild(newOption);
+                        adapterSelect.value = adapterPath;
+                        adapterSelect.dispatchEvent(new Event('change'));
+                    }
+                }
+                
+                // Focus the load model button for better UX
+                const loadModelBtn = document.getElementById('load-model-btn');
+                if (loadModelBtn) {
+                    loadModelBtn.focus();
+                }
+            }, 500); // Give the tab time to initialize
         } else {
             console.error('Testing tab button not found');
         }
