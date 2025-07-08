@@ -11,7 +11,9 @@
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <!-- Custom Styles -->
     <link href="{{ url_for('static', filename='css/styles.css') }}?v={{ cache_buster }}" rel="stylesheet">
-    <!-- Plotly -->
+    <!-- Chart.js (For consistent charting like monitoring tab) -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.min.js"></script>
+    <!-- Plotly (Legacy support) -->
     <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
     <!-- Socket.IO -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>

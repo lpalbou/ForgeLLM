@@ -1,11 +1,5 @@
-/**
- * Training Session Comparison Component
- * Handles comparison of multiple training sessions with advanced visualization
- */
-
-// SIMPLE GLOBAL APPROACH - NO CLASSES, NO COMPLEX INITIALIZATION
+// COMPARE TAB - USING PLOTLY (SAME AS MONITORING TAB)
 let selectedSessions = new Map();
-let comparisonData = null;
 
 // Simple function to check if elements exist
 function elementsExist() {
@@ -176,18 +170,13 @@ async function loadSessions() {
 // Handle session selection change
 async function handleSessionChange(sessionId, isSelected) {
     if (isSelected) {
-        // Add to selection
         try {
-            // First get session details to find log file
             const sessionsResponse = await fetch('/api/training/sessions');
             const sessionsData = await sessionsResponse.json();
             const sessions = sessionsData.training_sessions || [];
             const session = sessions.find(s => s.session_id === sessionId);
-            
-            if (!session || !session.log_file) {
-                throw new Error('Session log file not found');
-            }
-            
+            if (!session || !session.log_file) throw new Error('Session log file not found');
+
             const response = await fetch(`/api/dashboard/historical`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -195,32 +184,61 @@ async function handleSessionChange(sessionId, isSelected) {
             });
             const sessionData = await response.json();
             
-            // Store both the API data and session metadata
             selectedSessions.set(sessionId, {
                 ...sessionData,
                 session_name: session.session_name,
                 session_id: sessionId
             });
-            console.log(`Added session ${sessionId} to comparison`);
         } catch (error) {
             console.error(`Error loading session ${sessionId}:`, error);
-            // Uncheck the checkbox
             document.getElementById(`session-${sessionId}`).checked = false;
             return;
         }
     } else {
-        // Remove from selection
         selectedSessions.delete(sessionId);
-        console.log(`Removed session ${sessionId} from comparison`);
     }
     
     updateSelectionSummary();
-    
-    // Auto-generate comparison if 2+ sessions selected
+    updateSessionColorsAndUI(); // Centralized function to update colors and UI
+
     if (selectedSessions.size >= 2) {
         generateComparison();
     } else {
         hideComparison();
+    }
+}
+
+function updateSessionColorsAndUI() {
+    const colors = getSessionColors();
+    const isDarkMode = document.documentElement.getAttribute('data-theme') === 'dark' || document.body.getAttribute('data-theme') === 'dark';
+    
+    // Reset all session cards to their default, non-selected state
+    document.querySelectorAll('.session-card').forEach(card => {
+        card.style.backgroundColor = '';
+        card.style.borderLeftColor = 'transparent';
+        card.classList.remove('selected-session-card');
+        // Reset text color to default
+        card.querySelectorAll('.session-card-title, .session-card-text, .session-card-text-label').forEach(el => el.style.color = '');
+    });
+
+    let colorIndex = 0;
+    for (const [sessionId, sessionData] of selectedSessions) {
+        const color = colors[colorIndex % colors.length];
+        sessionData.color = color; // Assign/update color in the session data map
+
+        const sessionCard = document.querySelector(`#session-${sessionId} + label .session-card`);
+        if (sessionCard) {
+            sessionCard.classList.add('selected-session-card');
+            sessionCard.style.borderLeftColor = color;
+            sessionCard.style.backgroundColor = `${color}33`; // Use color with ~20% alpha
+
+            // Change text to be readable on the new background
+            const textColor = isDarkMode ? '#FFFFFF' : '#000000';
+            sessionCard.querySelectorAll('.session-card-title, .session-card-text, .session-card-text-label').forEach(el => {
+                el.style.color = textColor;
+            });
+        }
+        colorIndex++;
     }
 }
 
@@ -246,510 +264,251 @@ function hideComparison() {
     if (chartsGrid) chartsGrid.style.display = 'none';
 }
 
-async function generateComparison() {
-    try {
-        console.log(`Generating comparison for ${selectedSessions.size} sessions`);
-        
-        const placeholder = document.getElementById('comparison-placeholder');
-        const chartsGrid = document.getElementById('comparison-charts-grid');
-        
-        if (!placeholder || !chartsGrid) {
-            throw new Error('Chart containers not found');
-        }
-        
-        // Show charts grid
-        placeholder.style.display = 'none';
-        chartsGrid.style.display = 'block';
-        
-        // Wait for DOM to update, then render charts
-        setTimeout(async () => {
-            await Promise.all([
-                renderLossComparison(),
-                renderPerplexityComparison(), 
-                renderStabilityComparison(),
-                renderGeneralizationComparison()
-            ]);
-        }, 100);
-        
-        console.log('Comparison charts generated successfully');
-        
-    } catch (error) {
-        console.error('Error generating comparison:', error);
-        hideComparison();
+// Function to wrap long legend text for Plotly by inserting <br> tags
+function wrapText(text, maxLength = 40) {
+    if (!text || text.length <= maxLength) {
+        return text;
     }
+    // A more robust way to split, handling long segments without underscores
+    const parts = text.split(/([_])/).flatMap(part => {
+        if (part.length > maxLength) {
+            return part.match(new RegExp(`.{1,${maxLength}}`, 'g')) || [];
+        }
+        return part;
+    });
+
+    let wrappedText = '';
+    let currentLine = '';
+
+    parts.forEach((part, index) => {
+        if (currentLine.length + part.length > maxLength) {
+            wrappedText += currentLine + '<br>';
+            currentLine = part;
+        } else {
+            currentLine += part;
+        }
+    });
+    wrappedText += currentLine;
+
+    // Clean up to avoid leading/trailing underscores on lines
+    return wrappedText.replace(/<br>_/g, '<br>').replace(/_<br>/g, '<br>');
 }
 
-// Function to get actual container dimensions and calculate proper chart size
-function getChartDimensions(containerId) {
+// Generic function to render any comparison chart
+function renderComparisonChart(containerId, traces, layoutOptions) {
     const container = document.getElementById(containerId);
-    if (!container) return { width: 600, height: 400 };
-    
-    // Get the parent card-body
-    const cardBody = container.parentElement;
-    if (!cardBody) return { width: 600, height: 400 };
-    
-    // Calculate available space (accounting for padding/margins)
-    const containerRect = cardBody.getBoundingClientRect();
-    const width = Math.max(400, containerRect.width - 20); // Subtract padding
-    const height = 400;
-    
-    console.log(`Chart dimensions for ${containerId}: ${width}x${height}`);
-    return { width, height };
-}
+    if (!container) return;
 
-// Function to get dark theme compatible layout with explicit dimensions
-function getDarkThemeLayout(title, width, height) {
-    return {
+    const containerWidth = container.offsetWidth;
+    const containerHeight = container.offsetHeight;
+    if (containerWidth < 50 || containerHeight < 50) return;
+
+    const isDarkMode = document.documentElement.getAttribute('data-theme') === 'dark' || document.body.getAttribute('data-theme') === 'dark';
+    const textColor = isDarkMode ? '#F5F5F5' : '#333333';
+    const borderColor = isDarkMode ? '#555555' : '#DDDDDD';
+
+    const layout = {
+        width: containerWidth,
+        height: containerHeight,
+        autosize: false,
+        margin: { l: 60, r: 20, t: 50, b: 60 }, // Clean bottom margin, legend is removed
+        showlegend: false, // --- LEGEND IS NOW REMOVED ---
+        paper_bgcolor: 'transparent',
+        plot_bgcolor: 'transparent',
+        font: { color: textColor },
         title: {
-            text: title,
-            font: { color: '#ffffff', size: 16 }
+            text: layoutOptions.title,
+            x: 0.05,
+            font: { color: textColor, size: 16 }
         },
-        xaxis: { 
-            title: { text: 'Iterations', font: { color: '#ffffff' } },
-            color: '#ffffff',
-            gridcolor: '#404040'
+        xaxis: {
+            ...layoutOptions.xaxis,
+            title: {
+                text: layoutOptions.xaxis.title,
+                font: { color: textColor },
+                standoff: 20
+            },
+            gridcolor: borderColor,
+            linecolor: borderColor,
+            zerolinecolor: borderColor,
+            ticks: 'outside',
+            tickcolor: borderColor,
+            tickfont: { color: textColor }
         },
-        yaxis: { 
-            title: { text: 'Loss', font: { color: '#ffffff' } },
-            color: '#ffffff',
-            gridcolor: '#404040'
+        yaxis: {
+            ...layoutOptions.yaxis,
+            title: { text: layoutOptions.yaxis.title, font: { color: textColor } },
+            gridcolor: borderColor,
+            linecolor: borderColor,
+            zerolinecolor: borderColor,
+            ticks: 'outside',
+            tickcolor: borderColor,
+            tickfont: { color: textColor },
+            automargin: true
         },
-        margin: { l: 60, r: 30, t: 50, b: 50 },
-        plot_bgcolor: 'rgba(0,0,0,0)',
-        paper_bgcolor: 'rgba(0,0,0,0)',
-        font: { color: '#ffffff' },
-        legend: { font: { color: '#ffffff' } },
-        width: width,
-        height: height,
-        autosize: false
+        shapes: layoutOptions.shapes || [],
+        annotations: layoutOptions.annotations || []
     };
+
+    Plotly.react(container, traces, layout, {
+        responsive: false,
+        displayModeBar: false
+    });
 }
 
-// Plotly config for full width usage
-const plotlyConfig = {
-    responsive: true,
-    displayModeBar: false
-};
+async function generateComparison() {
+    const placeholder = document.getElementById('comparison-placeholder');
+    const chartsGrid = document.getElementById('comparison-charts-grid');
+    if (!placeholder || !chartsGrid) return;
 
-async function renderLossComparison() {
-    const chartContainer = document.getElementById('loss-comparison-chart');
-    if (!chartContainer) return;
+    placeholder.style.display = 'none';
+    chartsGrid.style.display = 'block';
     
-    // Get actual container dimensions
-    const { width, height } = getChartDimensions('loss-comparison-chart');
-    
-    const traces = [];
-    const colors = ['#007AFF', '#FF3B30', '#34C759', '#FF9500', '#AF52DE', '#00C7BE'];
-    let colorIndex = 0;
-    
-    for (const [sessionId, sessionData] of selectedSessions) {
-        const color = colors[colorIndex % colors.length];
-        colorIndex++;
-        
-        // Access the correct data structure: charts.loss.data
-        if (sessionData.charts && sessionData.charts.loss && sessionData.charts.loss.data) {
-            const lossCharts = sessionData.charts.loss.data;
-            
-            // Find training loss data
-            const trainingLoss = lossCharts.find(chart => chart.name === 'Training Loss');
-            if (trainingLoss && trainingLoss.x && trainingLoss.y) {
-                traces.push({
-                    x: trainingLoss.x,
-                    y: trainingLoss.y,
-                    type: 'scatter',
-                    mode: 'lines',
-                    name: sessionData.session_name || `Session ${sessionId}`,
-                    line: { color: color, width: 2 }
-                });
-            }
-        }
-    }
-    
-    const layout = getDarkThemeLayout('Training Loss Comparison', width, height);
-    layout.yaxis.title.text = 'Loss';
-    
-    // Clear and set container dimensions
-    chartContainer.style.width = width + 'px';
-    chartContainer.style.height = height + 'px';
-    chartContainer.innerHTML = '';
-    
-    Plotly.newPlot(chartContainer, traces, layout, plotlyConfig);
-}
-
-async function renderPerplexityComparison() {
-    const chartContainer = document.getElementById('perplexity-comparison-chart');
-    if (!chartContainer) return;
-    
-    // Get actual container dimensions
-    const { width, height } = getChartDimensions('perplexity-comparison-chart');
-    
-    const traces = [];
-    const colors = ['#007AFF', '#FF3B30', '#34C759', '#FF9500', '#AF52DE', '#00C7BE'];
-    let colorIndex = 0;
-    
-    for (const [sessionId, sessionData] of selectedSessions) {
-        const color = colors[colorIndex % colors.length];
-        colorIndex++;
-        
-        // Access the correct data structure: charts.perplexity.data
-        if (sessionData.charts && sessionData.charts.perplexity && sessionData.charts.perplexity.data) {
-            const perplexityCharts = sessionData.charts.perplexity.data;
-            
-            // Find training perplexity data
-            const trainingPerplexity = perplexityCharts.find(chart => chart.name === 'Training Perplexity');
-            if (trainingPerplexity && trainingPerplexity.x && trainingPerplexity.y) {
-                traces.push({
-                    x: trainingPerplexity.x,
-                    y: trainingPerplexity.y,
-                    type: 'scatter',
-                    mode: 'lines',
-                    name: sessionData.session_name || `Session ${sessionId}`,
-                    line: { color: color, width: 2 }
-                });
-            }
-        }
-    }
-    
-    const layout = getDarkThemeLayout('Perplexity Comparison', width, height);
-    layout.yaxis.title.text = 'Perplexity';
-    
-    // Clear and set container dimensions
-    chartContainer.style.width = width + 'px';
-    chartContainer.style.height = height + 'px';
-    chartContainer.innerHTML = '';
-    
-    Plotly.newPlot(chartContainer, traces, layout, plotlyConfig);
-}
-
-async function renderStabilityComparison() {
-    const chartContainer = document.getElementById('stability-comparison-chart');
-    if (!chartContainer) return;
-    
-    // Get actual container dimensions
-    const { width, height } = getChartDimensions('stability-comparison-chart');
-    
-    const traces = [];
-    const colors = ['#007AFF', '#FF3B30', '#34C759', '#FF9500', '#AF52DE', '#00C7BE'];
-    let colorIndex = 0;
-    
-    let minX = Infinity, maxX = -Infinity;
-    
-    for (const [sessionId, sessionData] of selectedSessions) {
-        const color = colors[colorIndex % colors.length];
-        colorIndex++;
-        
-        // Calculate loss variance/stability from training loss data
-        if (sessionData.charts && sessionData.charts.loss && sessionData.charts.loss.data) {
-            const lossCharts = sessionData.charts.loss.data;
-            const trainingLoss = lossCharts.find(chart => chart.name === 'Training Loss');
-            
-            if (trainingLoss && trainingLoss.x && trainingLoss.y) {
-                const windowSize = 10; // Calculate rolling variance
-                const variances = [];
-                const xValues = [];
-                
-                for (let i = windowSize; i < trainingLoss.y.length; i++) {
-                    const window = trainingLoss.y.slice(i - windowSize, i);
-                    const mean = window.reduce((a, b) => a + b, 0) / window.length;
-                    const variance = window.reduce((acc, val) => acc + Math.pow(val - mean, 2), 0) / window.length;
-                    variances.push(variance);
-                    xValues.push(trainingLoss.x[i]);
-                }
-                
-                // Track min/max X for background zones
-                if (xValues.length > 0) {
-                    minX = Math.min(minX, Math.min(...xValues));
-                    maxX = Math.max(maxX, Math.max(...xValues));
-                }
-                
-                traces.push({
-                    x: xValues,
-                    y: variances,
-                    type: 'scatter',
-                    mode: 'lines',
-                    name: sessionData.session_name || `Session ${sessionId}`,
-                    line: { color: color, width: 2 }
-                });
-            }
-        }
-    }
-    
-    const layout = getDarkThemeLayout('Loss Stability (Variance)', width, height);
-    layout.yaxis.title.text = 'Loss Variance';
-    
-    // Add colored background zones for stability levels
-    if (minX !== Infinity && maxX !== -Infinity) {
-        layout.shapes = [
-            // Excellent zone (0 - 0.01)
-            {
-                type: 'rect',
-                xref: 'x',
-                yref: 'y',
-                x0: minX,
-                y0: 0,
-                x1: maxX,
-                y1: 0.01,
-                fillcolor: 'rgba(52, 199, 89, 0.2)', // Green
-                line: { width: 0 },
-                layer: 'below'
-            },
-            // Good zone (0.01 - 0.05)
-            {
-                type: 'rect',
-                xref: 'x',
-                yref: 'y',
-                x0: minX,
-                y0: 0.01,
-                x1: maxX,
-                y1: 0.05,
-                fillcolor: 'rgba(255, 204, 0, 0.2)', // Yellow
-                line: { width: 0 },
-                layer: 'below'
-            },
-            // Unstable zone (0.05+)
-            {
-                type: 'rect',
-                xref: 'x',
-                yref: 'y',
-                x0: minX,
-                y0: 0.05,
-                x1: maxX,
-                y1: 0.2, // Cap at reasonable value for visualization
-                fillcolor: 'rgba(255, 59, 48, 0.2)', // Red
-                line: { width: 0 },
-                layer: 'below'
-            }
-        ];
-        
-        // Add annotations for zones
-        layout.annotations = [
-            {
-                x: minX + (maxX - minX) * 0.02,
-                y: 0.005,
-                text: 'Excellent',
-                showarrow: false,
-                font: { size: 10, color: '#ffffff' },
-                bgcolor: 'rgba(52, 199, 89, 0.8)',
-                bordercolor: 'rgba(52, 199, 89, 1)',
-                borderwidth: 1
-            },
-            {
-                x: minX + (maxX - minX) * 0.02,
-                y: 0.03,
-                text: 'Good',
-                showarrow: false,
-                font: { size: 10, color: '#ffffff' },
-                bgcolor: 'rgba(255, 204, 0, 0.8)',
-                bordercolor: 'rgba(255, 204, 0, 1)',
-                borderwidth: 1
-            },
-            {
-                x: minX + (maxX - minX) * 0.02,
-                y: 0.1,
-                text: 'Unstable',
-                showarrow: false,
-                font: { size: 10, color: '#ffffff' },
-                bgcolor: 'rgba(255, 59, 48, 0.8)',
-                bordercolor: 'rgba(255, 59, 48, 1)',
-                borderwidth: 1
-            }
-        ];
-    }
-    
-    // Clear and set container dimensions
-    chartContainer.style.width = width + 'px';
-    chartContainer.style.height = height + 'px';
-    chartContainer.innerHTML = '';
-    
-    Plotly.newPlot(chartContainer, traces, layout, plotlyConfig);
-}
-
-async function renderGeneralizationComparison() {
-    const chartContainer = document.getElementById('generalization-comparison-chart');
-    if (!chartContainer) return;
-    
-    // Get actual container dimensions
-    const { width, height } = getChartDimensions('generalization-comparison-chart');
-    
-    const traces = [];
-    const colors = ['#007AFF', '#FF3B30', '#34C759', '#FF9500', '#AF52DE', '#00C7BE'];
-    let colorIndex = 0;
-    
-    let minX = Infinity, maxX = -Infinity;
-    let hasValidationData = false;
-    
-    for (const [sessionId, sessionData] of selectedSessions) {
-        const color = colors[colorIndex % colors.length];
-        colorIndex++;
-        
-        // Calculate generalization gap (validation - training loss)
-        if (sessionData.charts && sessionData.charts.loss && sessionData.charts.loss.data) {
-            const lossCharts = sessionData.charts.loss.data;
-            const trainingLoss = lossCharts.find(chart => chart.name === 'Training Loss');
-            const validationLoss = lossCharts.find(chart => chart.name === 'Validation Loss');
-            
-            console.log(`Session ${sessionId}: Training=${!!trainingLoss}, Validation=${!!validationLoss}`);
-            
-            if (trainingLoss && trainingLoss.x && trainingLoss.y) {
-                if (validationLoss && validationLoss.x && validationLoss.y && validationLoss.y.length > 0) {
-                    // Both training and validation data available
-                    hasValidationData = true;
-                    const gaps = [];
-                    const xValues = [];
-                    
-                    // Create a map of validation data by iteration for easier lookup
-                    const valMap = new Map();
-                    for (let i = 0; i < validationLoss.x.length; i++) {
-                        valMap.set(validationLoss.x[i], validationLoss.y[i]);
-                    }
-                    
-                    // For each training point, find corresponding validation point
-                    for (let i = 0; i < trainingLoss.x.length; i++) {
-                        const iter = trainingLoss.x[i];
-                        const trainLossVal = trainingLoss.y[i];
-                        const valLossVal = valMap.get(iter);
-                        
-                        if (valLossVal !== undefined) {
-                            gaps.push(valLossVal - trainLossVal);
-                            xValues.push(iter);
-                        }
-                    }
-                    
-                    if (gaps.length > 0) {
-                        // Track min/max X for background zones
-                        minX = Math.min(minX, Math.min(...xValues));
-                        maxX = Math.max(maxX, Math.max(...xValues));
-                        
-                        traces.push({
-                            x: xValues,
-                            y: gaps,
-                            type: 'scatter',
-                            mode: 'lines',
-                            name: sessionData.session_name || `Session ${sessionId}`,
-                            line: { color: color, width: 2 }
+    setTimeout(() => {
+        try {
+            // --- 1. Loss Comparison (VALIDATION) ---
+            const lossTraces = [];
+            for (const [sessionId, sessionData] of selectedSessions) {
+                if (sessionData.charts?.loss?.data) {
+                    const validationLoss = sessionData.charts.loss.data.find(c => c.name === 'Validation Loss');
+                    if (validationLoss?.x && validationLoss?.y) {
+                        lossTraces.push({
+                            x: validationLoss.x, y: validationLoss.y, type: 'scatter', mode: 'lines',
+                            name: sessionData.session_name, // Name for hover data
+                            line: { color: sessionData.color, width: 2 } // Use assigned color
                         });
                     }
-                } else {
-                    // Only training data - show as flat line at 0 (no gap available)
-                    if (trainingLoss.x.length > 0) {
-                        minX = Math.min(minX, Math.min(...trainingLoss.x));
-                        maxX = Math.max(maxX, Math.max(...trainingLoss.x));
-                    }
-                    
-                    traces.push({
-                        x: trainingLoss.x,
-                        y: trainingLoss.x.map(() => 0),
-                        type: 'scatter',
-                        mode: 'lines',
-                        name: `${sessionData.session_name || `Session ${sessionId}`} (Training only)`,
-                        line: { color: color, width: 2, dash: 'dash' }
-                    });
                 }
             }
+            renderComparisonChart('loss-comparison-chart', lossTraces, {
+                title: 'Validation Loss',
+                xaxis: { title: 'Iterations' },
+                yaxis: { title: 'Validation Loss' }
+            });
+
+            // --- 2. Perplexity Comparison (VALIDATION) ---
+            const perplexityTraces = [];
+            for (const [sessionId, sessionData] of selectedSessions) {
+                 if (sessionData.charts?.perplexity?.data) {
+                    const validationPerplexity = sessionData.charts.perplexity.data.find(c => c.name === 'Validation Perplexity');
+                    if (validationPerplexity?.x && validationPerplexity?.y) {
+                        perplexityTraces.push({
+                            x: validationPerplexity.x, y: validationPerplexity.y, type: 'scatter', mode: 'lines',
+                            name: sessionData.session_name,
+                            line: { color: sessionData.color, width: 2 } // Use assigned color
+                        });
+                    }
+                }
+            }
+            renderComparisonChart('perplexity-comparison-chart', perplexityTraces, {
+                title: 'Validation Perplexity',
+                xaxis: { title: 'Iterations' },
+                yaxis: { title: 'Validation Perplexity' }
+            });
+
+            // --- 3. Stability Comparison (VALIDATION LOSS) ---
+            const stabilityTraces = [];
+            for (const [sessionId, sessionData] of selectedSessions) {
+                if (sessionData.charts?.loss?.data) {
+                    const validationLoss = sessionData.charts.loss.data.find(c => c.name === 'Validation Loss');
+                    if (validationLoss?.x && validationLoss?.y) {
+                        const windowSize = 10;
+                        const varianceX = [], varianceY = [];
+                        // Ensure there are enough points to calculate variance
+                        if (validationLoss.y.length >= windowSize) {
+                            for (let i = windowSize; i < validationLoss.y.length; i++) {
+                                const window = validationLoss.y.slice(i - windowSize, i);
+                                const mean = window.reduce((a, b) => a + b, 0) / window.length;
+                                const variance = window.reduce((acc, val) => acc + Math.pow(val - mean, 2), 0) / window.length;
+                                varianceX.push(validationLoss.x[i]);
+                                varianceY.push(variance);
+                            }
+                        }
+                        if (varianceX.length > 0) {
+                            stabilityTraces.push({
+                                x: varianceX, y: varianceY, type: 'scatter', mode: 'lines',
+                                name: sessionData.session_name,
+                                line: { color: sessionData.color, width: 2 } // Use assigned color
+                            });
+                        }
+                    }
+                }
+            }
+            renderComparisonChart('stability-comparison-chart', stabilityTraces, {
+                title: 'Validation Loss Stability',
+                xaxis: { title: 'Iterations' },
+                yaxis: { title: 'Loss Variance', range: [0, 0.1] },
+                shapes: [
+                    { type: 'rect', xref: 'paper', yref: 'y', x0: 0, y0: 0, x1: 1, y1: 0.005, fillcolor: 'rgba(40, 167, 69, 0.2)', line: { width: 0 }, layer: 'below' },
+                    { type: 'rect', xref: 'paper', yref: 'y', x0: 0, y0: 0.005, x1: 1, y1: 0.02, fillcolor: 'rgba(255, 193, 7, 0.2)', line: { width: 0 }, layer: 'below' },
+                    { type: 'rect', xref: 'paper', yref: 'y', x0: 0, y0: 0.02, x1: 1, y1: 0.1, fillcolor: 'rgba(220, 53, 69, 0.2)', line: { width: 0 }, layer: 'below' }
+                ],
+                annotations: [
+                    { text: 'Excellent', x: 0.95, y: 0.0025, xref: 'paper', yref: 'y', showarrow: false, font: { color: 'rgba(40, 167, 69, 0.9)', size: 10 }, xanchor: 'right' },
+                    { text: 'Good', x: 0.95, y: 0.0125, xref: 'paper', yref: 'y', showarrow: false, font: { color: 'rgba(255, 193, 7, 0.9)', size: 10 }, xanchor: 'right' },
+                    { text: 'Unstable', x: 0.95, y: 0.06, xref: 'paper', yref: 'y', showarrow: false, font: { color: 'rgba(220, 53, 69, 0.9)', size: 10 }, xanchor: 'right' }
+                ]
+            });
+
+            // --- 4. Generalization Gap (Correct by definition) ---
+            const gapTraces = [];
+            for (const [sessionId, sessionData] of selectedSessions) {
+                if (sessionData.charts?.loss?.data) {
+                    const trainingLoss = sessionData.charts.loss.data.find(c => c.name === 'Training Loss');
+                    const validationLoss = sessionData.charts.loss.data.find(c => c.name === 'Validation Loss');
+                    if (trainingLoss?.x && trainingLoss?.y) {
+                        if (validationLoss?.x?.length > 0) {
+                            const valMap = new Map(validationLoss.x.map((iter, i) => [iter, validationLoss.y[i]]));
+                            const gapX = [], gapY = [];
+                            trainingLoss.x.forEach((iter, i) => {
+                                if (valMap.has(iter)) {
+                                    gapX.push(iter);
+                                    gapY.push(valMap.get(iter) - trainingLoss.y[i]);
+                                }
+                            });
+                            if (gapX.length > 0) {
+                                gapTraces.push({
+                                    x: gapX, y: gapY, type: 'scatter', mode: 'lines',
+                                    name: sessionData.session_name,
+                                    line: { color: sessionData.color, width: 2 } // Use assigned color
+                                });
+                            }
+                        } else {
+                             gapTraces.push({
+                                x: trainingLoss.x, y: trainingLoss.x.map(() => 0), type: 'scatter', mode: 'lines',
+                                name: `${sessionData.session_name} (No Val)`,
+                                line: { color: sessionData.color, width: 2, dash: 'dash' } // Use assigned color
+                            });
+                        }
+                    }
+                }
+            }
+            renderComparisonChart('generalization-comparison-chart', gapTraces, {
+                title: 'Generalization Gap',
+                xaxis: { title: 'Iterations' },
+                yaxis: { title: 'Val Loss - Train Loss', range: [-0.5, 0.5] },
+                shapes: [
+                    { type: 'rect', xref: 'paper', yref: 'y', x0: 0, y0: 0.1, x1: 1, y1: 0.5, fillcolor: 'rgba(255, 193, 7, 0.2)', line: { width: 0 }, layer: 'below' },
+                    { type: 'rect', xref: 'paper', yref: 'y', x0: 0, y0: -0.1, x1: 1, y1: 0.1, fillcolor: 'rgba(40, 167, 69, 0.2)', line: { width: 0 }, layer: 'below' },
+                    { type: 'rect', xref: 'paper', yref: 'y', x0: 0, y0: -0.5, x1: 1, y1: -0.1, fillcolor: 'rgba(220, 53, 69, 0.2)', line: { width: 0 }, layer: 'below' }
+                ],
+                annotations: [
+                    { text: 'Underfitting', x: 0.95, y: 0.3, xref: 'paper', yref: 'y', showarrow: false, font: { color: 'rgba(255, 193, 7, 0.9)', size: 10 }, xanchor: 'right' },
+                    { text: 'Good Fit', x: 0.95, y: 0, xref: 'paper', yref: 'y', showarrow: false, font: { color: 'rgba(40, 167, 69, 0.9)', size: 10 }, xanchor: 'right' },
+                    { text: 'Overfitting', x: 0.95, y: -0.3, xref: 'paper', yref: 'y', showarrow: false, font: { color: 'rgba(220, 53, 69, 0.9)', size: 10 }, xanchor: 'right' }
+                ]
+            });
+        } catch (error) {
+            console.error('Error generating comparison:', error);
+            hideComparison();
         }
-    }
-    
-    const layout = getDarkThemeLayout('Generalization Gap', width, height);
-    layout.yaxis.title.text = 'Validation Loss - Training Loss';
-    
-    // Add colored background zones for generalization assessment (only if we have validation data)
-    if (minX !== Infinity && maxX !== -Infinity && hasValidationData) {
-        layout.shapes = [
-            // Underfitting zone (gap < -0.1)
-            {
-                type: 'rect',
-                xref: 'x',
-                yref: 'y',
-                x0: minX,
-                y0: -0.5,
-                x1: maxX,
-                y1: -0.1,
-                fillcolor: 'rgba(52, 199, 89, 0.2)', // Green
-                line: { width: 0 },
-                layer: 'below'
-            },
-            // Good fit zone (-0.1 to 0.1)
-            {
-                type: 'rect',
-                xref: 'x',
-                yref: 'y',
-                x0: minX,
-                y0: -0.1,
-                x1: maxX,
-                y1: 0.1,
-                fillcolor: 'rgba(100, 150, 255, 0.2)', // Blue
-                line: { width: 0 },
-                layer: 'below'
-            },
-            // Overfitting zone (gap > 0.1)
-            {
-                type: 'rect',
-                xref: 'x',
-                yref: 'y',
-                x0: minX,
-                y0: 0.1,
-                x1: maxX,
-                y1: 0.5,
-                fillcolor: 'rgba(255, 59, 48, 0.2)', // Red
-                line: { width: 0 },
-                layer: 'below'
-            }
-        ];
-        
-        // Add reference line at y=0
-        layout.shapes.push({
-            type: 'line',
-            xref: 'x',
-            yref: 'y',
-            x0: minX,
-            y0: 0,
-            x1: maxX,
-            y1: 0,
-            line: { color: '#666666', width: 1, dash: 'dot' },
-            layer: 'below'
-        });
-        
-        // Add annotations for zones
-        layout.annotations = [
-            {
-                x: minX + (maxX - minX) * 0.02,
-                y: -0.3,
-                text: 'Underfitting',
-                showarrow: false,
-                font: { size: 10, color: '#ffffff' },
-                bgcolor: 'rgba(52, 199, 89, 0.8)',
-                bordercolor: 'rgba(52, 199, 89, 1)',
-                borderwidth: 1
-            },
-            {
-                x: minX + (maxX - minX) * 0.02,
-                y: 0,
-                text: 'Good fit',
-                showarrow: false,
-                font: { size: 10, color: '#ffffff' },
-                bgcolor: 'rgba(100, 150, 255, 0.8)',
-                bordercolor: 'rgba(100, 150, 255, 1)',
-                borderwidth: 1
-            },
-            {
-                x: minX + (maxX - minX) * 0.02,
-                y: 0.3,
-                text: 'Overfitting',
-                showarrow: false,
-                font: { size: 10, color: '#ffffff' },
-                bgcolor: 'rgba(255, 59, 48, 0.8)',
-                bordercolor: 'rgba(255, 59, 48, 1)',
-                borderwidth: 1
-            }
-        ];
-    }
-    
-    // Clear and set container dimensions
-    chartContainer.style.width = width + 'px';
-    chartContainer.style.height = height + 'px';
-    chartContainer.innerHTML = '';
-    
-    Plotly.newPlot(chartContainer, traces, layout, plotlyConfig);
+    }, 100);
+}
+
+// Generate distinct colors for sessions
+function getSessionColors() {
+    // Standard color palette for charts and UI elements
+    return ['#0d6efd', '#dc3545', '#198754', '#fd7e14', '#6f42c1', '#d63384', '#20c997'];
 }
 
 // Clear all selections
@@ -799,9 +558,9 @@ document.addEventListener('shown.bs.tab', function(event) {
     }
 });
 
-console.log('Compare.js simple version loaded');
+console.log('Compare.js Plotly version loaded');
 
-// Inject CSS for improved session layout and FULL WIDTH charts
+// Inject CSS for clean styling
 const style = document.createElement('style');
 style.textContent = `
 /* Session List Container */
@@ -832,18 +591,23 @@ style.textContent = `
 
 /* Session Card Styling */
 .session-card {
-    background: var(--surface-color) !important;
-    border: 1px solid var(--border-color) !important;
-    border-radius: 8px !important;
-    padding: 12px !important;
-    transition: all 0.2s ease !important;
-    cursor: pointer;
+    transition: background-color 0.2s ease-in-out, border-left-color 0.2s ease-in-out;
+    border-left: 4px solid transparent;
+}
+
+.session-card-title,
+.session-card-text,
+.session-card-text-label {
+    transition: color 0.2s ease-in-out;
 }
 
 .session-card:hover {
-    border-color: #007AFF !important;
-    box-shadow: 0 2px 8px rgba(0, 122, 255, 0.1) !important;
-    transform: translateY(-1px);
+    background-color: var(--bs-tertiary-bg);
+}
+
+.btn-check:checked + label .session-card {
+    border-left-color: var(--bs-primary); /* Default border color */
+    background-color: var(--bs-tertiary-bg);
 }
 
 /* Session Header */
@@ -961,27 +725,13 @@ style.textContent = `
     margin-bottom: 10px;
 }
 
-/* CRITICAL: Force chart containers to use full available space */
+/* Chart containers using Plotly */
 #loss-comparison-chart,
 #perplexity-comparison-chart,
 #stability-comparison-chart,
 #generalization-comparison-chart {
-    min-height: 400px !important;
-}
-
-/* Ensure card bodies use full width */
-.card-body {
-    padding: 8px !important;
-    width: 100% !important;
-    box-sizing: border-box !important;
-}
-
-/* Force Bootstrap columns to use full allocated space */
-.comparison-charts-grid .col-lg-6 {
-    width: 50% !important;
-    max-width: 50% !important;
-    flex: 0 0 50% !important;
-    padding: 0 8px !important;
+    width: 100%;
+    height: 300px;
 }
 
 /* Tooltip styling */
@@ -1014,6 +764,21 @@ style.textContent = `
     transform: translateX(-50%) translateY(100%);
     border: 5px solid transparent;
     border-top-color: rgba(0, 0, 0, 0.9);
+    z-index: 1000;
+}
+
+/* Selected State for Session Card */
+.session-card.selected-session-card {
+    border-left-width: 4px !important;
+    border-left-style: solid !important;
+}
+
+#selection-summary {
+    position: sticky;
+    bottom: 0;
+    background: var(--bs-body-bg);
+    padding: 0.75rem;
+    border-top: 1px solid var(--bs-border-color);
     z-index: 1000;
 }
 `;
