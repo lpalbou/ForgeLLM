@@ -680,8 +680,61 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 });
 
-// Also listen for Bootstrap tab shown event
+// Function to ensure the fuse adapter dropdown is populated
+async function ensureFuseAdapterDropdownPopulated() {
+    const adapterSelect = document.getElementById('fuse-adapter-select');
+    if (!adapterSelect) {
+        console.error('Adapter select dropdown not found!');
+        return false;
+    }
+    
+    // If dropdown is empty or only has the placeholder option, populate it
+    if (adapterSelect.options.length <= 1) {
+        console.log('Dropdown is empty, populating it manually');
+        
+        try {
+            // Get adapters directly from API
+            const response = await fetch('/api/checkpoints');
+            const data = await response.json();
+            
+            if (data.success && data.checkpoints && data.checkpoints.length > 0) {
+                console.log(`Got ${data.checkpoints.length} adapters from API`);
+                
+                // Clear existing options except the first one
+                const firstOption = adapterSelect.firstElementChild;
+                adapterSelect.innerHTML = '';
+                if (firstOption) {
+                    adapterSelect.appendChild(firstOption);
+                }
+                
+                // Add the adapters to the dropdown
+                data.checkpoints.forEach(checkpoint => {
+                    const option = document.createElement('option');
+                    option.value = checkpoint.path;
+                    
+                    // Format the display name
+                    const modelName = checkpoint.model || 'Unknown';
+                    const iteration = checkpoint.iteration || 0;
+                    const size = checkpoint.size ? `${checkpoint.size.toFixed(1)}MB` : '';
+                    
+                    option.textContent = `${modelName} - iter ${iteration} ${size}`;
+                    adapterSelect.appendChild(option);
+                });
+                
+                console.log(`Populated dropdown with ${adapterSelect.options.length} options`);
+                return true;
+            }
+        } catch (error) {
+            console.error('Error populating dropdown:', error);
+        }
+    }
+    
+    return adapterSelect.options.length > 1;
+}
+
+// Global tab change event listener
 document.addEventListener('shown.bs.tab', function(event) {
+    // If we're entering the compare tab
     if (event.target.getAttribute('data-bs-target') === '#compare') {
         console.log('Compare tab activated, loading sessions');
         setTimeout(() => {
@@ -689,6 +742,86 @@ document.addEventListener('shown.bs.tab', function(event) {
                 loadSessions();
             }
         }, 100);
+    }
+    
+    // If we're entering the fuse tab
+    if (event.target.getAttribute('data-bs-target') === '#fuse') {
+        const storedAdapter = localStorage.getItem('forge-fuse-adapter');
+        if (storedAdapter) {
+            console.log('Found stored adapter path:', storedAdapter);
+            
+            // DIRECT APPROACH: Wait a bit for the dropdown to be populated, then select the adapter
+            setTimeout(() => {
+                const adapterSelect = document.getElementById('fuse-adapter-select');
+                if (!adapterSelect) {
+                    console.error('Adapter select dropdown not found!');
+                    return;
+                }
+                
+                console.log(`Dropdown has ${adapterSelect.options.length} options`);
+                
+                // Try to find the adapter in the dropdown
+                let found = false;
+                for (let i = 0; i < adapterSelect.options.length; i++) {
+                    const optionValue = adapterSelect.options[i].value;
+                    console.log(`Checking option ${i}: ${optionValue}`);
+                    
+                    // Check if the option value starts with the stored adapter path
+                    if (optionValue.startsWith(storedAdapter)) {
+                        console.log(`FOUND MATCH at index ${i}, selecting it`);
+                        adapterSelect.selectedIndex = i;
+                        adapterSelect.dispatchEvent(new Event('change'));
+                        found = true;
+                        break;
+                    }
+                }
+                
+                // If not found, try a more flexible approach
+                if (!found) {
+                    console.log('No direct match found, trying more flexible matching');
+                    
+                    // Extract model name and iteration from stored path
+                    const pathParts = storedAdapter.split('/');
+                    const modelFileName = pathParts[pathParts.length - 1];
+                    
+                    for (let i = 0; i < adapterSelect.options.length; i++) {
+                        const optionValue = adapterSelect.options[i].value;
+                        const optionParts = optionValue.split('/');
+                        const optionFileName = optionParts[optionParts.length - 1];
+                        
+                        // Check if the model names match
+                        if (optionValue.includes(modelFileName) || 
+                            optionFileName.includes(modelFileName) ||
+                            modelFileName.includes(optionFileName.split('_')[0])) {
+                            console.log(`Found partial match at index ${i}, selecting it`);
+                            adapterSelect.selectedIndex = i;
+                            adapterSelect.dispatchEvent(new Event('change'));
+                            found = true;
+                            break;
+                        }
+                    }
+                }
+                
+                // Clear the storage after attempting selection
+                localStorage.removeItem('forge-fuse-adapter');
+                
+                if (!found) {
+                    console.error('Could not find adapter in dropdown after multiple attempts');
+                    
+                    // Last resort: just select the first non-empty option
+                    if (adapterSelect.options.length > 1) {
+                        console.log('Selecting first available option as fallback');
+                        adapterSelect.selectedIndex = 1;
+                        adapterSelect.dispatchEvent(new Event('change'));
+                    }
+                }
+            }, 1000); // Give more time for the dropdown to be populated
+        }
+    }
+    
+    // If we're leaving the compare tab, store the selections
+    if (event.relatedTarget && event.relatedTarget.id === 'compare-tab') {
+        storeSelectedSessions();
     }
 });
 
@@ -873,43 +1006,23 @@ async function fuseSessionAdapter(sessionId) {
             throw new Error(`Session ${sessionId} not found`);
         }
         
-        // Get adapter path from log file path
-        const adapterPath = session.log_file.split('/').slice(0, -1).join('/');
+        // Get adapter path from log file path - use just the directory
+        const logFilePath = session.log_file;
+        const adapterPath = logFilePath.substring(0, logFilePath.lastIndexOf('/'));
+        
+        console.log('Adapter path:', adapterPath);
         
         // Store in localStorage for the fuse tab
         localStorage.setItem('forge-fuse-adapter', adapterPath);
+        console.log('Stored adapter path in localStorage:', adapterPath);
         
         // Switch to fuse tab
         const fuseTab = document.querySelector('[data-bs-target="#fuse"]');
         if (fuseTab) {
+            console.log('Switching to Fuse tab');
             fuseTab.click();
-            
-            // Wait for tab to be shown before setting values
-            setTimeout(() => {
-                // Reset scroll position
-                window.scrollTo(0, 0);
-                
-                // Set the adapter value in the dropdown
-                const adapterSelect = document.getElementById('fuse-adapter-select');
-                if (adapterSelect) {
-                    // Add option if it doesn't exist
-                    let found = false;
-                    for (let i = 0; i < adapterSelect.options.length; i++) {
-                        if (adapterSelect.options[i].value === adapterPath) {
-                            adapterSelect.selectedIndex = i;
-                            found = true;
-                            break;
-                        }
-                    }
-                    
-                    if (!found && adapterPath) {
-                        // If adapter not found in dropdown, trigger a refresh
-                        console.log('Adapter not found in dropdown, refreshing adapter list');
-                        // Dispatch a change event to trigger any listeners
-                        adapterSelect.dispatchEvent(new Event('change'));
-                    }
-                }
-            }, 300);
+        } else {
+            console.error('Fuse tab not found');
         }
     } catch (error) {
         console.error('Error fusing adapter:', error);
