@@ -505,6 +505,7 @@ def setup_api(app: Flask) -> Blueprint:
             top_p = data.get('top_p', 0.9)
             repetition_penalty = data.get('repetition_penalty', 1.1)
             max_kv_size = data.get('max_kv_size', 8192)
+            seed = data.get('seed', 42)  # Default to 42 for deterministic generation
             system_prompt = data.get('system_prompt', '')  # Legacy support
             streaming = data.get('streaming', False)
             is_base_model = data.get('is_base_model', None)  # New parameter
@@ -538,6 +539,7 @@ def setup_api(app: Flask) -> Blueprint:
                             'top_p': top_p,
                             'repetition_penalty': repetition_penalty,
                             'max_kv_size': max_kv_size,
+                            'seed': seed,
                             'system_prompt': system_prompt,
                             'streaming': True,
                             'is_base_model': is_base_model
@@ -569,6 +571,7 @@ def setup_api(app: Flask) -> Blueprint:
                     'top_p': top_p,
                     'repetition_penalty': repetition_penalty,
                     'max_kv_size': max_kv_size,
+                    'seed': seed,
                     'system_prompt': system_prompt,  # Legacy support
                     'is_base_model': is_base_model  # New parameter
                 })

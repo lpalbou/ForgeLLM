@@ -1744,6 +1744,7 @@ class TrainingInterface {
             const temperature = document.getElementById('temperature');
             const topP = document.getElementById('top-p');
             const repetitionPenalty = document.getElementById('repetition-penalty');
+            const seed = document.getElementById('seed');
             const streaming = document.getElementById('streaming-toggle');
             
             if (maxTokens) {
@@ -1769,6 +1770,11 @@ class TrainingInterface {
             if (repetitionPenalty) {
                 repetitionPenalty.value = '1.1';
                 console.log('✅ Reset repetition penalty to 1.1');
+            }
+            
+            if (seed) {
+                seed.value = '42';
+                console.log('✅ Reset seed to 42');
             }
             
             if (streaming) {
@@ -2381,6 +2387,7 @@ ${content.trim()}
         const topP = parseFloat(document.getElementById('top-p').value);
         const repetitionPenalty = parseFloat(document.getElementById('repetition-penalty').value);
         const maxKvSize = parseInt(document.getElementById('max-kv-size').value);
+        const seed = parseInt(document.getElementById('seed').value);
         const systemPrompt = document.getElementById('system-prompt').value.trim();
         const streaming = document.getElementById('streaming-toggle').checked;
         
@@ -2522,6 +2529,7 @@ ${content.trim()}
                 top_p: topP || undefined,
                 repetition_penalty: repetitionPenalty || undefined,
                 max_kv_size: maxKvSize || undefined,
+                seed: seed || undefined,
                 streaming: streaming,
                 // Add model type hint for backend
                 is_base_model: isBaseModel
@@ -3538,6 +3546,7 @@ ${content.trim()}
         const topP = parseFloat(document.getElementById('top-p').value);
         const repetitionPenalty = parseFloat(document.getElementById('repetition-penalty').value);
         const maxKvSize = parseInt(document.getElementById('max-kv-size').value);
+        const seed = parseInt(document.getElementById('seed').value);
         
         // Create metadata object
         const metadata = {
@@ -3551,7 +3560,8 @@ ${content.trim()}
                 temperature: temperature,
                 top_p: topP,
                 repetition_penalty: repetitionPenalty,
-                max_kv_size: maxKvSize
+                max_kv_size: maxKvSize,
+                seed: seed
                 // system_prompt now handled in message structure
             },
             timestamp: new Date().toISOString(),
@@ -3656,6 +3666,10 @@ ${content.trim()}
                 if (params.max_kv_size !== undefined) {
                     const maxKvInput = document.getElementById('max-kv-size');
                     if (maxKvInput) maxKvInput.value = params.max_kv_size;
+                }
+                if (params.seed !== undefined) {
+                    const seedInput = document.getElementById('seed');
+                    if (seedInput) seedInput.value = params.seed;
                 }
             }
 

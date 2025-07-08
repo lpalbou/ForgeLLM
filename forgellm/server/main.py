@@ -160,6 +160,7 @@ class ModelHandler(BaseHTTPRequestHandler):
         top_p = data.get('top_p', 0.9)
         repetition_penalty = data.get('repetition_penalty', 1.1)
         max_kv_size = data.get('max_kv_size')
+        seed = data.get('seed', 42)  # Default to 42 for deterministic generation
         streaming = data.get('streaming', False)
         
         # NEW: Handle history array and model type hint from frontend
@@ -325,6 +326,12 @@ class ModelHandler(BaseHTTPRequestHandler):
                 
             if max_kv_size:
                 generation_kwargs['max_kv_size'] = max_kv_size
+                
+            # Set seed for deterministic generation
+            if seed is not None:
+                import mlx.core as mx
+                mx.random.seed(seed)
+                logger.info(f"Set random seed to {seed} for deterministic generation")
             
             if streaming:
                 # Streaming response

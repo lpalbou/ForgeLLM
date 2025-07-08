@@ -250,7 +250,7 @@ class ModelManager:
         logger.info("Model unloaded")
         return True
     
-    def generate(self, prompt, max_tokens=100, temperature=0.7, history=None, top_p=None, repetition_penalty=None, system_prompt=None, max_kv_size=None):
+    def generate(self, prompt, max_tokens=100, temperature=0.7, history=None, top_p=None, repetition_penalty=None, system_prompt=None, max_kv_size=None, seed=None):
         """
         Generate text from the model.
         
@@ -263,6 +263,7 @@ class ModelManager:
             repetition_penalty (float, optional): Penalty for repeating tokens.
             system_prompt (str, optional): System prompt for chat models.
             max_kv_size (int, optional): Maximum KV cache size.
+            seed (int, optional): Random seed for deterministic generation.
         
         Returns:
             dict or str: Generated response with token information, or error string.
@@ -294,6 +295,8 @@ class ModelManager:
             data['system_prompt'] = system_prompt
         if max_kv_size is not None:
             data['max_kv_size'] = max_kv_size
+        if seed is not None:
+            data['seed'] = seed
         
         try:
             response = requests.post(
@@ -439,6 +442,7 @@ class ModelManager:
         repetition_penalty = params.get('repetition_penalty')
         system_prompt = params.get('system_prompt')
         max_kv_size = params.get('max_kv_size')
+        seed = params.get('seed')
         
         return self.generate(
             prompt,
@@ -448,7 +452,8 @@ class ModelManager:
             top_p=top_p,
             repetition_penalty=repetition_penalty,
             system_prompt=system_prompt,
-            max_kv_size=max_kv_size
+            max_kv_size=max_kv_size,
+            seed=seed
         )
 
     def stop_generation(self) -> None:

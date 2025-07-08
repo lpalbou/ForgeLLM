@@ -5,6 +5,27 @@ All notable changes to ForgetLLM will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.7] - 2025-07-08 (ONGOING)
+
+### 🎲 Deterministic Text Generation
+- **Seed Parameter Support**: Added comprehensive seed parameter for reproducible text generation
+  - **Testing Tab UI**: New seed input field with default value of 42 and helpful tooltip
+  - **Deterministic Generation**: Same seed produces identical outputs for reproducible results
+  - **MLX-LM Integration**: Proper MLX random seed setting for deterministic generation
+  - **Complete Parameter Chain**: Seed parameter flows through entire generation pipeline:
+    - Frontend JavaScript collection and validation
+    - API route parameter forwarding with default value 42
+    - ModelManager parameter handling and documentation
+    - Model server MLX seed setting with logging
+  - **Configuration Management**: Seed parameter included in:
+    - Reset configuration function (resets to 42)
+    - Chat history save/load functionality
+    - Parameter preservation across sessions
+  - **User Experience**: Clean UI integration matching existing parameter styling
+    - Input validation (1 to 2,147,483,647 range)
+    - Helpful description text with dice icon
+    - Consistent with other generation parameters
+
 ## [0.3.6] - 2025-07-06
 
 ### 🧮 Centralized Token Counting System
