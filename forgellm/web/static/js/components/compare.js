@@ -155,6 +155,9 @@ async function loadSessions() {
             const isSelected = selectedSessions.has(sessionId);
             const selectedClass = isSelected ? 'selected-session-card' : '';
             
+            // ENABLE FUSE BUTTON FOR ALL MODELS - no detection logic needed
+            // All models can be fused, regardless of type
+            
             return `
                 <div class="session-item mb-2">
                     <div class="session-card ${selectedClass}" 
@@ -194,6 +197,11 @@ async function loadSessions() {
                                     onclick="showSessionParameters('${sessionId}'); event.preventDefault(); event.stopPropagation();"
                                     title="View Parameters">
                                 <i class="fas fa-file-code"></i>
+                            </button>
+                            <button class="btn btn-sm btn-outline-secondary fuse-adapter-btn" 
+                                    onclick="fuseSessionAdapter('${sessionId}'); event.preventDefault(); event.stopPropagation();"
+                                    title="Fuse this adapter with base model">
+                                <i class="fas fa-layer-group"></i>
                             </button>
                             <button class="btn btn-sm btn-outline-secondary test-session-btn" 
                                     onclick="testSessionInPlayground('${sessionId}'); event.preventDefault(); event.stopPropagation();"
@@ -645,6 +653,31 @@ document.addEventListener('DOMContentLoaded', function() {
     } else {
         console.log('Compare tab elements not found, will retry when tab becomes active');
     }
+    
+    // Add event listener for fuse tab shown to handle adapter selection from localStorage
+    document.addEventListener('shown.bs.tab', function(event) {
+        if (event.target.getAttribute('data-bs-target') === '#fuse') {
+            setTimeout(() => {
+                const storedAdapter = localStorage.getItem('forge-fuse-adapter');
+                if (storedAdapter) {
+                    console.log('Found stored adapter path:', storedAdapter);
+                    const adapterSelect = document.getElementById('fuse-adapter-select');
+                    if (adapterSelect) {
+                        // Try to select the adapter
+                        for (let i = 0; i < adapterSelect.options.length; i++) {
+                            if (adapterSelect.options[i].value === storedAdapter) {
+                                adapterSelect.selectedIndex = i;
+                                adapterSelect.dispatchEvent(new Event('change'));
+                                // Clear the storage after use
+                                localStorage.removeItem('forge-fuse-adapter');
+                                break;
+                            }
+                        }
+                    }
+                }
+            }, 300);
+        }
+    });
 });
 
 // Also listen for Bootstrap tab shown event
@@ -823,6 +856,64 @@ async function testSessionInPlayground(sessionId) {
     } catch (error) {
         console.error('Error preparing test session:', error);
         alert('Failed to prepare test session: ' + error.message);
+    }
+}
+
+// Function to fuse a session adapter
+async function fuseSessionAdapter(sessionId) {
+    try {
+        console.log('Fusing adapter for session ID:', sessionId);
+        
+        // Get session data
+        const sessionsResponse = await fetch('/api/training/sessions');
+        const sessionsData = await sessionsResponse.json();
+        const session = sessionsData.training_sessions.find(s => s.session_id === sessionId);
+        
+        if (!session) {
+            throw new Error(`Session ${sessionId} not found`);
+        }
+        
+        // Get adapter path from log file path
+        const adapterPath = session.log_file.split('/').slice(0, -1).join('/');
+        
+        // Store in localStorage for the fuse tab
+        localStorage.setItem('forge-fuse-adapter', adapterPath);
+        
+        // Switch to fuse tab
+        const fuseTab = document.querySelector('[data-bs-target="#fuse"]');
+        if (fuseTab) {
+            fuseTab.click();
+            
+            // Wait for tab to be shown before setting values
+            setTimeout(() => {
+                // Reset scroll position
+                window.scrollTo(0, 0);
+                
+                // Set the adapter value in the dropdown
+                const adapterSelect = document.getElementById('fuse-adapter-select');
+                if (adapterSelect) {
+                    // Add option if it doesn't exist
+                    let found = false;
+                    for (let i = 0; i < adapterSelect.options.length; i++) {
+                        if (adapterSelect.options[i].value === adapterPath) {
+                            adapterSelect.selectedIndex = i;
+                            found = true;
+                            break;
+                        }
+                    }
+                    
+                    if (!found && adapterPath) {
+                        // If adapter not found in dropdown, trigger a refresh
+                        console.log('Adapter not found in dropdown, refreshing adapter list');
+                        // Dispatch a change event to trigger any listeners
+                        adapterSelect.dispatchEvent(new Event('change'));
+                    }
+                }
+            }, 300);
+        }
+    } catch (error) {
+        console.error('Error fusing adapter:', error);
+        alert('Failed to fuse adapter: ' + error.message);
     }
 }
 
