@@ -547,7 +547,7 @@ async function generateComparison() {
             }
             renderComparisonChart('stability-comparison-chart', stabilityTraces, {
                 title: 'Validation Loss Stability',
-                xaxis: { title: 'Iterations' },
+                xaxis: { title: 'Iterations', range: [0, null] },
                 yaxis: { title: 'Loss Variance', range: [0, 0.1] },
                 shapes: [
                     { type: 'rect', xref: 'paper', yref: 'y', x0: 0, y0: 0, x1: 1, y1: 0.005, fillcolor: 'rgba(40, 167, 69, 0.2)', line: { width: 0 }, layer: 'below' },
@@ -732,102 +732,377 @@ async function ensureFuseAdapterDropdownPopulated() {
     return adapterSelect.options.length > 1;
 }
 
-// Global tab change event listener
-document.addEventListener('shown.bs.tab', function(event) {
-    // If we're entering the compare tab
-    if (event.target.getAttribute('data-bs-target') === '#compare') {
-        console.log('Compare tab activated, loading sessions');
-        setTimeout(() => {
-            if (elementsExist()) {
-                loadSessions();
-            }
-        }, 100);
+// Function to extract iteration number from option text or value
+function extractIterationNumber(text, value) {
+    // First try to extract from text which has format like "Model Name [CPT] - iter 300 504.1MB"
+    const iterTextMatch = text.match(/iter\s+(\d+)/i);
+    if (iterTextMatch && iterTextMatch[1]) {
+        return parseInt(iterTextMatch[1], 10);
     }
     
-    // If we're entering the fuse tab
-    if (event.target.getAttribute('data-bs-target') === '#fuse') {
-        const storedAdapter = localStorage.getItem('forge-fuse-adapter');
-        if (storedAdapter) {
-            console.log('Found stored adapter path:', storedAdapter);
+    // If not found in text, try to extract from the value path
+    // Format like "models/cpt/model_name_iter300_seq3072_date/000300_adapters.safetensors"
+    const iterValueMatch = value.match(/iter(\d+)_|\/0*(\d+)_adapters\.safetensors$/);
+    if (iterValueMatch) {
+        return parseInt(iterValueMatch[1] || iterValueMatch[2], 10);
+    }
+    
+    // Last attempt - look for any number in the path that might be an iteration
+    const lastNumberMatch = value.match(/\/0*(\d+)_/);
+    if (lastNumberMatch && lastNumberMatch[1]) {
+        return parseInt(lastNumberMatch[1], 10);
+    }
+    
+    return 0; // Default if no iteration number found
+}
+
+// Function to get the best checkpoint iteration (lowest val loss) for a session
+async function getBestCheckpointIteration(sessionId) {
+    try {
+        // Get session data
+        const sessionsResponse = await fetch('/api/training/sessions');
+        const sessionsData = await sessionsResponse.json();
+        const session = sessionsData.training_sessions.find(s => s.session_id === sessionId);
+        
+        if (!session || !session.log_file) {
+            console.error('Session not found or missing log file');
+            return null;
+        }
+        
+        // Get validation loss data for this session
+        const response = await fetch(`/api/dashboard/historical`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ log_file: session.log_file })
+        });
+        
+        const sessionData = await response.json();
+        
+        if (sessionData.charts && sessionData.charts.loss && sessionData.charts.loss.data) {
+            const validationLoss = sessionData.charts.loss.data.find(c => c.name === 'Validation Loss');
             
-            // DIRECT APPROACH: Wait a bit for the dropdown to be populated, then select the adapter
-            setTimeout(() => {
-                const adapterSelect = document.getElementById('fuse-adapter-select');
-                if (!adapterSelect) {
-                    console.error('Adapter select dropdown not found!');
-                    return;
-                }
+            if (validationLoss && validationLoss.x && validationLoss.y) {
+                console.log('Found validation loss data:', validationLoss);
                 
-                console.log(`Dropdown has ${adapterSelect.options.length} options`);
-                
-                // Try to find the adapter in the dropdown
-                let found = false;
-                for (let i = 0; i < adapterSelect.options.length; i++) {
-                    const optionValue = adapterSelect.options[i].value;
-                    console.log(`Checking option ${i}: ${optionValue}`);
-                    
-                    // Check if the option value starts with the stored adapter path
-                    if (optionValue.startsWith(storedAdapter)) {
-                        console.log(`FOUND MATCH at index ${i}, selecting it`);
-                        adapterSelect.selectedIndex = i;
-                        adapterSelect.dispatchEvent(new Event('change'));
-                        found = true;
-                        break;
+                // Create pairs of [iteration, val_loss]
+                const iterLossPairs = [];
+                for (let i = 0; i < validationLoss.x.length; i++) {
+                    // Only include non-null values
+                    if (validationLoss.y[i] !== null && validationLoss.y[i] !== undefined) {
+                        iterLossPairs.push({
+                            iteration: validationLoss.x[i],
+                            valLoss: validationLoss.y[i]
+                        });
                     }
                 }
                 
-                // If not found, try a more flexible approach
-                if (!found) {
-                    console.log('No direct match found, trying more flexible matching');
+                if (iterLossPairs.length > 0) {
+                    // Sort by validation loss (ascending - lower is better)
+                    iterLossPairs.sort((a, b) => a.valLoss - b.valLoss);
                     
-                    // Extract model name and iteration from stored path
-                    const pathParts = storedAdapter.split('/');
-                    const modelFileName = pathParts[pathParts.length - 1];
-                    
-                    for (let i = 0; i < adapterSelect.options.length; i++) {
-                        const optionValue = adapterSelect.options[i].value;
-                        const optionParts = optionValue.split('/');
-                        const optionFileName = optionParts[optionParts.length - 1];
-                        
-                        // Check if the model names match
-                        if (optionValue.includes(modelFileName) || 
-                            optionFileName.includes(modelFileName) ||
-                            modelFileName.includes(optionFileName.split('_')[0])) {
-                            console.log(`Found partial match at index ${i}, selecting it`);
-                            adapterSelect.selectedIndex = i;
-                            adapterSelect.dispatchEvent(new Event('change'));
-                            found = true;
-                            break;
-                        }
-                    }
+                    // Get the iteration with lowest validation loss
+                    const bestIteration = iterLossPairs[0].iteration;
+                    console.log(`Best checkpoint is iteration ${bestIteration} with val loss ${iterLossPairs[0].valLoss}`);
+                    return bestIteration;
                 }
+            }
+        }
+        
+        console.warn('No validation loss data found');
+        return null;
+    } catch (error) {
+        console.error('Error getting best checkpoint iteration:', error);
+        return null;
+    }
+}
+
+// Helper function to select the best checkpoint in a dropdown
+async function selectBestCheckpoint(dropdownId, adapterInfo) {
+    const adapterSelect = document.getElementById(dropdownId);
+    if (!adapterSelect) {
+        console.error(`Dropdown with ID ${dropdownId} not found!`);
+        return false;
+    }
+    
+    console.log(`Dropdown ${dropdownId} has ${adapterSelect.options.length} options`);
+    
+    // If we have a specific target iteration, try to find it
+    if (adapterInfo.bestIteration) {
+        console.log(`Looking for specific target iteration: ${adapterInfo.bestIteration}`);
+        
+        // Format the target iteration with leading zeros (both formats)
+        const targetIterStr = adapterInfo.bestIteration.toString();
+        const targetIterPadded = targetIterStr.padStart(6, '0');
+        
+        // Look for the exact iteration in the dropdown
+        for (let i = 0; i < adapterSelect.options.length; i++) {
+            const optionValue = adapterSelect.options[i].value;
+            const optionText = adapterSelect.options[i].text;
+            
+            // Check for the target iteration in the option value
+            if ((optionValue.includes(`/${targetIterPadded}_`) || 
+                 optionValue.includes(`/${targetIterStr}_`) ||
+                 optionValue.includes(`_iter${targetIterStr}_`)) && 
+                optionValue.includes(adapterInfo.path)) {
                 
-                // Clear the storage after attempting selection
-                localStorage.removeItem('forge-fuse-adapter');
+                console.log(`Found target iteration ${adapterInfo.bestIteration} at index ${i}: ${optionValue}`);
+                adapterSelect.selectedIndex = i;
+                adapterSelect.dispatchEvent(new Event('change'));
+                return true;
+            }
+            
+            // Also check the option text for the iteration
+            if (optionText.includes(`iter ${targetIterStr}`) && 
+                optionValue.includes(adapterInfo.path)) {
                 
-                if (!found) {
-                    console.error('Could not find adapter in dropdown after multiple attempts');
-                    
-                    // Last resort: just select the first non-empty option
-                    if (adapterSelect.options.length > 1) {
-                        console.log('Selecting first available option as fallback');
-                        adapterSelect.selectedIndex = 1;
-                        adapterSelect.dispatchEvent(new Event('change'));
-                    }
-                }
-            }, 1000); // Give more time for the dropdown to be populated
+                console.log(`Found target iteration ${adapterInfo.bestIteration} in text at index ${i}: ${optionText}`);
+                adapterSelect.selectedIndex = i;
+                adapterSelect.dispatchEvent(new Event('change'));
+                return true;
+            }
+        }
+        
+        console.warn(`Could not find target iteration ${adapterInfo.bestIteration}, falling back to path matching`);
+    }
+    
+    // Find all matching options for this adapter path
+    const matchingOptions = [];
+    for (let i = 0; i < adapterSelect.options.length; i++) {
+        const optionValue = adapterSelect.options[i].value;
+        const optionText = adapterSelect.options[i].text;
+        
+        // Check if the option value contains the adapter path
+        if (optionValue.includes(adapterInfo.path)) {
+            console.log(`Found matching option at index ${i}: ${optionValue}`);
+            
+            // Extract iteration number using improved function
+            const iterNumber = extractIterationNumber(optionText, optionValue);
+            console.log(`Extracted iteration number: ${iterNumber}`);
+            
+            matchingOptions.push({
+                index: i,
+                value: optionValue,
+                text: optionText,
+                iteration: iterNumber
+            });
         }
     }
     
-    // If we're leaving the compare tab, store the selections
-    if (event.relatedTarget && event.relatedTarget.id === 'compare-tab') {
-        storeSelectedSessions();
+    // If we found matching options but couldn't find the exact target iteration,
+    // try to find the closest one
+    if (matchingOptions.length > 0 && adapterInfo.bestIteration) {
+        console.log(`Looking for closest iteration to target: ${adapterInfo.bestIteration}`);
+        
+        // Find the option with iteration closest to the target
+        let closestOption = matchingOptions[0];
+        let minDiff = Math.abs(closestOption.iteration - adapterInfo.bestIteration);
+        
+        for (let i = 1; i < matchingOptions.length; i++) {
+            const diff = Math.abs(matchingOptions[i].iteration - adapterInfo.bestIteration);
+            if (diff < minDiff) {
+                closestOption = matchingOptions[i];
+                minDiff = diff;
+            }
+        }
+        
+        console.log(`Selecting closest iteration: ${closestOption.iteration} at index ${closestOption.index}`);
+        adapterSelect.selectedIndex = closestOption.index;
+        adapterSelect.dispatchEvent(new Event('change'));
+        return true;
+    } else if (matchingOptions.length > 0) {
+        // If we don't have a target iteration, sort by iteration number (descending)
+        matchingOptions.sort((a, b) => b.iteration - a.iteration);
+        
+        // Select the highest iteration
+        const bestOption = matchingOptions[0];
+        console.log(`No target iteration, selecting highest iteration ${bestOption.iteration} at index ${bestOption.index}`);
+        adapterSelect.selectedIndex = bestOption.index;
+        adapterSelect.dispatchEvent(new Event('change'));
+        return true;
     }
-});
+    
+    // If no direct matches, try more flexible matching
+    console.log('No direct matches found, trying more flexible matching');
+    
+    // Extract model name from stored path
+    const pathParts = adapterInfo.path.split('/');
+    const modelFileName = pathParts[pathParts.length - 1];
+    
+    const flexibleMatches = [];
+    for (let i = 0; i < adapterSelect.options.length; i++) {
+        const optionValue = adapterSelect.options[i].value;
+        const optionText = adapterSelect.options[i].text;
+        
+        // Check for partial matches
+        if (optionValue.includes(modelFileName) || 
+            optionText.includes(modelFileName) ||
+            (adapterInfo.model && optionText.includes(adapterInfo.model))) {
+            
+            // Extract iteration number using improved function
+            const iterNumber = extractIterationNumber(optionText, optionValue);
+            console.log(`Extracted iteration number from flexible match: ${iterNumber}`);
+            
+            flexibleMatches.push({
+                index: i,
+                value: optionValue,
+                text: optionText,
+                iteration: iterNumber
+            });
+        }
+    }
+    
+    // Select the best match if any were found
+    if (flexibleMatches.length > 0) {
+        // Sort by iteration number (descending) as fallback
+        flexibleMatches.sort((a, b) => b.iteration - a.iteration);
+        
+        // Select the highest iteration
+        const bestOption = flexibleMatches[0];
+        console.log(`Selecting best flexible match at index ${bestOption.index} with iteration ${bestOption.iteration}`);
+        adapterSelect.selectedIndex = bestOption.index;
+        adapterSelect.dispatchEvent(new Event('change'));
+        return true;
+    }
+    
+    console.error('Could not find adapter in dropdown after multiple attempts');
+    return false;
+}
 
-console.log('Compare.js Plotly version loaded');
+// Function to fuse a session adapter
+async function fuseSessionAdapter(sessionId) {
+    try {
+        console.log('Fusing adapter for session ID:', sessionId);
+        
+        // Get session data
+        const sessionsResponse = await fetch('/api/training/sessions');
+        const sessionsData = await sessionsResponse.json();
+        const session = sessionsData.training_sessions.find(s => s.session_id === sessionId);
+        
+        if (!session) {
+            throw new Error(`Session ${sessionId} not found`);
+        }
+        
+        // Get adapter path from log file path - use just the directory
+        const logFilePath = session.log_file;
+        const adapterPath = logFilePath.substring(0, logFilePath.lastIndexOf('/'));
+        
+        console.log('Adapter path:', adapterPath);
+        
+        // Get the best checkpoint iteration based on validation loss
+        const bestIteration = await getBestCheckpointIteration(sessionId);
+        console.log('Best checkpoint iteration:', bestIteration);
+        
+        // Store adapter info in localStorage for the fuse tab
+        const adapterInfo = {
+            path: adapterPath,
+            model: session.model_name,
+            session_name: session.session_name,
+            bestIteration: bestIteration || null
+        };
+        
+        localStorage.setItem('forge-fuse-adapter', JSON.stringify(adapterInfo));
+        console.log('Stored adapter info in localStorage:', adapterInfo);
+        
+        // Switch to fuse tab
+        const fuseTab = document.querySelector('[data-bs-target="#fuse"]');
+        if (fuseTab) {
+            console.log('Switching to Fuse tab');
+            fuseTab.click();
+            
+            // Wait for tab to be shown before setting values
+            setTimeout(async () => {
+                // Try to select the best checkpoint in the adapter dropdown
+                const storedAdapterJson = localStorage.getItem('forge-fuse-adapter');
+                if (storedAdapterJson) {
+                    try {
+                        const adapterInfo = JSON.parse(storedAdapterJson);
+                        await selectBestCheckpoint('fuse-adapter-select', adapterInfo);
+                        // Clear the storage after attempting selection
+                        localStorage.removeItem('forge-fuse-adapter');
+                    } catch (error) {
+                        console.error('Error parsing stored adapter info:', error);
+                        localStorage.removeItem('forge-fuse-adapter');
+                    }
+                }
+            }, 1000);
+        } else {
+            console.error('Fuse tab not found');
+        }
+    } catch (error) {
+        console.error('Error fusing adapter:', error);
+        alert('Failed to fuse adapter: ' + error.message);
+    }
+}
 
-// Add these functions to handle the button clicks
+// Function to test a session in the playground tab
+async function testSessionInPlayground(sessionId) {
+    try {
+        // Get session data
+        const sessionsResponse = await fetch('/api/training/sessions');
+        const sessionsData = await sessionsResponse.json();
+        const session = sessionsData.training_sessions.find(s => s.session_id === sessionId);
+        
+        if (!session) {
+            throw new Error(`Session ${sessionId} not found`);
+        }
+        
+        // Get adapter path from log file path
+        const logFilePath = session.log_file;
+        const adapterPath = logFilePath.substring(0, logFilePath.lastIndexOf('/'));
+        
+        console.log('Testing adapter path:', adapterPath);
+        
+        // Get the best checkpoint iteration based on validation loss
+        const bestIteration = await getBestCheckpointIteration(sessionId);
+        console.log('Best checkpoint iteration:', bestIteration);
+        
+        // Store adapter info in localStorage for the testing tab
+        const adapterInfo = {
+            path: adapterPath,
+            model: session.model_name,
+            session_name: session.session_name,
+            bestIteration: bestIteration || null
+        };
+        
+        localStorage.setItem('forge-test-session', JSON.stringify(adapterInfo));
+        console.log('Stored test session info:', adapterInfo);
+        
+        // Switch to testing tab
+        const testingTab = document.querySelector('[data-bs-target="#testing"]');
+        if (testingTab) {
+            testingTab.click();
+            
+            // Wait for tab to be shown before setting values
+            setTimeout(async () => {
+                // Reset scroll position
+                window.scrollTo(0, 0);
+                
+                // Try to select the best checkpoint in the adapter dropdown
+                try {
+                    const success = await selectBestCheckpoint('adapter-path', adapterInfo);
+                    if (!success) {
+                        // If no matching options found, add the adapter path as a new option
+                        console.log('No matching options found, adding adapter path as new option');
+                        const adapterSelect = document.getElementById('adapter-path');
+                        if (adapterSelect) {
+                            const option = document.createElement('option');
+                            option.value = adapterPath;
+                            option.text = adapterPath.split('/').pop();
+                            adapterSelect.add(option);
+                            adapterSelect.value = adapterPath;
+                            adapterSelect.dispatchEvent(new Event('change'));
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error selecting best checkpoint:', error);
+                }
+            }, 500);
+        }
+    } catch (error) {
+        console.error('Error preparing test session:', error);
+        alert('Failed to prepare test session: ' + error.message);
+    }
+}
 
 // Function to show session parameters in a modal
 async function showSessionParameters(sessionId) {
@@ -929,106 +1204,87 @@ ${JSON.stringify(rawData, null, 2)}
     }
 }
 
-// Function to test a session in the playground tab
-async function testSessionInPlayground(sessionId) {
-    try {
-        // Get session data
-        const sessionsResponse = await fetch('/api/training/sessions');
-        const sessionsData = await sessionsResponse.json();
-        const session = sessionsData.training_sessions.find(s => s.session_id === sessionId);
-        
-        if (!session) {
-            throw new Error(`Session ${sessionId} not found`);
-        }
-        
-        // Get adapter path from log file path
-        const adapterPath = session.log_file.split('/').slice(0, -1).join('/');
-        
-        // Store in localStorage for the testing tab
-        localStorage.setItem('forge-test-session', JSON.stringify({
-            model: session.model_name,
-            adapter: adapterPath
-        }));
-        
-        // Switch to testing tab
-        const testingTab = document.querySelector('[data-bs-target="#testing"]');
-        if (testingTab) {
-            testingTab.click();
-            
-            // Wait for tab to be shown before setting values
-            setTimeout(() => {
-                // Reset scroll position
-                window.scrollTo(0, 0);
+// Global tab change event listener
+document.addEventListener('shown.bs.tab', function(event) {
+    // If we're entering the compare tab
+    if (event.target.getAttribute('data-bs-target') === '#compare') {
+        console.log('Compare tab activated, loading sessions');
+        setTimeout(() => {
+            if (elementsExist()) {
+                loadSessions();
+            }
+        }, 100);
+    }
+    
+    // If we're entering the fuse tab
+    if (event.target.getAttribute('data-bs-target') === '#fuse') {
+        const storedAdapterJson = localStorage.getItem('forge-fuse-adapter');
+        if (storedAdapterJson) {
+            try {
+                const adapterInfo = JSON.parse(storedAdapterJson);
+                console.log('Found stored adapter info:', adapterInfo);
                 
-                // Set the adapter value in the dropdown
-                const adapterSelect = document.getElementById('adapter-path');
-                if (adapterSelect) {
-                    // Add option if it doesn't exist
-                    let found = false;
-                    for (let i = 0; i < adapterSelect.options.length; i++) {
-                        if (adapterSelect.options[i].value === adapterPath) {
-                            adapterSelect.selectedIndex = i;
-                            found = true;
-                            break;
+                // Use the helper function to select the best checkpoint
+                setTimeout(async () => {
+                    try {
+                        const success = await selectBestCheckpoint('fuse-adapter-select', adapterInfo);
+                        if (success) {
+                            console.log('Successfully selected best checkpoint');
+                        } else {
+                            console.error('Failed to select best checkpoint');
                         }
+                    } catch (error) {
+                        console.error('Error selecting best checkpoint:', error);
                     }
                     
-                    if (!found) {
-                        const option = document.createElement('option');
-                        option.value = adapterPath;
-                        option.text = adapterPath.split('/').pop();
-                        adapterSelect.add(option);
-                        adapterSelect.value = adapterPath;
-                    }
-                    
-                    // Trigger change event
-                    adapterSelect.dispatchEvent(new Event('change'));
-                }
-            }, 500);
+                    // Clear the storage after attempting selection
+                    localStorage.removeItem('forge-fuse-adapter');
+                }, 1000);
+            } catch (error) {
+                console.error('Error parsing stored adapter info:', error);
+                localStorage.removeItem('forge-fuse-adapter');
+            }
         }
-    } catch (error) {
-        console.error('Error preparing test session:', error);
-        alert('Failed to prepare test session: ' + error.message);
     }
-}
+    
+    // If we're entering the testing tab
+    if (event.target.getAttribute('data-bs-target') === '#testing') {
+        const storedTestSessionJson = localStorage.getItem('forge-test-session');
+        if (storedTestSessionJson) {
+            try {
+                const adapterInfo = JSON.parse(storedTestSessionJson);
+                console.log('Found stored test session info:', adapterInfo);
+                
+                // Use the helper function to select the best checkpoint
+                setTimeout(async () => {
+                    try {
+                        const success = await selectBestCheckpoint('adapter-path', adapterInfo);
+                        if (success) {
+                            console.log('Successfully selected best checkpoint for testing');
+                        } else {
+                            console.error('Failed to select best checkpoint for testing');
+                        }
+                    } catch (error) {
+                        console.error('Error selecting best checkpoint for testing:', error);
+                    }
+                    
+                    // Clear the storage after attempting selection
+                    localStorage.removeItem('forge-test-session');
+                }, 1000);
+            } catch (error) {
+                console.error('Error parsing stored test session info:', error);
+                localStorage.removeItem('forge-test-session');
+            }
+        }
+    }
+    
+    // If we're leaving the compare tab, store the selections
+    if (event.relatedTarget && event.relatedTarget.id === 'compare-tab') {
+        storeSelectedSessions();
+    }
+});
 
-// Function to fuse a session adapter
-async function fuseSessionAdapter(sessionId) {
-    try {
-        console.log('Fusing adapter for session ID:', sessionId);
-        
-        // Get session data
-        const sessionsResponse = await fetch('/api/training/sessions');
-        const sessionsData = await sessionsResponse.json();
-        const session = sessionsData.training_sessions.find(s => s.session_id === sessionId);
-        
-        if (!session) {
-            throw new Error(`Session ${sessionId} not found`);
-        }
-        
-        // Get adapter path from log file path - use just the directory
-        const logFilePath = session.log_file;
-        const adapterPath = logFilePath.substring(0, logFilePath.lastIndexOf('/'));
-        
-        console.log('Adapter path:', adapterPath);
-        
-        // Store in localStorage for the fuse tab
-        localStorage.setItem('forge-fuse-adapter', adapterPath);
-        console.log('Stored adapter path in localStorage:', adapterPath);
-        
-        // Switch to fuse tab
-        const fuseTab = document.querySelector('[data-bs-target="#fuse"]');
-        if (fuseTab) {
-            console.log('Switching to Fuse tab');
-            fuseTab.click();
-        } else {
-            console.error('Fuse tab not found');
-        }
-    } catch (error) {
-        console.error('Error fusing adapter:', error);
-        alert('Failed to fuse adapter: ' + error.message);
-    }
-}
+console.log('Compare.js Plotly version loaded');
 
 // Syntax highlight function for JSON
 function syntaxHighlightJson(json) {
