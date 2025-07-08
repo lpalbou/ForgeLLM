@@ -1252,6 +1252,74 @@ def setup_api(app: Flask) -> Blueprint:
             logger.error(f"Error getting training sessions: {e}")
             return jsonify({"success": False, "error": str(e)}), 500
 
+    @bp.route('/training/compare', methods=['POST'])
+    def compare_training_sessions():
+        """Compare multiple training sessions."""
+        try:
+            data = request.get_json()
+            session_ids = data.get('session_ids', [])
+            
+            if len(session_ids) < 2:
+                return jsonify({
+                    'success': False,
+                    'error': 'At least 2 sessions required for comparison'
+                }), 400
+            
+            # Load all session data
+            comparison_data = []
+            
+            for session_id in session_ids:
+                # Find the session log file
+                import glob
+                from pathlib import Path
+                
+                possible_dirs = [Path("models/cpt")]
+                log_file = None
+                
+                for models_dir in possible_dirs:
+                    if models_dir.exists():
+                        log_pattern = str(models_dir / session_id / "CPT_*.json")
+                        log_files = glob.glob(log_pattern)
+                        if log_files:
+                            log_file = log_files[0]  # Take the first match
+                            break
+                
+                if not log_file:
+                    return jsonify({
+                        'success': False,
+                        'error': f'Session {session_id} not found'
+                    }), 404
+                
+                # Load training data and generate charts
+                session_data = load_training_data(log_file)
+                if 'error' in session_data:
+                    return jsonify({
+                        'success': False,
+                        'error': f'Error loading session {session_id}: {session_data["error"]}'
+                    }), 500
+                
+                # Generate chart data
+                charts = generate_web_chart_data(session_data)
+                
+                # Identify best checkpoints
+                best_checkpoints = identify_best_checkpoints(session_data, top_k=3)
+                
+                comparison_data.append({
+                    'session_id': session_id,
+                    'data': session_data,
+                    'charts': charts,
+                    'best_checkpoints': best_checkpoints
+                })
+            
+            return jsonify({
+                'success': True,
+                'comparison_data': comparison_data
+            })
+            
+        except Exception as e:
+            logger.error(f"Error comparing training sessions: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+
     @bp.route('/checkpoints', methods=['GET'])
     def get_checkpoints():
         """Get available checkpoints."""

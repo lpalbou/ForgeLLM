@@ -26,6 +26,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - Helpful description text with dice icon
     - Consistent with other generation parameters
 
+### 📊 Training Session Comparison System
+- **Compare Tab**: Revolutionary new tab for comprehensive training session analysis
+  - **Multi-Session Selection**: Interactive session picker with color-coded indicators
+  - **Dataset Compatibility Warning**: Clear guidance on comparing sessions with same training data
+  - **Advanced Visualization**: 2x2 grid of comparison charts with professional styling
+  - **Intelligent Session Management**: Automatic color assignment and consistent theming across charts
+  - **Auto-Update Functionality**: Comparisons generate automatically when sessions are selected/deselected
+  - **Enhanced Text Handling**: Improved text wrapping and layout for long session names and details
+  - **Robust Error Handling**: Comprehensive null checks and DOM readiness validation to prevent JavaScript errors
+  - **Smart Initialization**: Tab-aware initialization that ensures DOM elements are ready before execution
+
+- **Comprehensive Comparison Metrics**: Four key visualization categories
+  - **Loss Comparison**: Training vs validation loss curves with deviation analysis
+  - **Perplexity Evolution**: Logarithmic perplexity tracking with trend visualization
+  - **Loss Stability**: Variance analysis with color-coded stability bands (excellent/good/unstable)
+  - **Generalization Gap**: Val Loss - Train Loss with overfitting/underfitting indicators
+
+- **Statistical Analysis Dashboard**: Advanced performance insights
+  - **Performance Rankings**: Automatic ranking by final validation loss with medal system
+  - **Convergence Statistics**: Average metrics and best-performing session identification
+  - **Session Metadata**: Model names, iteration counts, training duration, and final metrics
+  - **Export Functionality**: JSON export of complete comparison data and statistics
+
+- **Professional User Experience**: Enterprise-grade interface design
+  - **Fullscreen Mode**: Immersive comparison view with responsive chart resizing
+  - **Interactive Charts**: Plotly.js integration with hover details and legend management
+  - **Color Consistency**: Persistent session colors across all charts and UI elements
+  - **Session Summary**: Real-time selection tracking with clear enable/disable states
+
+- **API Infrastructure**: Robust backend support for comparison operations
+  - **Multi-Session Endpoint**: Efficient batch loading of training session data
+  - **Chart Data Generation**: Server-side processing of metrics for web visualization
+  - **Error Handling**: Comprehensive validation and user-friendly error messages
+  - **Performance Optimization**: Parallel data processing and caching strategies
+
 ## [0.3.6] - 2025-07-06
 
 ### 🧮 Centralized Token Counting System

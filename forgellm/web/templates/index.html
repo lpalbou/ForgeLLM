@@ -913,6 +913,11 @@
                 </button>
             </li>
             <li class="nav-item" role="presentation">
+                <button class="nav-link" id="compare-tab" data-bs-toggle="tab" data-bs-target="#compare" type="button" role="tab">
+                    <i class="fas fa-balance-scale me-2"></i>Compare
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
                 <button class="nav-link" id="fuse-tab" data-bs-toggle="tab" data-bs-target="#fuse" type="button" role="tab">
                     <i class="fas fa-layer-group me-2"></i>Fuse
                 </button>
@@ -1411,6 +1416,169 @@
                                 <div class="mt-3 small text-muted">
                                     <i class="fas fa-info-circle me-1"></i>
                                     This list shows all available checkpoints for the selected training session.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Compare Tab -->
+            <div class="tab-pane fade" id="compare" role="tabpanel">
+                <div class="row">
+                    <!-- Left panel: Session Selection -->
+                    <div class="col-lg-3">
+                        <div class="card">
+                            <div class="card-header">
+                                <i class="fas fa-list me-2"></i>Training Sessions
+                                <button class="btn btn-sm btn-outline-primary float-end" id="refresh-sessions-btn" title="Refresh sessions list">
+                                    <i class="fas fa-sync-alt"></i>
+                                </button>
+                            </div>
+                            <div class="card-body">
+                                <!-- Dataset Warning -->
+                                <div class="alert alert-warning" role="alert">
+                                    <i class="fas fa-exclamation-triangle me-2"></i>
+                                    <strong>Important:</strong> Only compare sessions trained on the same dataset for meaningful results.
+                                </div>
+                                
+                                <!-- Session List -->
+                                <div id="compare-sessions-list">
+                                    <div class="text-center text-muted">
+                                        <i class="fas fa-spinner fa-spin fa-2x mb-3"></i>
+                                        <p>Loading training sessions...</p>
+                                    </div>
+                                </div>
+                                
+                                <!-- Selected Sessions Summary -->
+                                <div class="mt-3" id="selected-sessions-summary" style="display: none;">
+                                    <h6><i class="fas fa-chart-line me-2"></i>Selected Sessions</h6>
+                                    <div id="selected-sessions-count" class="small text-muted">0 sessions selected</div>
+                                    <div class="mt-2">
+                                        <button class="btn btn-sm btn-secondary" id="clear-selection-btn">
+                                            <i class="fas fa-times me-2"></i>Clear All
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Comparison Statistics -->
+                        <div class="card mt-3" id="comparison-stats-card" style="display: none;">
+                            <div class="card-header">
+                                <i class="fas fa-calculator me-2"></i>Comparison Statistics
+                            </div>
+                            <div class="card-body">
+                                <div id="comparison-stats-content">
+                                    <!-- Statistics will be populated here -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Center panel: Comparison Charts -->
+                    <div class="col-lg-9">
+                        <div class="card">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <div>
+                                    <i class="fas fa-chart-area me-2"></i>Training Comparison Dashboard
+                                </div>
+                                <div>
+                                    <button class="btn btn-sm btn-outline-primary" id="export-comparison-btn" disabled title="Export comparison data">
+                                        <i class="fas fa-download me-2"></i>Export
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-secondary" id="fullscreen-comparison-btn" title="Toggle fullscreen">
+                                        <i class="fas fa-expand"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <div id="comparison-charts-container">
+                                    <!-- Default state -->
+                                    <div class="text-center text-muted py-5" id="comparison-placeholder">
+                                        <i class="fas fa-balance-scale fa-4x mb-4" style="opacity: 0.3;"></i>
+                                        <h4>Training Session Comparison</h4>
+                                        <p class="lead">Select 2 or more training sessions from the left panel to compare their performance metrics.</p>
+                                        <div class="row text-start mt-4">
+                                            <div class="col-md-6">
+                                                <h6><i class="fas fa-chart-line me-2"></i>Available Comparisons:</h6>
+                                                <ul class="list-unstyled">
+                                                    <li><i class="fas fa-arrow-trend-down me-2 text-primary"></i>Loss Curves</li>
+                                                    <li><i class="fas fa-brain me-2 text-success"></i>Perplexity Evolution</li>
+                                                    <li><i class="fas fa-wave-square me-2 text-warning"></i>Loss Stability</li>
+                                                    <li><i class="fas fa-balance-scale me-2 text-info"></i>Generalization Gap</li>
+                                                </ul>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <h6><i class="fas fa-lightbulb me-2"></i>Tips:</h6>
+                                                <ul class="list-unstyled">
+                                                    <li><i class="fas fa-check me-2 text-success"></i>Use same training dataset</li>
+                                                    <li><i class="fas fa-eye me-2 text-primary"></i>Compare similar model sizes</li>
+                                                    <li><i class="fas fa-clock me-2 text-warning"></i>Consider training duration</li>
+                                                    <li><i class="fas fa-cogs me-2 text-info"></i>Review hyperparameters</li>
+                                                </ul>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Charts Grid (2x2) -->
+                                    <div id="comparison-charts-grid" style="display: none;">
+                                        <div class="row">
+                                            <!-- Loss Comparison -->
+                                            <div class="col-lg-6 mb-4">
+                                                <div class="card h-100">
+                                                    <div class="card-header">
+                                                        <i class="fas fa-chart-line me-2"></i>Loss Comparison
+                                                        <small class="text-muted float-end">Training vs Validation</small>
+                                                    </div>
+                                                    <div class="card-body p-2">
+                                                        <div id="loss-comparison-chart" style="height: 300px;"></div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            
+                                            <!-- Perplexity Comparison -->
+                                            <div class="col-lg-6 mb-4">
+                                                <div class="card h-100">
+                                                    <div class="card-header">
+                                                        <i class="fas fa-brain me-2"></i>Perplexity Comparison
+                                                        <small class="text-muted float-end">Lower is better</small>
+                                                    </div>
+                                                    <div class="card-body p-2">
+                                                        <div id="perplexity-comparison-chart" style="height: 300px;"></div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="row">
+                                            <!-- Loss Stability Comparison -->
+                                            <div class="col-lg-6 mb-4">
+                                                <div class="card h-100">
+                                                    <div class="card-header">
+                                                        <i class="fas fa-wave-square me-2"></i>Loss Stability
+                                                        <small class="text-muted float-end">Variance analysis</small>
+                                                    </div>
+                                                    <div class="card-body p-2">
+                                                        <div id="stability-comparison-chart" style="height: 300px;"></div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            
+                                            <!-- Generalization Gap Comparison -->
+                                            <div class="col-lg-6 mb-4">
+                                                <div class="card h-100">
+                                                    <div class="card-header">
+                                                        <i class="fas fa-balance-scale me-2"></i>Generalization Gap
+                                                        <small class="text-muted float-end">Val Loss - Train Loss</small>
+                                                    </div>
+                                                    <div class="card-body p-2">
+                                                        <div id="generalization-comparison-chart" style="height: 300px;"></div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -2138,6 +2306,7 @@
     <!-- Component Scripts -->
     <script src="{{ url_for('static', filename='js/services/api.js') }}?v={{ cache_buster }}"></script>
     <script src="{{ url_for('static', filename='js/components/quantization.js') }}?v={{ cache_buster }}"></script>
+    <script src="{{ url_for('static', filename='js/components/compare.js') }}?v={{ cache_buster }}"></script>
     
     <!-- Theme Toggle Script -->
     <script>

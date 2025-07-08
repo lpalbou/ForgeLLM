@@ -20,7 +20,7 @@ def index():
     """Render the main index page"""
     # Add cache buster to force JavaScript reload after changes
     # Force cache bust to reload updated JavaScript
-    cache_buster = 1751221786
+    cache_buster = int(time.time())
     return render_template('index.html', cache_buster=cache_buster)
 
 @bp.route('/static/<path:path>')
