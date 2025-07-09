@@ -83,40 +83,132 @@ function sortSessions(sessions) {
 }
 
 // Function to extract training parameters for tooltip
-function getTrainingParameters(session) {
+async function getTrainingParametersAsync(session) {
+    // If we need to fetch config data from the session logs
+    let sessionConfigData = null;
+    
+    try {
+        if (session.log_file && (!session.fine_tune_type && !(session.config && session.config.fine_tune_type))) {
+            // Try to get the actual training configuration
+            const response = await fetch('/api/logs/raw', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ log_file: session.log_file })
+            });
+            
+            if (response.ok) {
+                const sessionDetails = await response.json();
+                try {
+                    const rawData = JSON.parse(sessionDetails.logs);
+                    sessionConfigData = rawData.config || {};
+                } catch (e) {
+                    console.log('Could not parse session config for', session.session_name);
+                }
+            }
+        }
+    } catch (error) {
+        console.log('Error fetching session config for', session.session_name, ':', error);
+    }
+    
+    return getTrainingParameters(session, sessionConfigData);
+}
+
+// Synchronous version for immediate use
+function getTrainingParameters(session, extraConfig = null) {
     const sessionName = session.session_name || '';
     
     // Extract values directly from session name using regex
     const lrMatch = sessionName.match(/lr(\d+e?_?\d*)/i);
     const bsMatch = sessionName.match(/bs(\d+)/i);
     const seqMatch = sessionName.match(/seq(\d+)/i);
+    const decayMatch = sessionName.match(/decay([0-9.]+)/i);
+    
+    // Check if session already has fine_tune_type information
+    let fineTuneTypeFromSession = '';
+    if (session.fine_tune_type) {
+        fineTuneTypeFromSession = session.fine_tune_type;
+    } else if (session.config && session.config.fine_tune_type) {
+        fineTuneTypeFromSession = session.config.fine_tune_type;
+    } else if (extraConfig && extraConfig.fine_tune_type) {
+        fineTuneTypeFromSession = extraConfig.fine_tune_type;
+    }
     
     // Determine training type based on folder structure
     let trainingType = '';
     let fineTuneType = '';
+    let trainingTypeShort = '';
     
     if (session.log_file) {
         if (session.log_file.includes('/cpt/')) {
             trainingType = 'CPT (Continued Pre-training)';
+            trainingTypeShort = 'CPT';
         } else if (session.log_file.includes('/ift/')) {
             trainingType = 'IFT (Instruction Fine-tuning)';
+            trainingTypeShort = 'SFT'; // More commonly known as SFT (Supervised Fine-tuning)
         }
         
-        if (session.log_file.includes('lora')) {
-            fineTuneType = 'LoRA';
-        } else if (session.log_file.includes('dora')) {
-            fineTuneType = 'DoRA';
+        // Enhanced detection logic for fine-tune type
+        // 1. First priority: Use fine_tune_type from session data if available
+        if (fineTuneTypeFromSession) {
+            fineTuneType = fineTuneTypeFromSession;
         } else {
-            fineTuneType = 'Full';
+            // 2. Check session name and log file for LoRA/DoRA indicators
+            const sessionNameLower = sessionName.toLowerCase();
+            const logFileLower = session.log_file ? session.log_file.toLowerCase() : '';
+            
+            // Check for LoRA indicators
+            if (sessionNameLower.includes('lora') || 
+                sessionNameLower.includes('_lora_') ||
+                logFileLower.includes('lora') ||
+                logFileLower.includes('adapters.safetensors') ||
+                logFileLower.includes('_adapters.')) {
+                fineTuneType = 'LoRA';
+            } 
+            // Check for DoRA indicators
+            else if (sessionNameLower.includes('dora') || 
+                     sessionNameLower.includes('_dora_') ||
+                     logFileLower.includes('dora')) {
+                fineTuneType = 'DoRA';
+            } 
+            // Check for explicit Full indicators
+            else if (sessionNameLower.includes('full') || 
+                     sessionNameLower.includes('_full_') ||
+                     logFileLower.includes('full')) {
+                fineTuneType = 'Full';
+            } else {
+                // 3. Smart detection based on session patterns
+                // Check if this looks like LoRA training based on multiple indicators
+                const hasLoRAIndicators = (
+                    // Check if folder structure suggests LoRA (most CPT sessions are LoRA)
+                    (session.log_file && session.log_file.includes('/cpt/')) ||
+                    // Check if session has typical LoRA naming patterns
+                    sessionName.includes('iter') || 
+                    sessionName.includes('lr') ||
+                    sessionName.includes('bs') ||
+                    // Check latest iteration count (LoRA typically has more iterations)
+                    (session.latest_iteration && session.latest_iteration > 100)
+                );
+                
+                if (hasLoRAIndicators) {
+                    fineTuneType = 'LoRA'; // Likely LoRA training
+                } else {
+                    fineTuneType = 'Full'; // Default for other types
+                }
+            }
         }
     }
     
+    // Debug logging to help identify the issue
+    console.log(`Session Debug - Name: "${sessionName}", Log: "${session.log_file}", FromSession: "${fineTuneTypeFromSession}", Detected: "${fineTuneType}"`);
+    
     return {
         learningRate: lrMatch ? lrMatch[1].replace('_', '-') : '',
+        learningRateDecay: decayMatch ? decayMatch[1] : '',
         batchSize: bsMatch ? bsMatch[1] : '',
         iterations: session.latest_iteration || '',
         sequenceLength: seqMatch ? seqMatch[1] : '',
         trainingType: trainingType,
+        trainingTypeShort: trainingTypeShort,
         fineTuneType: fineTuneType
     };
 }
@@ -135,6 +227,11 @@ async function loadSessions() {
         
         // Handle different API response formats
         let sessions = data.training_sessions || data.sessions || data || [];
+        
+        // Debug: log first session structure if available
+        if (sessions.length > 0) {
+            console.log('Sample session structure:', sessions[0]);
+        }
         
         const container = document.getElementById('compare-sessions-list');
         if (!container) return;
@@ -156,10 +253,13 @@ async function loadSessions() {
             // Clean up model name by removing "dataset_cpt_" prefix
             const cleanModelName = (session.model_name || 'Unknown').replace(/^dataset_cpt_/, '');
             
-            // Use start_time instead of started_at
-            const startDate = session.start_time ? new Date(session.start_time).toLocaleDateString() : 'Unknown';
+            // Use start_time with time included
+            const startDateTime = session.start_time ? new Date(session.start_time) : null;
+            const startDate = startDateTime ? startDateTime.toLocaleDateString() : 'Unknown';
+            const startTime = startDateTime ? startDateTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '';
             
-            // Get training parameters for tooltip
+            // Get training parameters for tooltip and display - for now use synchronous version
+            // TODO: Consider implementing async loading for more accurate detection
             const params = getTrainingParameters(session);
             
             // Build a simple tooltip with parameters
@@ -178,6 +278,24 @@ async function loadSessions() {
             // ENABLE FUSE BUTTON FOR ALL MODELS - no detection logic needed
             // All models can be fused, regardless of type
             
+            // Create badge combinations for training type
+            const trainingBadges = [];
+            if (params.fineTuneType && params.fineTuneType !== '-') {
+                const bgColor = params.fineTuneType === 'Full' ? 'bg-primary' : 
+                               params.fineTuneType === 'LoRA' ? 'bg-success' : 'bg-info';
+                trainingBadges.push(`<span class="badge ${bgColor}">${params.fineTuneType}</span>`);
+            }
+            if (params.trainingTypeShort && params.trainingTypeShort !== '-') {
+                trainingBadges.push(`<span class="badge bg-warning text-dark">${params.trainingTypeShort}</span>`);
+            }
+            const trainingBadgeHtml = trainingBadges.join(' ');
+
+            // Create learning rate display with decay if available
+            let lrDisplay = formatValue(params.learningRate);
+            if (params.learningRateDecay && params.learningRateDecay !== '') {
+                lrDisplay += ` <small class="text-muted">/${params.learningRateDecay}</small>`;
+            }
+
             return `
                 <div class="session-item mb-2">
                     <div class="session-card ${selectedClass}" 
@@ -188,42 +306,43 @@ async function loadSessions() {
                          data-bs-html="false"
                          title="${tooltipContent}"
                          onclick="handleSessionChange('${sessionId.replace(/'/g, "\\'")}', !selectedSessions.has('${sessionId.replace(/'/g, "\\'")}'))">
+                        
+                        <!-- Header with model name and iteration badge -->
                         <div class="session-header">
-                            <div class="session-name">${session.session_name || session.name || 'Unnamed Session'}</div>
-                            <div class="session-status">
-                                <span class="badge bg-secondary">${session.latest_iteration || session.iterations || 'N/A'} iter</span>
+                            <div class="session-name" title="${cleanModelName}">${cleanModelName}</div>
+                            <span class="badge bg-secondary iteration-badge">${session.latest_iteration || session.iterations || 'N/A'}</span>
+                        </div>
+                        
+                        <!-- Training type badges row -->
+                        <div class="training-badges mb-2">
+                            ${trainingBadgeHtml}
+                        </div>
+                        
+                        <!-- Compact info row -->
+                        <div class="session-compact-info">
+                            <div class="info-item">
+                                <i class="fas fa-calendar-alt text-muted"></i>
+                                <span class="info-text">${startDate}${startTime ? ` ${startTime}` : ''}</span>
+                            </div>
+                            <div class="info-item">
+                                <i class="fas fa-chart-line text-muted"></i>
+                                <span class="info-text">LR: ${lrDisplay}</span>
                             </div>
                         </div>
-                        <div class="session-details">
-                            <div class="detail-row">
-                                <span class="detail-label">Model:</span>
-                                <span class="detail-value">${cleanModelName}</span>
-                            </div>
-                            <div class="detail-row">
-                                <span class="detail-label">Type:</span>
-                                <span class="detail-value">${formatValue(params.fineTuneType)}</span>
-                            </div>
-                            <div class="detail-row">
-                                <span class="detail-label">Started:</span>
-                                <span class="detail-value">${startDate}</span>
-                            </div>
-                            <div class="detail-row">
-                                <span class="detail-label">LR:</span>
-                                <span class="detail-value">${formatValue(params.learningRate)}</span>
-                            </div>
-                        </div>
-                        <div class="session-actions mt-2 pt-2 border-top">
-                            <button class="btn btn-sm btn-outline-secondary view-params-btn" 
+                        
+                        <!-- Action buttons (smaller and more compact) -->
+                        <div class="session-actions">
+                            <button class="btn btn-xs btn-outline-secondary" 
                                     onclick="showSessionParameters('${sessionId.replace(/'/g, "\\'")}'); event.preventDefault(); event.stopPropagation();"
                                     title="View Parameters">
                                 <i class="fas fa-file-code"></i>
                             </button>
-                            <button class="btn btn-sm btn-outline-secondary fuse-adapter-btn" 
+                            <button class="btn btn-xs btn-outline-secondary" 
                                     onclick="fuseSessionAdapter('${sessionId.replace(/'/g, "\\'")}'); event.preventDefault(); event.stopPropagation();"
                                     title="Fuse this adapter with base model">
                                 <i class="fas fa-layer-group"></i>
                             </button>
-                            <button class="btn btn-sm btn-outline-secondary test-session-btn" 
+                            <button class="btn btn-xs btn-outline-secondary" 
                                     onclick="testSessionInPlayground('${sessionId.replace(/'/g, "\\'")}'); event.preventDefault(); event.stopPropagation();"
                                     title="Test in Playground">
                                 <i class="fas fa-vial"></i>
@@ -235,6 +354,11 @@ async function loadSessions() {
         }).join('');
         
         console.log(`Loaded ${sessions.length} sessions`);
+        
+        // Background task: Fetch actual fine_tune_types for more accurate badges
+        setTimeout(() => {
+            updateSessionBadgesWithActualData(sessions);
+        }, 1000);
         
         // Initialize Bootstrap tooltips
         const tooltips = document.querySelectorAll('[data-bs-toggle="tooltip"]');
@@ -1597,6 +1721,90 @@ document.addEventListener('shown.bs.tab', function(event) {
     }
 });
 
+// Function to update session badges with actual config data
+async function updateSessionBadgesWithActualData(sessions) {
+    console.log('Updating session badges with actual config data...');
+    
+    // Process sessions in batches to avoid overwhelming the server
+    const batchSize = 3;
+    for (let i = 0; i < sessions.length; i += batchSize) {
+        const batch = sessions.slice(i, i + batchSize);
+        
+        await Promise.allSettled(batch.map(async session => {
+            try {
+                if (!session.log_file) return;
+                
+                // Fetch the actual config
+                const response = await fetch('/api/logs/raw', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ log_file: session.log_file })
+                });
+                
+                if (!response.ok) return;
+                
+                const sessionDetails = await response.json();
+                let config = null;
+                
+                try {
+                    const rawData = JSON.parse(sessionDetails.logs);
+                    config = rawData.config || {};
+                } catch (e) {
+                    console.log('Could not parse session config for', session.session_name);
+                    return;
+                }
+                
+                // Get the actual fine_tune_type
+                const actualFineTuneType = config.fine_tune_type;
+                if (!actualFineTuneType) return;
+                
+                // Update the badge in the UI
+                const sessionId = session.session_id || session.id || '';
+                const escapedSessionId = escapeSelector(sessionId);
+                const sessionCard = document.querySelector(`#session-card-${escapedSessionId}`);
+                
+                if (sessionCard) {
+                    const trainingBadges = sessionCard.querySelector('.training-badges');
+                    if (trainingBadges) {
+                        // Find and update the fine-tune type badge
+                        const badges = trainingBadges.querySelectorAll('.badge');
+                        let fineTuneBadge = null;
+                        
+                        badges.forEach(badge => {
+                            const text = badge.textContent.trim();
+                            if (text === 'Full' || text === 'LoRA' || text === 'DoRA') {
+                                fineTuneBadge = badge;
+                            }
+                        });
+                        
+                        if (fineTuneBadge) {
+                            // Update the badge text and color
+                            const displayType = actualFineTuneType === 'lora' ? 'LoRA' : 
+                                               actualFineTuneType === 'dora' ? 'DoRA' : 'Full';
+                            const bgColor = displayType === 'Full' ? 'bg-primary' : 
+                                           displayType === 'LoRA' ? 'bg-success' : 'bg-info';
+                            
+                            fineTuneBadge.textContent = displayType;
+                            fineTuneBadge.className = `badge ${bgColor}`;
+                            
+                            console.log(`Updated ${session.session_name}: ${actualFineTuneType} -> ${displayType}`);
+                        }
+                    }
+                }
+            } catch (error) {
+                console.log('Error updating badge for', session.session_name, ':', error);
+            }
+        }));
+        
+        // Small delay between batches to avoid overwhelming the server
+        if (i + batchSize < sessions.length) {
+            await new Promise(resolve => setTimeout(resolve, 200));
+        }
+    }
+    
+    console.log('Finished updating session badges');
+}
+
 console.log('Compare.js Plotly version loaded');
 
 // Syntax highlight function for JSON
@@ -1650,13 +1858,13 @@ style.textContent = `
     background: var(--text-muted);
 }
 
-/* Session Card Styling */
+/* Session Card Styling - More compact */
 .session-card {
     transition: all 0.2s ease-in-out;
     border-left: 4px solid transparent;
-    padding: 10px;
+    padding: 8px;
     border-radius: 6px;
-    margin-bottom: 8px;
+    margin-bottom: 6px;
     cursor: pointer;
 }
 
@@ -1709,59 +1917,93 @@ style.textContent = `
     box-shadow: 0 0 0 1px rgba(13, 110, 253, 0.4) !important;
 }
 
-/* Session Header */
+/* Session Header - Redesigned for compact layout */
 .session-header {
     display: flex;
     justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 8px;
+    align-items: center;
+    margin-bottom: 6px;
 }
 
 .session-name {
     font-weight: 600 !important;
-    font-size: 14px !important;
+    font-size: 13px !important;
     color: var(--text-color) !important;
-    line-height: 1.3;
-    max-width: 180px;
+    line-height: 1.2;
+    flex: 1;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    margin-right: 8px;
 }
 
-.session-status {
-    flex-shrink: 0;
-    margin-left: 8px;
-}
-
-.session-status .badge {
-    font-size: 10px !important;
+.iteration-badge {
+    font-size: 9px !important;
     padding: 2px 6px !important;
+    border-radius: 8px !important;
+    flex-shrink: 0;
 }
 
-/* Session Details */
-.session-details {
-    font-size: 11px !important;
-    color: var(--text-muted) !important;
-}
-
-.detail-row {
+/* Training badges row */
+.training-badges {
     display: flex;
-    justify-content: space-between;
-    margin-bottom: 2px;
+    gap: 4px;
+    flex-wrap: wrap;
 }
 
-.detail-label {
-    font-weight: 500;
-    min-width: 50px;
+.training-badges .badge {
+    font-size: 8px !important;
+    padding: 1px 5px !important;
+    border-radius: 6px !important;
+    font-weight: 500 !important;
 }
 
-.detail-value {
-    text-align: right;
-    max-width: 120px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+/* Compact info layout */
+.session-compact-info {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    margin-bottom: 8px;
 }
+
+.info-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 10px !important;
+}
+
+.info-item i {
+    width: 12px;
+    font-size: 9px !important;
+    opacity: 0.7;
+}
+
+.info-text {
+    color: var(--text-color) !important;
+    line-height: 1.2;
+    font-weight: 400;
+}
+
+/* Action buttons - extra small size */
+.session-actions {
+    display: flex;
+    gap: 3px;
+    margin-top: 6px;
+}
+
+.btn-xs {
+    padding: 2px 4px !important;
+    font-size: 9px !important;
+    border-radius: 3px !important;
+    min-width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+
 
 /* Checkbox Styling */
 .session-checkbox {
@@ -1876,14 +2118,7 @@ style.textContent = `
     z-index: 1000;
 }
 
-.session-actions {
-    display: flex;
-    gap: 5px;
-}
 
-.session-actions .btn {
-    padding: 0.25rem 0.5rem;
-}
 `;
 document.head.appendChild(style);
 
