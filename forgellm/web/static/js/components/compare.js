@@ -46,8 +46,8 @@ async function restoreSelectedSessions() {
             // Update UI after all sessions are restored
             updateSessionColorsAndUI();
             
-            // Generate comparison if we have at least 2 sessions
-            if (selectedSessions.size >= 2) {
+            // Generate comparison if we have at least 1 session
+            if (selectedSessions.size >= 1) {
                 generateComparison();
             }
         }
@@ -514,7 +514,7 @@ async function handleSessionChange(sessionId, isSelected) {
     updateSelectionSummary();
     updateSessionColorsAndUI(); // Centralized function to update colors and UI
 
-    if (selectedSessions.size >= 2) {
+    if (selectedSessions.size >= 1) {
         generateComparison();
     } else {
         hideComparison();
@@ -740,7 +740,7 @@ async function generateComparison() {
                 }
             }
             renderComparisonChart('loss-comparison-chart', lossTraces, {
-                title: 'Validation Loss',
+                title: selectedSessions.size === 1 ? 'Validation Loss' : 'Validation Loss Comparison',
                 xaxis: { 
                     title: 'Iterations',
                     range: [0, maxLossIteration > 0 ? maxLossIteration : null]
@@ -770,7 +770,7 @@ async function generateComparison() {
                 }
             }
             renderComparisonChart('perplexity-comparison-chart', perplexityTraces, {
-                title: 'Validation Perplexity',
+                title: selectedSessions.size === 1 ? 'Validation Perplexity' : 'Validation Perplexity Comparison',
                 xaxis: { 
                     title: 'Iterations',
                     range: [0, maxPerplexityIteration > 0 ? maxPerplexityIteration : null]
@@ -909,7 +909,7 @@ async function generateComparison() {
             
             Plotly.newPlot(stabilityContainer, stabilityTraces, {
                 title: {
-                    text: 'Validation Loss Stability',
+                    text: selectedSessions.size === 1 ? 'Validation Loss Stability' : 'Validation Loss Stability Comparison',
                     x: 0.05,
                     font: { color: textColor, size: 16 }
                 },
@@ -1026,7 +1026,7 @@ async function generateComparison() {
             }
             
             renderComparisonChart('generalization-comparison-chart', gapTraces, {
-                title: 'Generalization Gap',
+                title: selectedSessions.size === 1 ? 'Generalization Gap' : 'Generalization Gap Comparison',
                 xaxis: { title: 'Iterations', range: [0, null] },
                 yaxis: { 
                     title: 'Val Loss - Train Loss', 
@@ -2214,6 +2214,9 @@ style.textContent = `
 
 .session-card:hover {
     background-color: rgba(0, 123, 255, 0.1);
+    transform: translateY(-2px) !important;
+    box-shadow: 0 4px 12px rgba(0, 123, 255, 0.2) !important;
+    border-left-color: #007AFF !important;
 }
 
 /* Selected state styling - IMPORTANT: Make this very visible with blue background */
@@ -2366,7 +2369,10 @@ style.textContent = `
 
 /* Dark Mode Enhancements */
 [data-theme="dark"] .session-card:hover {
-    background-color: #333333;
+    background-color: rgba(0, 123, 255, 0.15) !important;
+    transform: translateY(-2px) !important;
+    box-shadow: 0 4px 12px rgba(0, 123, 255, 0.3) !important;
+    border-left-color: #007AFF !important;
 }
 
 [data-theme="dark"] .selected-session-card {
@@ -2458,7 +2464,7 @@ document.head.appendChild(style);
 // Listen for theme changes and regenerate comparison charts
 function handleThemeChange() {
     // Only regenerate if we have active comparisons
-    if (selectedSessions.size >= 2) {
+    if (selectedSessions.size >= 1) {
         console.log('Theme changed, regenerating comparison charts...');
         generateComparison();
     }
