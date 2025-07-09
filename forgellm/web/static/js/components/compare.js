@@ -1623,7 +1623,7 @@ const style = document.createElement('style');
 style.textContent = `
 /* Session List Container */
 #compare-sessions-list {
-    max-height: 400px;
+    max-height: 600px;
     overflow-y: auto;
     padding-right: 5px;
 }
