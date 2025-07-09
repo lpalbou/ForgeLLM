@@ -2779,6 +2779,11 @@ style.textContent = `
     font-size: 10px !important;
 }
 
+.bg-info {
+    background-color: #007bff !important;
+    color: #fff !important;
+}
+
 `;
 document.head.appendChild(style);
 
