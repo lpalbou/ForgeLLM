@@ -728,14 +728,20 @@ async function generateComparison() {
                     autorange: false
                 },
                 shapes: [
-                    { type: 'rect', xref: 'paper', yref: 'y', x0: 0, y0: 0.1, x1: 1, y1: maxGapValue, fillcolor: 'rgba(255, 193, 7, 0.2)', line: { width: 0 }, layer: 'below' },
-                    { type: 'rect', xref: 'paper', yref: 'y', x0: 0, y0: -0.1, x1: 1, y1: 0.1, fillcolor: 'rgba(40, 167, 69, 0.2)', line: { width: 0 }, layer: 'below' },
-                    { type: 'rect', xref: 'paper', yref: 'y', x0: 0, y0: minGapValue, x1: 1, y1: -0.1, fillcolor: 'rgba(220, 53, 69, 0.2)', line: { width: 0 }, layer: 'below' }
+                    // Underfitting area (yellow): Val Loss - Train Loss < 0
+                    { type: 'rect', xref: 'paper', yref: 'y', x0: 0, y0: minGapValue, x1: 1, y1: 0, fillcolor: 'rgba(255, 193, 7, 0.2)', line: { width: 0 }, layer: 'below' },
+                    // Good fit area (green): Val Loss - Train Loss between 0 and 0.2
+                    { type: 'rect', xref: 'paper', yref: 'y', x0: 0, y0: 0, x1: 1, y1: 0.2, fillcolor: 'rgba(40, 167, 69, 0.2)', line: { width: 0 }, layer: 'below' },
+                    // Overfitting area (red): Val Loss - Train Loss > 0.2
+                    { type: 'rect', xref: 'paper', yref: 'y', x0: 0, y0: 0.2, x1: 1, y1: maxGapValue, fillcolor: 'rgba(220, 53, 69, 0.2)', line: { width: 0 }, layer: 'below' }
                 ],
                 annotations: [
-                    { text: 'Underfitting', x: 0.95, y: Math.min(maxGapValue - 0.05, 0.3), xref: 'paper', yref: 'y', showarrow: false, font: { color: 'rgba(255, 193, 7, 0.9)', size: 10 }, xanchor: 'right' },
-                    { text: 'Good Fit', x: 0.95, y: 0, xref: 'paper', yref: 'y', showarrow: false, font: { color: 'rgba(40, 167, 69, 0.9)', size: 10 }, xanchor: 'right' },
-                    { text: 'Overfitting', x: 0.95, y: Math.max(minGapValue + 0.05, -0.3), xref: 'paper', yref: 'y', showarrow: false, font: { color: 'rgba(220, 53, 69, 0.9)', size: 10 }, xanchor: 'right' }
+                    // Underfitting label (yellow) positioned in the negative region
+                    { text: 'Underfitting', x: 0.95, y: Math.max(minGapValue + 0.05, -0.3), xref: 'paper', yref: 'y', showarrow: false, font: { color: 'rgba(255, 193, 7, 0.9)', size: 10 }, xanchor: 'right' },
+                    // Good fit label (green) positioned in the middle of the good fit region
+                    { text: 'Good Fit', x: 0.95, y: 0.1, xref: 'paper', yref: 'y', showarrow: false, font: { color: 'rgba(40, 167, 69, 0.9)', size: 10 }, xanchor: 'right' },
+                    // Overfitting label (red) positioned in the overfitting region
+                    { text: 'Overfitting', x: 0.95, y: Math.min(maxGapValue - 0.05, 0.3), xref: 'paper', yref: 'y', showarrow: false, font: { color: 'rgba(220, 53, 69, 0.9)', size: 10 }, xanchor: 'right' }
                 ]
             });
         } catch (error) {
