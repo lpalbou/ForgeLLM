@@ -474,12 +474,21 @@ function renderComparisonChart(containerId, traces, layoutOptions) {
     const textColor = isDarkMode ? '#F5F5F5' : '#333333';
     const borderColor = isDarkMode ? '#555555' : '#DDDDDD';
 
-    // Ensure xaxis range starts at 0 for stability chart
-    if (containerId === 'stability-comparison-chart' || containerId === 'generalization-comparison-chart') {
-        if (!layoutOptions.xaxis) layoutOptions.xaxis = {};
-        layoutOptions.xaxis.range = [0, null];
-        layoutOptions.xaxis.fixedrange = true; // Prevent user from zooming/panning
+    // Debug the traces for stability chart
+    if (containerId === 'stability-comparison-chart') {
+        console.log('Stability Chart Traces:', JSON.stringify(traces));
+        console.log('X-axis values:', traces.flatMap(t => t.x));
     }
+
+    // Ensure all charts have x-axis starting at 0 for consistency
+    if (!layoutOptions.xaxis) layoutOptions.xaxis = {};
+    
+    // Force x-axis to start at 0 and be linear
+    layoutOptions.xaxis.range = [0, layoutOptions.xaxis.range?.[1] || null];
+    layoutOptions.xaxis.type = 'linear';
+    layoutOptions.xaxis.fixedrange = true; // Prevent user from zooming/panning
+    
+    console.log(`Chart ${containerId} x-axis range:`, layoutOptions.xaxis.range);
 
     const layout = {
         width: containerWidth,
@@ -552,10 +561,17 @@ async function generateComparison() {
             
             // --- 1. Loss Comparison (VALIDATION) ---
             const lossTraces = [];
+            let maxLossIteration = 0; // Track maximum iteration
+            
             for (const [sessionId, sessionData] of selectedSessions) {
                 if (sessionData.charts?.loss?.data) {
                     const validationLoss = sessionData.charts.loss.data.find(c => c.name === 'Validation Loss');
                     if (validationLoss?.x && validationLoss?.y) {
+                        // Track maximum iteration
+                        if (validationLoss.x.length > 0) {
+                            maxLossIteration = Math.max(maxLossIteration, Math.max(...validationLoss.x));
+                        }
+                        
                         lossTraces.push({
                             x: validationLoss.x, y: validationLoss.y, type: 'scatter', mode: 'lines',
                             name: sessionData.session_name, // Name for hover data
@@ -566,16 +582,26 @@ async function generateComparison() {
             }
             renderComparisonChart('loss-comparison-chart', lossTraces, {
                 title: 'Validation Loss',
-                xaxis: { title: 'Iterations' },
+                xaxis: { 
+                    title: 'Iterations',
+                    range: [0, maxLossIteration > 0 ? maxLossIteration : null]
+                },
                 yaxis: { title: 'Validation Loss' }
             });
 
             // --- 2. Perplexity Comparison (VALIDATION) ---
             const perplexityTraces = [];
+            let maxPerplexityIteration = 0; // Track maximum iteration
+            
             for (const [sessionId, sessionData] of selectedSessions) {
                  if (sessionData.charts?.perplexity?.data) {
                     const validationPerplexity = sessionData.charts.perplexity.data.find(c => c.name === 'Validation Perplexity');
                     if (validationPerplexity?.x && validationPerplexity?.y) {
+                        // Track maximum iteration
+                        if (validationPerplexity.x.length > 0) {
+                            maxPerplexityIteration = Math.max(maxPerplexityIteration, Math.max(...validationPerplexity.x));
+                        }
+                        
                         perplexityTraces.push({
                             x: validationPerplexity.x, y: validationPerplexity.y, type: 'scatter', mode: 'lines',
                             name: sessionData.session_name,
@@ -586,65 +612,177 @@ async function generateComparison() {
             }
             renderComparisonChart('perplexity-comparison-chart', perplexityTraces, {
                 title: 'Validation Perplexity',
-                xaxis: { title: 'Iterations' },
+                xaxis: { 
+                    title: 'Iterations',
+                    range: [0, maxPerplexityIteration > 0 ? maxPerplexityIteration : null]
+                },
                 yaxis: { title: 'Validation Perplexity' }
             });
 
             // --- 3. Stability Comparison (VALIDATION LOSS) ---
+            // Completely rewritten implementation
+            const stabilityContainer = document.getElementById('stability-comparison-chart');
+            if (!stabilityContainer) {
+                console.error('Stability chart container not found');
+                return;
+            }
+            
+            // Clear previous chart if it exists
+            Plotly.purge(stabilityContainer);
+            
             const stabilityTraces = [];
+            let maxIteration = 0;
+            
+            // Process each selected session
             for (const [sessionId, sessionData] of selectedSessions) {
-                if (sessionData.charts?.loss?.data) {
+                try {
+                    // Skip if no validation loss data available
+                    if (!sessionData.charts?.loss?.data) continue;
+                    
                     const validationLoss = sessionData.charts.loss.data.find(c => c.name === 'Validation Loss');
-                    if (validationLoss?.x && validationLoss?.y) {
-                        const windowSize = 10;
-                        const varianceX = [], varianceY = [];
+                    if (!validationLoss?.x || !validationLoss?.y || validationLoss.x.length < 2 || validationLoss.y.length < 2) continue;
+                    
+                    console.log(`Processing stability data for ${sessionId}, points: ${validationLoss.x.length}`);
+                    
+                    // Calculate rolling variance with a window
+                    const windowSize = Math.min(10, Math.floor(validationLoss.x.length / 2));
+                    if (windowSize < 2) continue; // Need at least 2 points for variance
+                    
+                    const points = [];
+                    
+                    // Always start with zero variance at iteration 0
+                    if (validationLoss.x[0] > 0) {
+                        points.push({ x: 0, y: 0 });
+                    }
+                    
+                    // Calculate variance for each window
+                    for (let i = windowSize; i < validationLoss.y.length; i++) {
+                        const window = validationLoss.y.slice(i - windowSize, i);
+                        const mean = window.reduce((a, b) => a + b, 0) / windowSize;
+                        const variance = window.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / windowSize;
                         
-                        // Add a zero point at iteration 0 if the data doesn't start at 0
-                        if (validationLoss.x.length > 0 && validationLoss.x[0] > 0) {
-                            varianceX.push(0);
-                            // Use the first available variance value or 0
-                            varianceY.push(validationLoss.y.length > windowSize ? 
-                                validationLoss.y.slice(0, windowSize).reduce((acc, val) => acc + Math.pow(val - validationLoss.y[0], 2), 0) / windowSize : 0);
-                        }
-                        
-                        // Ensure there are enough points to calculate variance
-                        if (validationLoss.y.length >= windowSize) {
-                            for (let i = windowSize; i < validationLoss.y.length; i++) {
-                                const window = validationLoss.y.slice(i - windowSize, i);
-                                const mean = window.reduce((a, b) => a + b, 0) / window.length;
-                                const variance = window.reduce((acc, val) => acc + Math.pow(val - mean, 2), 0) / window.length;
-                                varianceX.push(validationLoss.x[i]);
-                                varianceY.push(variance);
-                            }
-                        }
-                        if (varianceX.length > 0) {
-                            stabilityTraces.push({
-                                x: varianceX, y: varianceY, type: 'scatter', mode: 'lines',
-                                name: sessionData.session_name,
-                                line: { color: sessionData.color, width: 2 } // Use assigned color
-                            });
+                        const x = validationLoss.x[i];
+                        if (x >= 0) { // Only use non-negative x values
+                            points.push({ x, y: variance });
+                            maxIteration = Math.max(maxIteration, x);
                         }
                     }
+                    
+                    // Only add trace if we have points
+                    if (points.length > 0) {
+                        stabilityTraces.push({
+                            x: points.map(p => p.x),
+                            y: points.map(p => p.y),
+                            type: 'scatter',
+                            mode: 'lines',
+                            name: sessionData.session_name,
+                            line: { color: sessionData.color, width: 2 }
+                        });
+                        
+                        console.log(`Added stability trace for ${sessionId} with ${points.length} points, x range: [${Math.min(...points.map(p => p.x))}, ${Math.max(...points.map(p => p.x))}]`);
+                    }
+                } catch (error) {
+                    console.error(`Error processing stability data for session ${sessionId}:`, error);
                 }
             }
-            renderComparisonChart('stability-comparison-chart', stabilityTraces, {
-                title: 'Validation Loss Stability',
-                xaxis: { title: 'Iterations', range: [0, null] },
-                yaxis: { 
-                    title: 'Loss Variance', 
-                    range: [0, Math.max(0.1, ...stabilityTraces.flatMap(trace => trace.y).filter(val => val !== null && val !== undefined))],
-                    autorange: false
+            
+            // If no traces, show empty chart with message
+            if (stabilityTraces.length === 0) {
+                console.log('No stability data available');
+                
+                // Get theme colors
+                const isDarkMode = document.documentElement.getAttribute('data-theme') === 'dark' || document.body.getAttribute('data-theme') === 'dark';
+                const textColor = isDarkMode ? '#F5F5F5' : '#333333';
+                const borderColor = isDarkMode ? '#555555' : '#DDDDDD';
+                
+                // Create empty chart with message
+                Plotly.newPlot(stabilityContainer, [], {
+                    title: {
+                        text: 'Validation Loss Stability - No Data Available',
+                        font: { color: textColor }
+                    },
+                    xaxis: { 
+                        title: 'Iterations', 
+                        range: [0, 100],
+                        tickfont: { color: textColor }
+                    },
+                    yaxis: { 
+                        title: 'Loss Variance', 
+                        range: [0, 0.1],
+                        tickfont: { color: textColor }
+                    },
+                    annotations: [{
+                        text: 'No stability data available for selected models',
+                        showarrow: false,
+                        font: { color: textColor, size: 14 },
+                        xref: 'paper',
+                        yref: 'paper',
+                        x: 0.5,
+                        y: 0.5
+                    }],
+                    paper_bgcolor: 'transparent',
+                    plot_bgcolor: 'transparent',
+                    font: { color: textColor }
+                }, {
+                    responsive: true,
+                    displayModeBar: false
+                });
+                
+                return;
+            }
+            
+            // Calculate appropriate y-axis range
+            const allVarianceValues = stabilityTraces.flatMap(trace => trace.y);
+            const maxVariance = Math.max(0.1, ...allVarianceValues);
+            
+            console.log(`Stability chart: ${stabilityTraces.length} traces, max iteration: ${maxIteration}, max variance: ${maxVariance}`);
+            
+            // Create the chart with proper ranges
+            const isDarkMode = document.documentElement.getAttribute('data-theme') === 'dark' || document.body.getAttribute('data-theme') === 'dark';
+            const textColor = isDarkMode ? '#F5F5F5' : '#333333';
+            const borderColor = isDarkMode ? '#555555' : '#DDDDDD';
+            
+            Plotly.newPlot(stabilityContainer, stabilityTraces, {
+                title: {
+                    text: 'Validation Loss Stability',
+                    x: 0.05,
+                    font: { color: textColor, size: 16 }
                 },
+                xaxis: {
+                    title: { text: 'Iterations', font: { color: textColor } },
+                    range: [0, maxIteration > 0 ? maxIteration : 100],
+                    type: 'linear',
+                    gridcolor: borderColor,
+                    linecolor: borderColor,
+                    zerolinecolor: borderColor,
+                    tickfont: { color: textColor }
+                },
+                yaxis: {
+                    title: { text: 'Loss Variance', font: { color: textColor } },
+                    range: [0, maxVariance * 1.1], // Add 10% padding
+                    gridcolor: borderColor,
+                    linecolor: borderColor,
+                    zerolinecolor: borderColor,
+                    tickfont: { color: textColor }
+                },
+                paper_bgcolor: 'transparent',
+                plot_bgcolor: 'transparent',
+                margin: { l: 60, r: 20, t: 50, b: 60 },
                 shapes: [
                     { type: 'rect', xref: 'paper', yref: 'y', x0: 0, y0: 0, x1: 1, y1: 0.005, fillcolor: 'rgba(40, 167, 69, 0.2)', line: { width: 0 }, layer: 'below' },
                     { type: 'rect', xref: 'paper', yref: 'y', x0: 0, y0: 0.005, x1: 1, y1: 0.02, fillcolor: 'rgba(255, 193, 7, 0.2)', line: { width: 0 }, layer: 'below' },
-                    { type: 'rect', xref: 'paper', yref: 'y', x0: 0, y0: 0.02, x1: 1, y1: 0.1, fillcolor: 'rgba(220, 53, 69, 0.2)', line: { width: 0 }, layer: 'below' }
+                    { type: 'rect', xref: 'paper', yref: 'y', x0: 0, y0: 0.02, x1: 1, y1: maxVariance * 1.1, fillcolor: 'rgba(220, 53, 69, 0.2)', line: { width: 0 }, layer: 'below' }
                 ],
                 annotations: [
                     { text: 'Excellent', x: 0.95, y: 0.0025, xref: 'paper', yref: 'y', showarrow: false, font: { color: 'rgba(40, 167, 69, 0.9)', size: 10 }, xanchor: 'right' },
                     { text: 'Good', x: 0.95, y: 0.0125, xref: 'paper', yref: 'y', showarrow: false, font: { color: 'rgba(255, 193, 7, 0.9)', size: 10 }, xanchor: 'right' },
-                    { text: 'Unstable', x: 0.95, y: 0.06, xref: 'paper', yref: 'y', showarrow: false, font: { color: 'rgba(220, 53, 69, 0.9)', size: 10 }, xanchor: 'right' }
-                ]
+                    { text: 'Unstable', x: 0.95, y: Math.min(maxVariance * 0.6, 0.06), xref: 'paper', yref: 'y', showarrow: false, font: { color: 'rgba(220, 53, 69, 0.9)', size: 10 }, xanchor: 'right' }
+                ],
+                showlegend: false,
+                font: { color: textColor } // Ensure all text uses the correct color
+            }, {
+                responsive: true,
+                displayModeBar: false
             });
 
             // --- 4. Generalization Gap (Correct by definition) ---
