@@ -1626,7 +1626,7 @@ const style = document.createElement('style');
 style.textContent = `
 /* Session List Container */
 #compare-sessions-list {
-    max-height: 600px;
+    max-height: 631px;
     overflow-y: auto;
     padding-right: 5px;
 }
