@@ -510,139 +510,11 @@ async function loadSessions() {
         
         // Create compact session items with better layout and tooltips
         container.innerHTML = sessions.map(session => {
-            // The session ID is the full directory name
-            const sessionId = session.session_id || session.id || '';
-            const escapedSessionId = escapeSelector(sessionId);
-            
-            // Clean up model name by removing "dataset_cpt_" prefix
-            const cleanModelName = (session.model_name || 'Unknown').replace(/^dataset_cpt_/, '');
-            
-            // Use start_time with time included
-            const startDateTime = session.start_time ? new Date(session.start_time) : null;
-            const startDate = startDateTime ? startDateTime.toLocaleDateString() : 'Unknown';
-            const startTime = startDateTime ? startDateTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '';
-            
-            // Get training parameters for tooltip and display - for now use synchronous version
-            // TODO: Consider implementing async loading for more accurate detection
-            const params = getTrainingParameters(session);
-            
-            // Check if this session is selected
-            const isSelected = selectedSessions.has(sessionId);
-            const selectedClass = isSelected ? 'selected-session-card' : '';
-            
-            // ENABLE FUSE BUTTON FOR ALL MODELS - no detection logic needed
-            // All models can be fused, regardless of type
-            
-            // Create badge combinations for training type and sequence length
-            const trainingBadges = [];
-            if (params.fineTuneType && params.fineTuneType !== '-') {
-                const bgColor = params.fineTuneType === 'Full' ? 'bg-primary' : 
-                               params.fineTuneType === 'LoRA' ? 'bg-success' : 'bg-info';
-                trainingBadges.push(`<span class="badge ${bgColor}">${params.fineTuneType}</span>`);
-            }
-            if (params.trainingTypeShort && params.trainingTypeShort !== '-') {
-                trainingBadges.push(`<span class="badge bg-warning text-dark">${params.trainingTypeShort}</span>`);
-            }
-            
-            // Add sequence length badge
-            const seqLength = params.maxSeqLength || params.sequenceLength;
-            if (seqLength && seqLength !== '-' && seqLength !== '') {
-                // Show the actual number (e.g., 3072, 2048, 4096)
-                trainingBadges.push(`<span class="badge bg-secondary">${seqLength}</span>`);
-            }
-            
-            const trainingBadgeHtml = trainingBadges.join(' ');
-
-            // Create comprehensive learning rate display with LR decay and weight decay
-            let lrDisplay = formatScientificNotation(params.learningRate);
-            let additionalParams = [];
-            
-            // Add LR decay factor if available
-            if (params.lrDecayFactor && params.lrDecayFactor !== '') {
-                additionalParams.push(`LDR ${params.lrDecayFactor}`);
-            }
-            
-            // Add weight decay if available
-            if (params.weightDecay && params.weightDecay !== '') {
-                additionalParams.push(`WD ${params.weightDecay}`);
-            }
-            
-            // Combine everything
-            if (additionalParams.length > 0) {
-                lrDisplay = `${lrDisplay} | ${additionalParams.join(' | ')}`;
-            }
-
-            return `
-                <div class="session-item mb-2">
-                    <div class="session-card ${selectedClass}" 
-                         id="session-card-${escapedSessionId}" 
-                         data-session-id="${sessionId}"
-                         onclick="handleSessionChange('${sessionId.replace(/'/g, "\\'")}', !selectedSessions.has('${sessionId.replace(/'/g, "\\'")}'))">
-                        
-                        <!-- Header with model name and badges -->
-                        <div class="session-header">
-                            <div class="session-name" title="${cleanModelName}">${cleanModelName}</div>
-                            <div class="header-badges">
-                                <!-- Loss badges (will be populated asynchronously) -->
-                                <div class="loss-badges-header" data-session-id="${sessionId}">
-                                    <span class="badge bg-light text-dark loss-badge-loading">
-                                        T: <span class="loading-dots">...</span>
-                                    </span>
-                                    <span class="badge bg-light text-dark loss-badge-loading">
-                                        V: <span class="loading-dots">...</span>
-                                    </span>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <!-- Training type badges row -->
-                        <div class="training-badges mb-2">
-                            ${trainingBadgeHtml}
-                        </div>
-                        
-                        <!-- Compact info row -->
-                        <div class="session-compact-info">
-                            <div class="info-item">
-                                <i class="fas fa-calendar-alt text-muted"></i>
-                                <span class="info-text">${startDate}${startTime ? ` ${startTime}` : ''}</span>
-                            </div>
-                            <div class="info-item">
-                                <i class="fas fa-chart-line text-muted"></i>
-                                <span class="info-text">LR: ${lrDisplay}</span>
-                            </div>
-                        </div>
-                        
-                        <!-- Action buttons (smaller and more compact) -->
-                        <div class="session-actions">
-                            <button class="btn btn-xs btn-outline-secondary" 
-                                    onclick="showSessionParameters('${sessionId.replace(/'/g, "\\'")}'); event.preventDefault(); event.stopPropagation();"
-                                    title="View Parameters">
-                                <i class="fas fa-file-code"></i>
-                            </button>
-                            <button class="btn btn-xs btn-outline-secondary" 
-                                    onclick="fuseSessionAdapter('${sessionId.replace(/'/g, "\\'")}'); event.preventDefault(); event.stopPropagation();"
-                                    title="Fuse Adapter">
-                                <i class="fas fa-layer-group"></i>
-                            </button>
-                            <button class="btn btn-xs btn-outline-secondary" 
-                                    onclick="testSessionInPlayground('${sessionId.replace(/'/g, "\\'")}'); event.preventDefault(); event.stopPropagation();"
-                                    title="Test in Playground">
-                                <i class="fas fa-flask"></i>
-                            </button>
-                            <button class="btn btn-xs btn-outline-secondary ms-auto" 
-                                    onclick="showSessionFolder('${sessionId.replace(/'/g, "\\'")}'); event.preventDefault(); event.stopPropagation();"
-                                    title="View Folder">
-                                <i class="fas fa-folder-open"></i>
-                            </button>
-                            <button class="btn btn-xs btn-outline-danger" 
-                                    onclick="deleteSession('${sessionId.replace(/'/g, "\\'")}'); event.preventDefault(); event.stopPropagation();"
-                                    title="Delete Session">
-                                <i class="fas fa-trash"></i>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            `;
+            return generateSessionCard(session, {
+                isCompareTab: true,
+                showSelectionFeatures: true,
+                containerId: 'session-card'
+            });
         }).join('');
         
         console.log(`Loaded ${sessions.length} sessions`);
@@ -2373,22 +2245,33 @@ style.textContent = `
     padding-right: 5px;
 }
 
+/* Training tab sessions container */
+#checkpoints-list {
+    max-height: 500px;
+    overflow-y: auto;
+    padding-right: 5px;
+}
+
 /* Custom scrollbar for session list */
-#compare-sessions-list::-webkit-scrollbar {
+#compare-sessions-list::-webkit-scrollbar,
+#checkpoints-list::-webkit-scrollbar {
     width: 6px;
 }
 
-#compare-sessions-list::-webkit-scrollbar-track {
+#compare-sessions-list::-webkit-scrollbar-track,
+#checkpoints-list::-webkit-scrollbar-track {
     background: var(--surface-color);
     border-radius: 3px;
 }
 
-#compare-sessions-list::-webkit-scrollbar-thumb {
+#compare-sessions-list::-webkit-scrollbar-thumb,
+#checkpoints-list::-webkit-scrollbar-thumb {
     background: var(--border-color);
     border-radius: 3px;
 }
 
-#compare-sessions-list::-webkit-scrollbar-thumb:hover {
+#compare-sessions-list::-webkit-scrollbar-thumb:hover,
+#checkpoints-list::-webkit-scrollbar-thumb:hover {
     background: var(--text-muted);
 }
 
@@ -3244,5 +3127,152 @@ async function populateLossBadges(sessions) {
             });
         }
     }
+}
+
+// Reusable session card generation function
+function generateSessionCard(session, options = {}) {
+    const {
+        isCompareTab = false,
+        showSelectionFeatures = false,
+        customClickHandler = null,
+        containerId = 'session-card'
+    } = options;
+    
+    // The session ID is the full directory name
+    const sessionId = session.session_id || session.id || '';
+    const escapedSessionId = escapeSelector(sessionId);
+    
+    // Clean up model name by removing "dataset_cpt_" prefix
+    const cleanModelName = (session.model_name || 'Unknown').replace(/^dataset_cpt_/, '');
+    
+    // Use start_time with time included
+    const startDateTime = session.start_time ? new Date(session.start_time) : null;
+    const startDate = startDateTime ? startDateTime.toLocaleDateString() : 'Unknown';
+    const startTime = startDateTime ? startDateTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '';
+    
+    // Get training parameters for display
+    const params = getTrainingParameters(session);
+    
+    // Check if this session is selected (only for compare tab)
+    const isSelected = isCompareTab && selectedSessions.has(sessionId);
+    const selectedClass = isSelected ? 'selected-session-card' : '';
+    
+    // Create badge combinations for training type and sequence length
+    const trainingBadges = [];
+    if (params.fineTuneType && params.fineTuneType !== '-') {
+        const bgColor = params.fineTuneType === 'Full' ? 'bg-primary' : 
+                       params.fineTuneType === 'LoRA' ? 'bg-success' : 'bg-info';
+        trainingBadges.push(`<span class="badge ${bgColor}">${params.fineTuneType}</span>`);
+    }
+    if (params.trainingTypeShort && params.trainingTypeShort !== '-') {
+        trainingBadges.push(`<span class="badge bg-warning text-dark">${params.trainingTypeShort}</span>`);
+    }
+    
+    // Add sequence length badge
+    const seqLength = params.maxSeqLength || params.sequenceLength;
+    if (seqLength && seqLength !== '-' && seqLength !== '') {
+        trainingBadges.push(`<span class="badge bg-secondary">${seqLength}</span>`);
+    }
+    
+    const trainingBadgeHtml = trainingBadges.join(' ');
+
+    // Create comprehensive learning rate display with LR decay and weight decay
+    let lrDisplay = formatScientificNotation(params.learningRate);
+    let additionalParams = [];
+    
+    // Add LR decay factor if available
+    if (params.lrDecayFactor && params.lrDecayFactor !== '') {
+        additionalParams.push(`LDR ${params.lrDecayFactor}`);
+    }
+    
+    // Add weight decay if available
+    if (params.weightDecay && params.weightDecay !== '') {
+        additionalParams.push(`WD ${params.weightDecay}`);
+    }
+    
+    // Combine everything
+    if (additionalParams.length > 0) {
+        lrDisplay = `${lrDisplay} | ${additionalParams.join(' | ')}`;
+    }
+
+    // Determine click handler
+    let clickHandler = '';
+    if (customClickHandler) {
+        clickHandler = `onclick="${customClickHandler}('${sessionId.replace(/'/g, "\\'")}')"`;
+    } else if (isCompareTab) {
+        clickHandler = `onclick="handleSessionChange('${sessionId.replace(/'/g, "\\'")}', !selectedSessions.has('${sessionId.replace(/'/g, "\\'")}'))"`;
+    }
+
+    return `
+        <div class="session-item mb-2">
+            <div class="session-card ${selectedClass}" 
+                 id="${containerId}-${escapedSessionId}" 
+                 data-session-id="${sessionId}"
+                 ${clickHandler}>
+                
+                <!-- Header with model name and badges -->
+                <div class="session-header">
+                    <div class="session-name" title="${cleanModelName}">${cleanModelName}</div>
+                    <div class="header-badges">
+                        <!-- Loss badges (will be populated asynchronously) -->
+                        <div class="loss-badges-header" data-session-id="${sessionId}">
+                            <span class="badge bg-light text-dark loss-badge-loading">
+                                T: <span class="loading-dots">...</span>
+                            </span>
+                            <span class="badge bg-light text-dark loss-badge-loading">
+                                V: <span class="loading-dots">...</span>
+                            </span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Training type badges row -->
+                <div class="training-badges mb-2">
+                    ${trainingBadgeHtml}
+                </div>
+                
+                <!-- Compact info row -->
+                <div class="session-compact-info">
+                    <div class="info-item">
+                        <i class="fas fa-calendar-alt text-muted"></i>
+                        <span class="info-text">${startDate}${startTime ? ` ${startTime}` : ''}</span>
+                    </div>
+                    <div class="info-item">
+                        <i class="fas fa-chart-line text-muted"></i>
+                        <span class="info-text">LR: ${lrDisplay}</span>
+                    </div>
+                </div>
+                
+                <!-- Action buttons (smaller and more compact) -->
+                <div class="session-actions">
+                    <button class="btn btn-xs btn-outline-secondary" 
+                            onclick="showSessionParameters('${sessionId.replace(/'/g, "\\'")}'); event.preventDefault(); event.stopPropagation();"
+                            title="View Parameters">
+                        <i class="fas fa-file-code"></i>
+                    </button>
+                    <button class="btn btn-xs btn-outline-secondary" 
+                            onclick="fuseSessionAdapter('${sessionId.replace(/'/g, "\\'")}'); event.preventDefault(); event.stopPropagation();"
+                            title="Fuse Adapter">
+                        <i class="fas fa-layer-group"></i>
+                    </button>
+                    <button class="btn btn-xs btn-outline-secondary" 
+                            onclick="testSessionInPlayground('${sessionId.replace(/'/g, "\\'")}'); event.preventDefault(); event.stopPropagation();"
+                            title="Test in Playground">
+                        <i class="fas fa-flask"></i>
+                    </button>
+                    <button class="btn btn-xs btn-outline-secondary ms-auto" 
+                            onclick="showSessionFolder('${sessionId.replace(/'/g, "\\'")}'); event.preventDefault(); event.stopPropagation();"
+                            title="View Folder">
+                        <i class="fas fa-folder-open"></i>
+                    </button>
+                    <button class="btn btn-xs btn-outline-danger" 
+                            onclick="deleteSession('${sessionId.replace(/'/g, "\\'")}'); event.preventDefault(); event.stopPropagation();"
+                            title="Delete Session">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
 }
 

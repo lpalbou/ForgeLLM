@@ -2400,13 +2400,13 @@
     <!-- Marked.js for Markdown rendering -->
     <script src="{{ url_for('static', filename='js/utils/marked.min.js') }}"></script>
     
-    <!-- Custom JavaScript -->
-    <script src="{{ url_for('static', filename='app.js') }}?v={{ cache_buster }}"></script>
-    
-    <!-- Component Scripts -->
+    <!-- Component Scripts (load before app.js to ensure functions are available) -->
     <script src="{{ url_for('static', filename='js/services/api.js') }}?v={{ cache_buster }}"></script>
     <script src="{{ url_for('static', filename='js/components/quantization.js') }}?v={{ cache_buster }}"></script>
     <script src="{{ url_for('static', filename='js/components/compare.js') }}?v={{ cache_buster }}"></script>
+    
+    <!-- Custom JavaScript (loads after components) -->
+    <script src="{{ url_for('static', filename='app.js') }}?v={{ cache_buster }}"></script>
     
     <!-- Theme Toggle Script -->
     <script>

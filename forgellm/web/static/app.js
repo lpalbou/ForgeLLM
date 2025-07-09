@@ -1,4 +1,6 @@
 // MLX Training Interface JavaScript
+// Import function dependencies from compare.js for unified session cards
+
 class TrainingInterface {
     constructor() {
         this.socket = null;
@@ -631,111 +633,21 @@ class TrainingInterface {
             `;
             return;
         }
-        
+
+        // Use the unified session card generator from the Compare tab
         const sessionsHTML = trainingSessions.map(session => {
-            // Format date with both date and time to avoid conflicts
-            // Use start_time from training data if available, otherwise fall back to created timestamp
-            let sessionDate;
-            if (session.start_time) {
-                sessionDate = new Date(session.start_time);
-            } else {
-                sessionDate = new Date(session.created * 1000);
-            }
-            const dateStr = sessionDate.toLocaleDateString();
-            const timeStr = sessionDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-            const formattedDate = `${dateStr} ${timeStr}`;
-            
-            // Clean up model name display
-            const displayModelName = session.model_name || session.base_model || 'Unknown';
-            const cleanModelName = displayModelName.replace('mlx-community/', '').replace('dataset_cpt_', '');
-            
-            return `
-            <div class="col-12 mb-3">
-                <div class="card h-100 shadow-sm">
-                    <div class="card-header bg-primary text-white">
-                        <div class="row align-items-center">
-                            <div class="col-md-8">
-                                <h6 class="mb-1 fw-bold">
-                                    <i class="fas fa-brain me-2"></i>
-                                    ${session.session_name}
-                                </h6>
-                                <small class="opacity-75">
-                                    <i class="fas fa-calendar me-1"></i>
-                                    ${formattedDate}
-                                </small>
-                            </div>
-                            <div class="col-md-4 text-end">
-                                <span class="badge bg-light text-primary me-1">${session.metrics_count || 0} metrics</span>
-                                ${session.latest_val_loss ? `<span class="badge bg-success">Val: ${session.latest_val_loss.toFixed(3)}</span>` : ''}
-                            </div>
-                        </div>
-                    </div>
-                    <div class="card-body">
-                        <div class="row g-3 mb-3">
-                            <div class="col-md-6">
-                                <div class="d-flex align-items-center">
-                                    <i class="fas fa-robot text-primary me-2"></i>
-                                    <div>
-                                        <small class="text-muted d-block">Base Model</small>
-                                        <strong class="text-truncate" title="${cleanModelName}">${cleanModelName}</strong>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-md-6">
-                                <div class="d-flex align-items-center">
-                                    <i class="fas fa-chart-line text-success me-2"></i>
-                                    <div>
-                                        <small class="text-muted d-block">Progress</small>
-                                        <strong>${session.latest_iteration || 0} iterations</strong>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        ${session.latest_loss || session.latest_val_loss ? `
-                        <div class="row g-3 mb-3">
-                            <div class="col-md-6">
-                                <div class="d-flex align-items-center">
-                                    <i class="fas fa-arrow-down text-warning me-2"></i>
-                                    <div>
-                                        <small class="text-muted d-block">Train Loss</small>
-                                        <strong>${session.latest_loss ? session.latest_loss.toFixed(4) : 'N/A'}</strong>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-md-6">
-                                <div class="d-flex align-items-center">
-                                    <i class="fas fa-check-circle text-info me-2"></i>
-                                    <div>
-                                        <small class="text-muted d-block">Val Loss</small>
-                                        <strong>${session.latest_val_loss ? session.latest_val_loss.toFixed(4) : 'N/A'}</strong>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        ` : ''}
-                        
-                        <div class="d-flex gap-2 flex-wrap">
-                            <button class="btn btn-outline-primary btn-sm" onclick="trainingInterface.showCheckpointDetails('${session.session_id}')">
-                                <i class="fas fa-list me-1"></i>Details
-                            </button>
-                            ${session.log_file ? `
-                            <button class="btn btn-outline-info btn-sm" onclick="trainingInterface.viewTrainingLogs('${session.log_file}')">
-                                <i class="fas fa-chart-line me-1"></i>Logs
-                            </button>
-                            ` : ''}
-                            <button class="btn btn-outline-danger btn-sm" onclick="trainingInterface.deleteTrainingSession('${session.session_id}')">
-                                <i class="fas fa-trash me-1"></i>Delete
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            `;
+            return generateSessionCard(session, {
+                isCompareTab: false,
+                showSelectionFeatures: false,
+                containerId: 'training-session-card'
+            });
         }).join('');
         
-        // Wrap in a proper row container for Bootstrap grid
-        container.innerHTML = `<div class="row">${sessionsHTML}</div>`;
+        // Use the same compact layout as Compare tab
+        container.innerHTML = sessionsHTML;
+        
+        // Populate loss badges for training tab sessions
+        populateLossBadges(trainingSessions);
     }
     
     updateTrainingSessionsDropdown(trainingSessions) {
