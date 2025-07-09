@@ -123,6 +123,22 @@ function getTrainingParameters(session, extraConfig = null) {
     const seqMatch = sessionName.match(/seq(\d+)/i);
     const decayMatch = sessionName.match(/decay([0-9.]+)/i);
     
+    // Try to extract weight decay and LR decay factor from session config or extraConfig
+    let weightDecay = '';
+    let lrDecayFactor = '';
+    
+    // Check session config first
+    if (session.config) {
+        weightDecay = session.config.weight_decay || '';
+        lrDecayFactor = session.config.lr_decay_factor || '';
+    }
+    
+    // Check extraConfig if available
+    if (extraConfig) {
+        weightDecay = weightDecay || extraConfig.weight_decay || '';
+        lrDecayFactor = lrDecayFactor || extraConfig.lr_decay_factor || '';
+    }
+    
     // Check if session already has fine_tune_type information
     let fineTuneTypeFromSession = '';
     if (session.fine_tune_type) {
@@ -204,6 +220,8 @@ function getTrainingParameters(session, extraConfig = null) {
     return {
         learningRate: lrMatch ? lrMatch[1].replace('_', '-') : '',
         learningRateDecay: decayMatch ? decayMatch[1] : '',
+        lrDecayFactor: lrDecayFactor,
+        weightDecay: weightDecay,
         batchSize: bsMatch ? bsMatch[1] : '',
         iterations: session.latest_iteration || '',
         sequenceLength: seqMatch ? seqMatch[1] : '',
@@ -290,10 +308,23 @@ async function loadSessions() {
             }
             const trainingBadgeHtml = trainingBadges.join(' ');
 
-            // Create learning rate display with decay if available
+            // Create comprehensive learning rate display with LR decay and weight decay
             let lrDisplay = formatValue(params.learningRate);
-            if (params.learningRateDecay && params.learningRateDecay !== '') {
-                lrDisplay += ` <small class="text-muted">/${params.learningRateDecay}</small>`;
+            let additionalParams = [];
+            
+            // Add LR decay factor if available
+            if (params.lrDecayFactor && params.lrDecayFactor !== '') {
+                additionalParams.push(`LDR ${params.lrDecayFactor}`);
+            }
+            
+            // Add weight decay if available
+            if (params.weightDecay && params.weightDecay !== '') {
+                additionalParams.push(`WD ${params.weightDecay}`);
+            }
+            
+            // Combine everything
+            if (additionalParams.length > 0) {
+                lrDisplay = `${lrDisplay} | ${additionalParams.join(' | ')}`;
             }
 
             return `
@@ -1754,9 +1785,12 @@ async function updateSessionBadgesWithActualData(sessions) {
                     return;
                 }
                 
-                // Get the actual fine_tune_type
+                // Get the actual fine_tune_type and other parameters
                 const actualFineTuneType = config.fine_tune_type;
-                if (!actualFineTuneType) return;
+                const actualWeightDecay = config.weight_decay;
+                const actualLrDecayFactor = config.lr_decay_factor;
+                
+                if (!actualFineTuneType && !actualWeightDecay && !actualLrDecayFactor) return;
                 
                 // Update the badge in the UI
                 const sessionId = session.session_id || session.id || '';
@@ -1777,7 +1811,8 @@ async function updateSessionBadgesWithActualData(sessions) {
                             }
                         });
                         
-                        if (fineTuneBadge) {
+                        // Update fine-tune type badge if we have that info
+                        if (fineTuneBadge && actualFineTuneType) {
                             // Update the badge text and color
                             const displayType = actualFineTuneType === 'lora' ? 'LoRA' : 
                                                actualFineTuneType === 'dora' ? 'DoRA' : 'Full';
@@ -1788,6 +1823,44 @@ async function updateSessionBadgesWithActualData(sessions) {
                             fineTuneBadge.className = `badge ${bgColor}`;
                             
                             console.log(`Updated ${session.session_name}: ${actualFineTuneType} -> ${displayType}`);
+                        }
+                        
+                        // Update learning rate display with actual parameters
+                        if (actualWeightDecay || actualLrDecayFactor) {
+                            const lrInfoItems = sessionCard.querySelectorAll('.info-item .info-text');
+                            let lrInfoSpan = null;
+                            
+                            // Find the LR info span
+                            lrInfoItems.forEach(span => {
+                                if (span.textContent.includes('LR:')) {
+                                    lrInfoSpan = span;
+                                }
+                            });
+                            
+                            if (lrInfoSpan) {
+                                // Extract current LR value
+                                const currentLrMatch = lrInfoSpan.textContent.match(/LR:\s*([^\s|]+)/);
+                                const currentLr = currentLrMatch ? currentLrMatch[1] : '';
+                                
+                                // Build new display
+                                let newLrDisplay = `LR: ${currentLr}`;
+                                let additionalParams = [];
+                                
+                                if (actualLrDecayFactor) {
+                                    additionalParams.push(`LDR ${actualLrDecayFactor}`);
+                                }
+                                
+                                if (actualWeightDecay) {
+                                    additionalParams.push(`WD ${actualWeightDecay}`);
+                                }
+                                
+                                if (additionalParams.length > 0) {
+                                    newLrDisplay += ` | ${additionalParams.join(' | ')}`;
+                                }
+                                
+                                lrInfoSpan.textContent = newLrDisplay;
+                                console.log(`Updated LR display for ${session.session_name}: ${newLrDisplay}`);
+                            }
                         }
                     }
                 }
