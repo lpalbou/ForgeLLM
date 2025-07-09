@@ -1,5 +1,6 @@
 // COMPARE TAB - USING PLOTLY (SAME AS MONITORING TAB)
 let selectedSessions = new Map();
+let hoveredSessionId = null; // Track which session is currently being hovered
 
 // NEW: Centralized Session Data Manager
 class SessionDataManager {
@@ -561,6 +562,15 @@ async function loadSessions() {
         
         console.log(`Loaded ${sessions.length} sessions`);
         
+        // Add hover event listeners to session cards for chart highlighting
+        sessions.forEach(session => {
+            const sessionCard = document.querySelector(`#session-card-${escapeSelector(session.session_id)}`);
+            if (sessionCard) {
+                sessionCard.addEventListener('mouseenter', () => handleSessionHover(session.session_id));
+                sessionCard.addEventListener('mouseleave', () => handleSessionHoverEnd());
+            }
+        });
+        
         // Background task: Fetch actual fine_tune_types for more accurate badges
         setTimeout(() => {
             updateSessionBadgesWithActualData(sessions);
@@ -780,6 +790,38 @@ function renderComparisonChart(containerId, traces, layoutOptions) {
     const isDarkMode = document.body.getAttribute('data-theme') === 'dark';
     const textColor = isDarkMode ? '#F5F5F5' : '#333333';
     const borderColor = isDarkMode ? '#555555' : '#DDDDDD';
+
+    // Apply hover highlighting to traces if a session is being hovered
+    if (hoveredSessionId) {
+        traces = traces.map(trace => {
+            // Find the session that matches this trace
+            const hoveredSession = selectedSessions.get(hoveredSessionId);
+            const isHovered = hoveredSession && trace.name === hoveredSession.session_name;
+            
+            if (isHovered) {
+                // Highlight the hovered trace
+                return {
+                    ...trace,
+                    line: {
+                        ...trace.line,
+                        width: 4, // Thicker line
+                        color: trace.line.color // Keep the same color but thicker
+                    },
+                    opacity: 1.0 // Full opacity
+                };
+            } else {
+                // Dim other traces
+                return {
+                    ...trace,
+                    line: {
+                        ...trace.line,
+                        width: 1.5 // Thinner line
+                    },
+                    opacity: 0.4 // Reduced opacity
+                };
+            }
+        });
+    }
 
     // Debug the traces for stability chart
     if (containerId === 'stability-comparison-chart') {
@@ -2725,6 +2767,27 @@ function handleThemeChange() {
     // Only regenerate if we have active comparisons
     if (selectedSessions.size >= 1) {
         console.log('Theme changed, regenerating comparison charts...');
+        generateComparison();
+    }
+}
+
+// Handle session card hover events
+function handleSessionHover(sessionId) {
+    // Only apply hover effects for selected sessions
+    if (selectedSessions.has(sessionId)) {
+        hoveredSessionId = sessionId;
+        regenerateChartsWithHighlighting();
+    }
+}
+
+function handleSessionHoverEnd() {
+    hoveredSessionId = null;
+    regenerateChartsWithHighlighting();
+}
+
+// Regenerate charts with current hover highlighting
+function regenerateChartsWithHighlighting() {
+    if (selectedSessions.size >= 1) {
         generateComparison();
     }
 }
