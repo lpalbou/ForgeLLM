@@ -368,6 +368,11 @@ async function loadSessions() {
                                 <i class="fas fa-file-code"></i>
                             </button>
                             <button class="btn btn-xs btn-outline-secondary" 
+                                    onclick="showSessionFolder('${sessionId.replace(/'/g, "\\'")}'); event.preventDefault(); event.stopPropagation();"
+                                    title="Browse Session Folder">
+                                <i class="fas fa-folder-open"></i>
+                            </button>
+                            <button class="btn btn-xs btn-outline-secondary" 
                                     onclick="fuseSessionAdapter('${sessionId.replace(/'/g, "\\'")}'); event.preventDefault(); event.stopPropagation();"
                                     title="Fuse this adapter with base model">
                                 <i class="fas fa-layer-group"></i>
@@ -376,6 +381,11 @@ async function loadSessions() {
                                     onclick="testSessionInPlayground('${sessionId.replace(/'/g, "\\'")}'); event.preventDefault(); event.stopPropagation();"
                                     title="Test in Playground">
                                 <i class="fas fa-vial"></i>
+                            </button>
+                            <button class="btn btn-xs btn-outline-danger ms-auto" 
+                                    onclick="deleteSession('${sessionId.replace(/'/g, "\\'")}'); event.preventDefault(); event.stopPropagation();"
+                                    title="Delete Session">
+                                <i class="fas fa-trash"></i>
                             </button>
                         </div>
                     </div>
@@ -1896,6 +1906,236 @@ async function updateSessionBadgesWithActualData(sessions) {
     }
     
     console.log('Finished updating session badges');
+}
+
+// Function to show session folder in a modal
+async function showSessionFolder(sessionId) {
+    try {
+        // Get the session data to find the log file path
+        const sessionsResponse = await fetch('/api/training/sessions');
+        const sessionsData = await sessionsResponse.json();
+        const sessions = sessionsData.training_sessions || [];
+        const session = sessions.find(s => s.session_id === sessionId);
+        
+        if (!session || !session.log_file) {
+            alert('Session folder not found');
+            return;
+        }
+        
+        // Extract the directory path from the log file path
+        const logFilePath = session.log_file;
+        const sessionDirectory = logFilePath.substring(0, logFilePath.lastIndexOf('/'));
+        
+        console.log('Showing folder for session:', sessionId, 'Path:', sessionDirectory);
+        
+        // Use the existing file browser modal
+        window.currentBrowserCallback = null; // No callback needed for viewing
+        window.currentBrowserType = 'view';
+        
+        // Set modal title
+        const modal = document.getElementById('file-browser-modal');
+        const modalTitle = modal.querySelector('#file-browser-title');
+        modalTitle.textContent = `Session Folder: ${session.session_name || sessionId}`;
+        
+        // Hide the select button since we're just viewing
+        const selectBtn = modal.querySelector('#browser-select-btn');
+        selectBtn.style.display = 'none';
+        
+        // Load the directory contents
+        await loadDirectoryContents(sessionDirectory);
+        
+        // Show the modal
+        const bsModal = new bootstrap.Modal(modal);
+        bsModal.show();
+        
+        // Reset modal when it's hidden to restore normal functionality for other uses
+        modal.addEventListener('hidden.bs.modal', () => {
+            const selectBtn = modal.querySelector('#browser-select-btn');
+            const modalTitle = modal.querySelector('#file-browser-title');
+            selectBtn.style.display = 'block';
+            modalTitle.textContent = 'Select Directory';
+        }, { once: true });
+        
+    } catch (error) {
+        console.error('Error showing session folder:', error);
+        alert('Error showing session folder: ' + error.message);
+    }
+}
+
+// Function to delete a session with confirmation
+async function deleteSession(sessionId) {
+    try {
+        // Get the session data for confirmation
+        const sessionsResponse = await fetch('/api/training/sessions');
+        const sessionsData = await sessionsResponse.json();
+        const sessions = sessionsData.training_sessions || [];
+        const session = sessions.find(s => s.session_id === sessionId);
+        
+        if (!session) {
+            alert('Session not found');
+            return;
+        }
+        
+        const sessionName = session.session_name || sessionId;
+        
+        // Show confirmation dialog
+        const confirmed = confirm(
+            `Are you sure you want to delete the training session?\n\n` +
+            `Session: ${sessionName}\n` +
+            `Model: ${session.base_model || 'Unknown'}\n` +
+            `Iterations: ${session.latest_iteration || 'N/A'}\n\n` +
+            `This action cannot be undone and will delete all session files.`
+        );
+        
+        if (!confirmed) {
+            return;
+        }
+        
+        // Show loading
+        const loadingOverlay = document.getElementById('loading-overlay');
+        const loadingMessage = document.getElementById('loading-message');
+        loadingMessage.textContent = `Deleting session: ${sessionName}...`;
+        loadingOverlay.classList.remove('d-none');
+        
+        // Call the delete API
+        const response = await fetch('/api/training/sessions/delete', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                session_id: sessionId
+            })
+        });
+        
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+            throw new Error(errorData.error || `HTTP ${response.status}`);
+        }
+        
+        const result = await response.json();
+        
+        // Hide loading
+        loadingOverlay.classList.add('d-none');
+        
+        if (result.success) {
+            console.log(`Successfully deleted session: ${sessionName}`);
+            
+            // Remove from selected sessions if it was selected
+            selectedSessions.delete(sessionId);
+            updateSelectionSummary();
+            
+            // Refresh the sessions list
+            await loadSessions();
+            
+            // Show success message
+            alert(`Session "${sessionName}" has been successfully deleted.`);
+        } else {
+            throw new Error(result.error || 'Unknown error during deletion');
+        }
+        
+    } catch (error) {
+        // Hide loading
+        const loadingOverlay = document.getElementById('loading-overlay');
+        loadingOverlay.classList.add('d-none');
+        
+        console.error('Error deleting session:', error);
+        alert(`Error deleting session: ${error.message}`);
+    }
+}
+
+// Helper function to load directory contents (adapted from existing file browser)
+async function loadDirectoryContents(path) {
+    const browserContent = document.getElementById('browser-content');
+    const browserLoading = document.getElementById('browser-loading');
+    const currentPathInput = document.getElementById('browser-current-path');
+    
+    try {
+        browserLoading.classList.remove('d-none');
+        browserContent.innerHTML = '';
+        
+        const response = await fetch(`/api/filesystem/browse?path=${encodeURIComponent(path)}`);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        if (!data.success) {
+            throw new Error(data.error || 'Failed to load directory');
+        }
+        
+        currentPathInput.value = data.current_path;
+        
+        let html = '';
+        
+        // Add items (directories and files)
+        if (data.items && data.items.length > 0) {
+            data.items.forEach(item => {
+                if (item.is_directory) {
+                    html += `
+                        <div class="border-bottom p-2 browser-item" data-type="directory" data-path="${item.path}">
+                            <i class="fas fa-folder text-primary me-2"></i>
+                            <span>${item.name}</span>
+                            <small class="text-muted ms-auto">${item.description}</small>
+                        </div>
+                    `;
+                } else {
+                    const icon = getFileIcon(item.name);
+                    html += `
+                        <div class="border-bottom p-2 browser-item" data-type="file" data-path="${item.path}">
+                            <i class="${icon} me-2"></i>
+                            <span>${item.name}</span>
+                            <small class="text-muted ms-auto">${item.description}</small>
+                        </div>
+                    `;
+                }
+            });
+        }
+        
+        if (html === '') {
+            html = '<div class="p-3 text-muted text-center">Empty directory</div>';
+        }
+        
+        browserContent.innerHTML = html;
+        
+        // Add click handlers for navigation (only for viewing)
+        browserContent.querySelectorAll('.browser-item[data-type="directory"]').forEach(item => {
+            item.style.cursor = 'pointer';
+            item.addEventListener('click', () => {
+                const newPath = item.getAttribute('data-path');
+                loadDirectoryContents(newPath);
+            });
+        });
+        
+    } catch (error) {
+        console.error('Error loading directory:', error);
+        browserContent.innerHTML = `<div class="p-3 text-danger">Error: ${error.message}</div>`;
+    } finally {
+        browserLoading.classList.add('d-none');
+    }
+}
+
+// Helper functions for file browser
+function getFileIcon(filename) {
+    const ext = filename.split('.').pop().toLowerCase();
+    switch (ext) {
+        case 'json': return 'fas fa-file-code text-warning';
+        case 'safetensors': return 'fas fa-cube text-info';
+        case 'py': return 'fab fa-python text-success';
+        case 'md': return 'fab fa-markdown text-primary';
+        case 'txt': return 'fas fa-file-alt text-secondary';
+        case 'yaml': case 'yml': return 'fas fa-file-code text-orange';
+        default: return 'fas fa-file text-muted';
+    }
+}
+
+function formatFileSize(bytes) {
+    if (!bytes) return '';
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(1024));
+    return Math.round(bytes / Math.pow(1024, i) * 100) / 100 + ' ' + sizes[i];
 }
 
 console.log('Compare.js Plotly version loaded');

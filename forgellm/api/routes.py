@@ -1252,6 +1252,54 @@ def setup_api(app: Flask) -> Blueprint:
             logger.error(f"Error getting training sessions: {e}")
             return jsonify({"success": False, "error": str(e)}), 500
 
+    @bp.route('/training/sessions/delete', methods=['POST'])
+    def delete_training_session():
+        """Delete a training session and all its files."""
+        try:
+            data = request.get_json()
+            session_id = data.get('session_id')
+            
+            if not session_id:
+                return jsonify({"success": False, "error": "session_id is required"}), 400
+            
+            import shutil
+            from pathlib import Path
+            
+            # Look for the session in possible directories
+            possible_dirs = [
+                Path("models/cpt"),
+                Path("models/ift")
+            ]
+            
+            session_found = False
+            deleted_paths = []
+            
+            for models_dir in possible_dirs:
+                if models_dir.exists():
+                    session_path = models_dir / session_id
+                    if session_path.exists() and session_path.is_dir():
+                        session_found = True
+                        logger.info(f"Deleting training session directory: {session_path}")
+                        
+                        # Remove the entire session directory
+                        shutil.rmtree(session_path)
+                        deleted_paths.append(str(session_path))
+                        
+                        logger.info(f"Successfully deleted session directory: {session_path}")
+            
+            if not session_found:
+                return jsonify({"success": False, "error": f"Session '{session_id}' not found"}), 404
+            
+            return jsonify({
+                "success": True, 
+                "message": f"Session '{session_id}' deleted successfully",
+                "deleted_paths": deleted_paths
+            })
+            
+        except Exception as e:
+            logger.error(f"Error deleting training session: {e}")
+            return jsonify({"success": False, "error": str(e)}), 500
+
     @bp.route('/training/compare', methods=['POST'])
     def compare_training_sessions():
         """Compare multiple training sessions."""
