@@ -284,15 +284,6 @@ async function loadSessions() {
             // TODO: Consider implementing async loading for more accurate detection
             const params = getTrainingParameters(session);
             
-            // Build a simple tooltip with parameters
-            const tooltipContent = `Training Parameters:
-• Type: ${formatValue(params.trainingType)}
-• Fine-tune Type: ${formatValue(params.fineTuneType)}
-• Learning Rate: ${formatValue(params.learningRate)}
-• Batch Size: ${formatValue(params.batchSize)}
-• Iterations: ${formatValue(params.iterations)}
-• Sequence Length: ${formatValue(params.sequenceLength)}`;
-            
             // Check if this session is selected
             const isSelected = selectedSessions.has(sessionId);
             const selectedClass = isSelected ? 'selected-session-card' : '';
@@ -344,10 +335,6 @@ async function loadSessions() {
                     <div class="session-card ${selectedClass}" 
                          id="session-card-${escapedSessionId}" 
                          data-session-id="${sessionId}"
-                         data-bs-toggle="tooltip" 
-                         data-bs-placement="right" 
-                         data-bs-html="false"
-                         title="${tooltipContent}"
                          onclick="handleSessionChange('${sessionId.replace(/'/g, "\\'")}', !selectedSessions.has('${sessionId.replace(/'/g, "\\'")}'))">
                         
                         <!-- Header with model name and iteration badge -->
@@ -403,15 +390,7 @@ async function loadSessions() {
             updateSessionBadgesWithActualData(sessions);
         }, 1000);
         
-        // Initialize Bootstrap tooltips
-        const tooltips = document.querySelectorAll('[data-bs-toggle="tooltip"]');
-        tooltips.forEach(tooltip => {
-            new bootstrap.Tooltip(tooltip, {
-                html: false,
-                placement: 'right',
-                trigger: 'hover'
-            });
-        });
+        // Tooltips removed - all information is now displayed directly in badges and info lines
         
         // Add event listener for tab changes to store/restore selections
         document.addEventListener('shown.bs.tab', function(event) {
