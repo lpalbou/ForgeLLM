@@ -2,6 +2,184 @@
 let selectedSessions = new Map();
 let hoveredSessionId = null; // Track which session is currently being hovered
 
+// =============================================================================
+// SHARED SESSION CARD COMPONENT
+// =============================================================================
+
+/**
+ * Creates a professional session card that can be used across different tabs
+ * @param {Object} session - Session data object
+ * @param {Object} options - Configuration options for the card
+ * @returns {string} HTML string for the session card
+ */
+function createSessionCard(session, options = {}) {
+    const {
+        showSelection = false,        // Show selection checkbox/click behavior
+        showImportantNote = false,    // Show the "Important: only compare..." note
+        actions = [],                // Array of action button configs
+        context = 'default'          // Context for styling/behavior
+    } = options;
+    
+    const sessionId = session.session_id || session.id || '';
+    const escapedSessionId = escapeSelector(sessionId);
+    
+    // Clean up model name by removing "dataset_cpt_" prefix
+    const cleanModelName = (session.model_name || 'Unknown').replace(/^dataset_cpt_/, '');
+    
+    // Use start_time with time included
+    const startDateTime = session.start_time ? new Date(session.start_time) : null;
+    const startDate = startDateTime ? startDateTime.toLocaleDateString() : 'Unknown';
+    const startTime = startDateTime ? startDateTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '';
+    
+    // Get training parameters
+    const params = getTrainingParameters(session);
+    
+    // Check if this session is selected (for compare context)
+    const isSelected = showSelection && selectedSessions.has(sessionId);
+    const selectedClass = isSelected ? 'selected-session-card' : '';
+    
+    // Create badge combinations for training type and sequence length
+    const trainingBadges = [];
+    if (params.fineTuneType && params.fineTuneType !== '-') {
+        const bgColor = params.fineTuneType === 'Full' ? 'bg-primary' : 
+                       params.fineTuneType === 'LoRA' ? 'bg-success' : 'bg-info';
+        trainingBadges.push(`<span class="badge ${bgColor}">${params.fineTuneType}</span>`);
+    }
+    if (params.trainingTypeShort && params.trainingTypeShort !== '-') {
+        trainingBadges.push(`<span class="badge bg-warning text-dark">${params.trainingTypeShort}</span>`);
+    }
+    
+    // Add sequence length badge
+    const seqLength = params.maxSeqLength || params.sequenceLength;
+    if (seqLength && seqLength !== '-' && seqLength !== '') {
+        trainingBadges.push(`<span class="badge bg-secondary">${seqLength}</span>`);
+    }
+    
+    const trainingBadgeHtml = trainingBadges.join(' ');
+
+    // Create loss badges (Train Loss and Val Loss) - these replace the iteration count
+    const lossBadges = [];
+    
+    // Try to get loss values from session data
+    // API returns: latest_loss (train), latest_val_loss (val)
+    const trainLoss = session.train_loss || session.latest_train_loss || session.last_train_loss || session.latest_loss;
+    const valLoss = session.val_loss || session.latest_val_loss || session.last_val_loss || session.validation_loss;
+    
+    if (trainLoss && trainLoss !== 'N/A' && trainLoss !== '-') {
+        const lossValue = parseFloat(trainLoss);
+        if (!isNaN(lossValue)) {
+            lossBadges.push(`<span class="badge bg-warning text-dark" title="Best Training Loss (at lowest val loss iteration)">T: ${lossValue.toFixed(3)}</span>`);
+        }
+    }
+    
+    if (valLoss && valLoss !== 'N/A' && valLoss !== '-') {
+        const lossValue = parseFloat(valLoss);
+        if (!isNaN(lossValue)) {
+            lossBadges.push(`<span class="badge bg-success" title="Best Validation Loss (lowest across all iterations)">V: ${lossValue.toFixed(3)}</span>`);
+        }
+    }
+    
+    // Fallback to iteration count if no loss data available
+    if (lossBadges.length === 0) {
+        const iterations = session.latest_iteration || session.iterations || session.current_iteration;
+        if (iterations && iterations !== 'N/A') {
+            lossBadges.push(`<span class="badge bg-secondary">${iterations}</span>`);
+        }
+    }
+    
+    const lossBadgeHtml = lossBadges.join(' ');
+
+    // Create comprehensive learning rate display with LR decay and weight decay
+    let lrDisplay = formatScientificNotation(params.learningRate);
+    let additionalParams = [];
+    
+    // Add LR decay factor if available
+    if (params.lrDecayFactor && params.lrDecayFactor !== '') {
+        additionalParams.push(`LDR ${params.lrDecayFactor}`);
+    }
+    
+    // Add weight decay if available
+    if (params.weightDecay && params.weightDecay !== '') {
+        additionalParams.push(`WD ${params.weightDecay}`);
+    }
+    
+    // Combine everything
+    if (additionalParams.length > 0) {
+        lrDisplay = `${lrDisplay} | ${additionalParams.join(' | ')}`;
+    }
+
+    // Generate action buttons
+    const actionButtonsHtml = actions.map(action => {
+        const buttonClass = action.style === 'danger' ? 'btn-outline-danger' : 'btn-outline-secondary';
+        const extraClass = action.rightAlign ? 'ms-auto' : '';
+        
+        // Handle custom handlers (for methods that need different parameters)
+        let clickHandler;
+        if (action.customHandler) {
+            clickHandler = `${action.onclick}(); event.preventDefault(); event.stopPropagation();`;
+        } else {
+            clickHandler = `${action.onclick}('${sessionId.replace(/'/g, "\\'")}'); event.preventDefault(); event.stopPropagation();`;
+        }
+        
+        return `
+            <button class="btn btn-xs ${buttonClass} ${extraClass}" 
+                    onclick="${clickHandler}"
+                    title="${action.title}">
+                <i class="${action.icon}"></i>
+            </button>
+        `;
+    }).join('');
+
+    // Create click handler for selection (compare context)
+    const clickHandler = showSelection ? 
+        `onclick="handleSessionChange('${sessionId.replace(/'/g, "\\'")}', !selectedSessions.has('${sessionId.replace(/'/g, "\\'")}'))"` : '';
+
+    return `
+        <div class="session-item mb-2">
+            <div class="session-card ${selectedClass}" 
+                 id="session-card-${escapedSessionId}" 
+                 data-session-id="${sessionId}"
+                 ${clickHandler}>
+                
+                <!-- Header with model name and loss badges -->
+                <div class="session-header">
+                    <div class="session-name" title="${cleanModelName}">${cleanModelName}</div>
+                    <div class="loss-badges">
+                        ${lossBadgeHtml}
+                    </div>
+                </div>
+                
+                <!-- Training type badges row -->
+                <div class="training-badges mb-2">
+                    ${trainingBadgeHtml}
+                </div>
+                
+                <!-- Compact info row -->
+                <div class="session-compact-info">
+                    <div class="info-item">
+                        <i class="fas fa-calendar-alt text-muted"></i>
+                        <span class="info-text">${startDate}${startTime ? ` ${startTime}` : ''}</span>
+                    </div>
+                    <div class="info-item">
+                        <i class="fas fa-chart-line text-muted"></i>
+                        <span class="info-text">LR: ${lrDisplay}</span>
+                    </div>
+                </div>
+                
+                <!-- Action buttons -->
+                ${actionButtonsHtml ? `
+                <div class="session-actions">
+                    ${actionButtonsHtml}
+                </div>
+                ` : ''}
+            </div>
+        </div>
+    `;
+}
+
+// Make the session card component globally available
+window.createSessionCard = createSessionCard;
+
 // NEW: Centralized Session Data Manager
 class SessionDataManager {
     constructor() {
@@ -348,19 +526,19 @@ function getTrainingParameters(session, extraConfig = null) {
                 logFileLower.includes('lora') ||
                 logFileLower.includes('adapters.safetensors') ||
                 logFileLower.includes('_adapters.')) {
-                fineTuneType = 'LoRA';
+            fineTuneType = 'LoRA';
             } 
             // Check for DoRA indicators
             else if (sessionNameLower.includes('dora') || 
                      sessionNameLower.includes('_dora_') ||
                      logFileLower.includes('dora')) {
-                fineTuneType = 'DoRA';
+            fineTuneType = 'DoRA';
             } 
             // Check for explicit Full indicators
             else if (sessionNameLower.includes('full') || 
                      sessionNameLower.includes('_full_') ||
                      logFileLower.includes('full')) {
-                fineTuneType = 'Full';
+            fineTuneType = 'Full';
             } else {
                 // 3. Smart detection based on session patterns
                 // Check if this looks like LoRA training based on multiple indicators
@@ -447,131 +625,22 @@ async function loadSessions() {
         // Sort sessions by model name and size
         sessions = sortSessions(sessions);
         
-        // Create compact session items with better layout and tooltips
+        // Create session cards using the shared component with Compare tab configuration
         container.innerHTML = sessions.map(session => {
-            // The session ID is the full directory name
-            const sessionId = session.session_id || session.id || '';
-            const escapedSessionId = escapeSelector(sessionId);
+            // Define actions for Compare tab
+            const actions = [
+                { icon: 'fas fa-file-code', onclick: 'showSessionParameters', title: 'View Parameters' },
+                { icon: 'fas fa-layer-group', onclick: 'fuseSessionAdapter', title: 'Fuse Adapter' },
+                { icon: 'fas fa-flask', onclick: 'testSessionInPlayground', title: 'Test in Playground' },
+                { icon: 'fas fa-folder-open', onclick: 'showSessionFolder', title: 'View Folder', rightAlign: true },
+                { icon: 'fas fa-trash', onclick: 'deleteSession', title: 'Delete Session', style: 'danger' }
+            ];
             
-            // Clean up model name by removing "dataset_cpt_" prefix
-            const cleanModelName = (session.model_name || 'Unknown').replace(/^dataset_cpt_/, '');
-            
-            // Use start_time with time included
-            const startDateTime = session.start_time ? new Date(session.start_time) : null;
-            const startDate = startDateTime ? startDateTime.toLocaleDateString() : 'Unknown';
-            const startTime = startDateTime ? startDateTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '';
-            
-            // Get training parameters for tooltip and display - for now use synchronous version
-            // TODO: Consider implementing async loading for more accurate detection
-            const params = getTrainingParameters(session);
-            
-            // Check if this session is selected
-            const isSelected = selectedSessions.has(sessionId);
-            const selectedClass = isSelected ? 'selected-session-card' : '';
-            
-            // ENABLE FUSE BUTTON FOR ALL MODELS - no detection logic needed
-            // All models can be fused, regardless of type
-            
-            // Create badge combinations for training type and sequence length
-            const trainingBadges = [];
-            if (params.fineTuneType && params.fineTuneType !== '-') {
-                const bgColor = params.fineTuneType === 'Full' ? 'bg-primary' : 
-                               params.fineTuneType === 'LoRA' ? 'bg-success' : 'bg-info';
-                trainingBadges.push(`<span class="badge ${bgColor}">${params.fineTuneType}</span>`);
-            }
-            if (params.trainingTypeShort && params.trainingTypeShort !== '-') {
-                trainingBadges.push(`<span class="badge bg-warning text-dark">${params.trainingTypeShort}</span>`);
-            }
-            
-            // Add sequence length badge
-            const seqLength = params.maxSeqLength || params.sequenceLength;
-            if (seqLength && seqLength !== '-' && seqLength !== '') {
-                // Show the actual number (e.g., 3072, 2048, 4096)
-                trainingBadges.push(`<span class="badge bg-secondary">${seqLength}</span>`);
-            }
-            
-            const trainingBadgeHtml = trainingBadges.join(' ');
-
-            // Create comprehensive learning rate display with LR decay and weight decay
-            let lrDisplay = formatScientificNotation(params.learningRate);
-            let additionalParams = [];
-            
-            // Add LR decay factor if available
-            if (params.lrDecayFactor && params.lrDecayFactor !== '') {
-                additionalParams.push(`LDR ${params.lrDecayFactor}`);
-            }
-            
-            // Add weight decay if available
-            if (params.weightDecay && params.weightDecay !== '') {
-                additionalParams.push(`WD ${params.weightDecay}`);
-            }
-            
-            // Combine everything
-            if (additionalParams.length > 0) {
-                lrDisplay = `${lrDisplay} | ${additionalParams.join(' | ')}`;
-            }
-
-            return `
-                <div class="session-item mb-2">
-                    <div class="session-card ${selectedClass}" 
-                         id="session-card-${escapedSessionId}" 
-                         data-session-id="${sessionId}"
-                         onclick="handleSessionChange('${sessionId.replace(/'/g, "\\'")}', !selectedSessions.has('${sessionId.replace(/'/g, "\\'")}'))">
-                        
-                        <!-- Header with model name and iteration badge -->
-                        <div class="session-header">
-                            <div class="session-name" title="${cleanModelName}">${cleanModelName}</div>
-                            <span class="badge bg-secondary iteration-badge">${session.latest_iteration || session.iterations || 'N/A'}</span>
-                        </div>
-                        
-                        <!-- Training type badges row -->
-                        <div class="training-badges mb-2">
-                            ${trainingBadgeHtml}
-                        </div>
-                        
-                        <!-- Compact info row -->
-                        <div class="session-compact-info">
-                            <div class="info-item">
-                                <i class="fas fa-calendar-alt text-muted"></i>
-                                <span class="info-text">${startDate}${startTime ? ` ${startTime}` : ''}</span>
-                            </div>
-                            <div class="info-item">
-                                <i class="fas fa-chart-line text-muted"></i>
-                                <span class="info-text">LR: ${lrDisplay}</span>
-                            </div>
-                        </div>
-                        
-                        <!-- Action buttons (smaller and more compact) -->
-                        <div class="session-actions">
-                            <button class="btn btn-xs btn-outline-secondary" 
-                                    onclick="showSessionParameters('${sessionId.replace(/'/g, "\\'")}'); event.preventDefault(); event.stopPropagation();"
-                                    title="View Parameters">
-                                <i class="fas fa-file-code"></i>
-                            </button>
-                            <button class="btn btn-xs btn-outline-secondary" 
-                                    onclick="fuseSessionAdapter('${sessionId.replace(/'/g, "\\'")}'); event.preventDefault(); event.stopPropagation();"
-                                    title="Fuse Adapter">
-                                <i class="fas fa-layer-group"></i>
-                            </button>
-                            <button class="btn btn-xs btn-outline-secondary" 
-                                    onclick="testSessionInPlayground('${sessionId.replace(/'/g, "\\'")}'); event.preventDefault(); event.stopPropagation();"
-                                    title="Test in Playground">
-                                <i class="fas fa-flask"></i>
-                            </button>
-                            <button class="btn btn-xs btn-outline-secondary ms-auto" 
-                                    onclick="showSessionFolder('${sessionId.replace(/'/g, "\\'")}'); event.preventDefault(); event.stopPropagation();"
-                                    title="View Folder">
-                                <i class="fas fa-folder-open"></i>
-                            </button>
-                            <button class="btn btn-xs btn-outline-danger" 
-                                    onclick="deleteSession('${sessionId.replace(/'/g, "\\'")}'); event.preventDefault(); event.stopPropagation();"
-                                    title="Delete Session">
-                                <i class="fas fa-trash"></i>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            `;
+            return createSessionCard(session, {
+                showSelection: true,
+                actions: actions,
+                context: 'compare'
+            });
         }).join('');
         
         console.log(`Loaded ${sessions.length} sessions`);
@@ -639,13 +708,15 @@ async function handleSessionChange(sessionId, isSelected) {
         if (isSelected) {
             // Apply all selected styles directly
             sessionCard.classList.add('selected-session-card');
-            sessionCard.style.backgroundColor = isDarkMode ? 'rgba(13, 110, 253, 0.3)' : 'rgba(13, 110, 253, 0.25)';
+            sessionCard.style.backgroundColor = isDarkMode ? 'rgba(13, 110, 253, 0.35)' : 'rgba(13, 110, 253, 0.25)';
             sessionCard.style.borderLeftColor = '#0d6efd';
             sessionCard.style.borderLeftWidth = '4px';
             sessionCard.style.borderLeftStyle = 'solid';
+            sessionCard.style.border = isDarkMode ? '2px solid rgba(13, 110, 253, 0.6)' : '2px solid rgba(13, 110, 253, 0.5)';
+            sessionCard.style.borderRadius = '8px';
             sessionCard.style.boxShadow = isDarkMode ? 
-                '0 0 0 1px rgba(13, 110, 253, 0.4)' : 
-                '0 0 0 1px rgba(13, 110, 253, 0.25)';
+                '0 0 0 2px rgba(13, 110, 253, 0.4)' : 
+                '0 0 0 2px rgba(13, 110, 253, 0.3)';
             sessionCard.style.position = 'relative';
             sessionCard.style.zIndex = '1';
         } else {
@@ -654,6 +725,8 @@ async function handleSessionChange(sessionId, isSelected) {
             sessionCard.style.backgroundColor = defaultBgColor;
             sessionCard.style.borderLeftColor = 'transparent';
             sessionCard.style.borderLeftWidth = '4px';
+            sessionCard.style.border = `1px solid ${isDarkMode ? '#404040' : '#e9ecef'}`;
+            sessionCard.style.borderRadius = '8px';
             sessionCard.style.boxShadow = 'none';
             sessionCard.style.position = '';
             sessionCard.style.zIndex = '';
@@ -724,6 +797,8 @@ function updateSessionColorsAndUI() {
         card.classList.remove('selected-session-card');
         card.style.backgroundColor = defaultBgColor;
         card.style.borderLeftColor = 'transparent';
+        card.style.border = `1px solid ${isDarkMode ? '#404040' : '#e9ecef'}`;
+        card.style.borderRadius = '8px';
         card.style.boxShadow = 'none';
     });
 
@@ -735,10 +810,17 @@ function updateSessionColorsAndUI() {
             console.log(`Found session card for ${sessionId}`);
             sessionCard.classList.add('selected-session-card');
             // Apply inline styles as well for maximum compatibility
-            sessionCard.style.backgroundColor = isDarkMode ? 'rgba(13, 110, 253, 0.3)' : 'rgba(13, 110, 253, 0.25)';
+            sessionCard.style.backgroundColor = isDarkMode ? 'rgba(13, 110, 253, 0.35)' : 'rgba(13, 110, 253, 0.25)';
             sessionCard.style.borderLeftColor = '#0d6efd';
             sessionCard.style.borderLeftWidth = '4px';
-            sessionCard.style.boxShadow = '0 0 0 1px rgba(13, 110, 253, 0.25)';
+            sessionCard.style.borderLeftStyle = 'solid';
+            sessionCard.style.border = isDarkMode ? '2px solid rgba(13, 110, 253, 0.6)' : '2px solid rgba(13, 110, 253, 0.5)';
+            sessionCard.style.borderRadius = '8px';
+            sessionCard.style.boxShadow = isDarkMode ? 
+                '0 0 0 2px rgba(13, 110, 253, 0.4)' : 
+                '0 0 0 2px rgba(13, 110, 253, 0.3)';
+            sessionCard.style.position = 'relative';
+            sessionCard.style.zIndex = '1';
         } else {
             console.warn(`Session card for ${sessionId} not found when applying selected state`);
         }
@@ -2510,32 +2592,41 @@ style.textContent = `
     border-left-color: #0d6efd !important;
     border-left-width: 4px !important;
     border-left-style: solid !important;
-    box-shadow: 0 0 0 1px rgba(13, 110, 253, 0.25) !important;
+    box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.3) !important;
     position: relative !important;
     z-index: 1 !important;
+    border: 2px solid rgba(13, 110, 253, 0.5) !important;
+    border-radius: 8px !important;
 }
 
 /* Add a blue overlay to make selection more obvious */
 .selected-session-card::after {
     content: '';
     position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    border: 2px solid rgba(13, 110, 253, 0.5);
-    border-radius: 4px;
+    top: -2px;
+    left: -2px;
+    right: -2px;
+    bottom: -2px;
+    border: 2px solid rgba(13, 110, 253, 0.6);
+    border-radius: 8px;
     pointer-events: none;
     z-index: -1;
+    background: rgba(13, 110, 253, 0.1);
 }
 
 /* Dark mode selected state */
 [data-theme="dark"] .selected-session-card {
-    background-color: rgba(13, 110, 253, 0.3) !important;
+    background-color: rgba(13, 110, 253, 0.35) !important;
     border-left-color: #0d6efd !important;
     border-left-width: 4px !important;
     border-left-style: solid !important;
-    box-shadow: 0 0 0 1px rgba(13, 110, 253, 0.4) !important;
+    box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.4) !important;
+    border: 2px solid rgba(13, 110, 253, 0.6) !important;
+}
+
+[data-theme="dark"] .selected-session-card::after {
+    background: rgba(13, 110, 253, 0.15);
+    border: 2px solid rgba(13, 110, 253, 0.7);
 }
 
 /* Session Header - Redesigned for compact layout */
@@ -2556,6 +2647,22 @@ style.textContent = `
     text-overflow: ellipsis;
     white-space: nowrap;
     margin-right: 8px;
+}
+
+.loss-badges {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex-shrink: 0;
+    align-items: flex-end;
+}
+
+.loss-badges .badge {
+    font-size: 9px !important;
+    padding: 2px 6px !important;
+    border-radius: 8px !important;
+    line-height: 1.2;
+    white-space: nowrap;
 }
 
 .iteration-badge {
@@ -2652,8 +2759,8 @@ style.textContent = `
     cursor: pointer;
 }
 
-        /* Dark Mode Enhancements */
-        [data-theme="dark"] .session-card:hover {
+/* Dark Mode Enhancements */
+[data-theme="dark"] .session-card:hover {
             background-color: rgba(0, 123, 255, 0.15) !important;
             transform: translateY(-2px) !important;
             box-shadow: 0 4px 12px rgba(0, 123, 255, 0.3) !important;
@@ -2699,9 +2806,9 @@ style.textContent = `
         
         /* Dark mode table styling - specific to summary table only */
         [data-theme="dark"] #sessions-summary-table {
-            color: var(--text-color);
-        }
-        
+    color: var(--text-color);
+}
+
         [data-theme="dark"] #sessions-summary-table thead.table-light {
             background-color: var(--surface-color) !important;
             border-color: var(--border-color) !important;

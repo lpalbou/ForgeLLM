@@ -1230,12 +1230,34 @@ def setup_api(app: Flask) -> Blueprint:
                             # Add latest metrics if available
                             metrics = data.get('metrics', [])
                             if metrics:
-                                latest = metrics[-1]
-                                session_info.update({
-                                    "latest_iteration": latest.get('iteration'),
-                                    "latest_loss": latest.get('train_loss'),
-                                    "latest_val_loss": latest.get('val_loss')
-                                })
+                                # Find the best validation loss (lowest) instead of latest
+                                best_val_loss = None
+                                best_train_loss = None
+                                best_iteration = None
+                                
+                                for metric in metrics:
+                                    val_loss = metric.get('val_loss')
+                                    if val_loss is not None:
+                                        if best_val_loss is None or val_loss < best_val_loss:
+                                            best_val_loss = val_loss
+                                            best_train_loss = metric.get('train_loss')
+                                            best_iteration = metric.get('iteration')
+                                
+                                # If we found best validation loss, use it; otherwise fall back to latest
+                                if best_val_loss is not None:
+                                    session_info.update({
+                                        "latest_iteration": best_iteration,
+                                        "latest_loss": best_train_loss,
+                                        "latest_val_loss": best_val_loss
+                                    })
+                                else:
+                                    # Fallback to latest metrics if no validation loss found
+                                    latest = metrics[-1]
+                                    session_info.update({
+                                        "latest_iteration": latest.get('iteration'),
+                                        "latest_loss": latest.get('train_loss'),
+                                        "latest_val_loss": latest.get('val_loss')
+                                    })
                             
                             all_sessions.append(session_info)
                             

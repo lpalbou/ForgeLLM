@@ -913,6 +913,68 @@
             margin: 0 0.1rem;
         }
 
+        /* Summary Table Styles */
+        #sessions-summary-table {
+            font-size: 0.875rem;
+        }
+        
+        #sessions-summary-table th {
+            font-weight: 600;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            border-bottom: 2px solid var(--border-color);
+            padding: 0.75rem 0.5rem;
+        }
+        
+        #sessions-summary-table td {
+            padding: 0.75rem 0.5rem;
+            vertical-align: middle;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        #sessions-summary-table .btn-xs {
+            padding: 0.25rem 0.375rem;
+            font-size: 0.75rem;
+            margin: 0 0.125rem;
+        }
+        
+        #sessions-summary-table .badge {
+            font-size: 0.75rem;
+            padding: 0.25rem 0.5rem;
+        }
+        
+        #sessions-summary-table .btn-group {
+            display: flex;
+            flex-wrap: nowrap;
+            gap: 2px;
+        }
+        
+        /* Training Sessions Panel Height Limit */
+        #checkpoints-list {
+            max-height: 1090px;
+            overflow-y: auto;
+            padding-right: 5px;
+        }
+        
+        /* Custom scrollbar for training sessions list */
+        #checkpoints-list::-webkit-scrollbar {
+            width: 6px;
+        }
+        
+        #checkpoints-list::-webkit-scrollbar-track {
+            background: var(--surface-color);
+            border-radius: 3px;
+        }
+        
+        #checkpoints-list::-webkit-scrollbar-thumb {
+            background: var(--border-color);
+            border-radius: 3px;
+        }
+        
+        #checkpoints-list::-webkit-scrollbar-thumb:hover {
+            background: var(--text-muted);
+        }
     </style>
 </head>
 <body>
