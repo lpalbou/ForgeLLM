@@ -1608,7 +1608,7 @@ def setup_api(app: Flask) -> Blueprint:
         return jsonify({
             'success': True,
             'status': 'ok',
-            'version': '0.3.6'
+            'version': '0.3.7'
         })
     
     @bp.route('/model/status', methods=['GET'])

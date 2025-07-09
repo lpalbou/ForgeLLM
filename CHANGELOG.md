@@ -5,7 +5,7 @@ All notable changes to ForgetLLM will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.3.7] - 2025-07-08 (ONGOING)
+## [0.3.7] - 2025-07-09
 
 ### 🎲 Deterministic Text Generation
 - **Seed Parameter Support**: Added comprehensive seed parameter for reproducible text generation
@@ -36,12 +36,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Enhanced Text Handling**: Improved text wrapping and layout for long session names and details
   - **Robust Error Handling**: Comprehensive null checks and DOM readiness validation to prevent JavaScript errors
   - **Smart Initialization**: Tab-aware initialization that ensures DOM elements are ready before execution
+  - **Special Character Handling**: Robust CSS selector escaping for model IDs with dots and special characters
+  - **Theme-Aware Styling**: Proper background and text colors in both light and dark modes
+  - **Visual Selection Feedback**: Enhanced blue highlighting with border effects for selected models
 
 - **Comprehensive Comparison Metrics**: Four key visualization categories
   - **Loss Comparison**: Training vs validation loss curves with deviation analysis
   - **Perplexity Evolution**: Logarithmic perplexity tracking with trend visualization
   - **Loss Stability**: Variance analysis with color-coded stability bands (excellent/good/unstable)
+    - Fixed x-axis range to always start at 0 for better trend visualization
+    - Added data point at iteration 0 for more complete variance tracking
   - **Generalization Gap**: Val Loss - Train Loss with overfitting/underfitting indicators
+    - Dynamic y-axis range adjustment based on actual data values
+    - Color-coded regions for underfitting and overfitting detection
 
 - **Statistical Analysis Dashboard**: Advanced performance insights
   - **Performance Rankings**: Automatic ranking by final validation loss with medal system
@@ -54,6 +61,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Interactive Charts**: Plotly.js integration with hover details and legend management
   - **Color Consistency**: Persistent session colors across all charts and UI elements
   - **Session Summary**: Real-time selection tracking with clear enable/disable states
+  - **Session Parameter Viewer**: Modal-based parameter inspection with copy-to-clipboard functionality
+  - **Quick Actions**: Contextual buttons for viewing parameters, fusing adapters, and testing in playground
+
+- **Adapter Integration**: Seamless workflow between Compare and other tabs
+  - **"Fuse" Button**: Direct adapter selection for model fusion from Compare tab
+  - **"Test in Playground" Button**: One-click testing of selected models in Testing tab
+  - **Best Checkpoint Selection**: Automatic selection of best checkpoint (lowest validation loss)
+  - **Parameter Inspection**: Detailed parameter view with copy-to-clipboard functionality
 
 - **API Infrastructure**: Robust backend support for comparison operations
   - **Multi-Session Endpoint**: Efficient batch loading of training session data

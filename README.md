@@ -6,6 +6,7 @@ ForgeLLM is a comprehensive platform for continued pre-training and instruction 
 
 - **🚀 Train**: Continued pre-training (CPT) via web interface *(IFT coming soon - see [Development Perspectives](docs/perspectives.md))*
 - **📊 Monitor**: Real-time training dashboards and checkpoint management
+- **🆚 Compare**: Enable comparison of multiple training sessions with validation loss, perplexity, stability and generalization gap
 - **🔗 Fuse**: Merge LoRA/DoRA adapters with base models for deployment
 - **⚡ Quantize**: Convert models to 8-bit or 4-bit precision for efficient deployment
 - **💬 Chat & Test**: Interactive chat with models and adapters via CLI or web
@@ -17,6 +18,9 @@ Training:
 
 Monitoring:
 ![Monitoring](docs/assets/monitoring-tab.png)
+
+Compare:
+![Compare](docs/assets/compare-tab.png)
 
 Testing:
 ![Testing](docs/assets/testing-tab.png)
@@ -32,7 +36,7 @@ Testing:
 pip install forgellm
 
 # Install specific version
-pip install forgellm==0.3.6
+pip install forgellm==0.3.7
 
 # Upgrade existing installation
 pip install --upgrade forgellm
