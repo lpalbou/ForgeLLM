@@ -619,8 +619,8 @@ async function generateComparison() {
                 yaxis: { title: 'Validation Perplexity' }
             });
 
-            // --- 3. Stability Comparison (VALIDATION LOSS) ---
-            // Completely rewritten implementation
+            // --- 3. Stability Comparison (VALIDATION LOSS) - Using Coefficient of Variation (CV) ---
+            // Completely rewritten implementation using CV instead of variance
             const stabilityContainer = document.getElementById('stability-comparison-chart');
             if (!stabilityContainer) {
                 console.error('Stability chart container not found');
@@ -640,30 +640,36 @@ async function generateComparison() {
                     if (!sessionData.charts?.loss?.data) continue;
                     
                     const validationLoss = sessionData.charts.loss.data.find(c => c.name === 'Validation Loss');
-                    if (!validationLoss?.x || !validationLoss?.y || validationLoss.x.length < 2 || validationLoss.y.length < 2) continue;
+                    if (!validationLoss?.x || !validationLoss?.y || validationLoss.x.length < 5 || validationLoss.y.length < 5) continue;
                     
                     console.log(`Processing stability data for ${sessionId}, points: ${validationLoss.x.length}`);
                     
-                    // Calculate rolling variance with a window
-                    const windowSize = Math.min(10, Math.floor(validationLoss.x.length / 2));
-                    if (windowSize < 2) continue; // Need at least 2 points for variance
+                    // Calculate Coefficient of Variation (CV) with a sliding window
+                    const windowSize = Math.min(5, Math.floor(validationLoss.x.length / 2));
+                    if (windowSize < 3) continue; // Need at least 3 points for meaningful CV
                     
                     const points = [];
                     
-                    // Always start with zero variance at iteration 0
+                    // Always start with zero CV at iteration 0
                     if (validationLoss.x[0] > 0) {
                         points.push({ x: 0, y: 0 });
                     }
                     
-                    // Calculate variance for each window
+                    // Calculate CV for each window
                     for (let i = windowSize; i < validationLoss.y.length; i++) {
                         const window = validationLoss.y.slice(i - windowSize, i);
                         const mean = window.reduce((a, b) => a + b, 0) / windowSize;
+                        
+                        // Calculate standard deviation
                         const variance = window.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / windowSize;
+                        const stdDev = Math.sqrt(variance);
+                        
+                        // Calculate Coefficient of Variation (CV) as percentage
+                        const cv = (stdDev / mean) * 100; // Express as percentage
                         
                         const x = validationLoss.x[i];
                         if (x >= 0) { // Only use non-negative x values
-                            points.push({ x, y: variance });
+                            points.push({ x, y: cv });
                             maxIteration = Math.max(maxIteration, x);
                         }
                     }
@@ -679,7 +685,7 @@ async function generateComparison() {
                             line: { color: sessionData.color, width: 2 }
                         });
                         
-                        console.log(`Added stability trace for ${sessionId} with ${points.length} points, x range: [${Math.min(...points.map(p => p.x))}, ${Math.max(...points.map(p => p.x))}]`);
+                        console.log(`Added stability trace for ${sessionId} with ${points.length} points, CV range: [${Math.min(...points.map(p => p.y))}, ${Math.max(...points.map(p => p.y))}]%`);
                     }
                 } catch (error) {
                     console.error(`Error processing stability data for session ${sessionId}:`, error);
@@ -707,8 +713,8 @@ async function generateComparison() {
                         tickfont: { color: textColor }
                     },
                     yaxis: { 
-                        title: 'Loss Variance', 
-                        range: [0, 0.1],
+                        title: 'Coefficient of Variation (%)', 
+                        range: [0, 20],
                         tickfont: { color: textColor }
                     },
                     annotations: [{
@@ -732,10 +738,10 @@ async function generateComparison() {
             }
             
             // Calculate appropriate y-axis range
-            const allVarianceValues = stabilityTraces.flatMap(trace => trace.y);
-            const maxVariance = Math.max(0.1, ...allVarianceValues);
+            const allCVValues = stabilityTraces.flatMap(trace => trace.y);
+            const maxCV = Math.max(20, ...allCVValues); // At least 20% to show all stability zones
             
-            console.log(`Stability chart: ${stabilityTraces.length} traces, max iteration: ${maxIteration}, max variance: ${maxVariance}`);
+            console.log(`Stability chart: ${stabilityTraces.length} traces, max iteration: ${maxIteration}, max CV: ${maxCV}%`);
             
             // Create the chart with proper ranges
             const isDarkMode = document.documentElement.getAttribute('data-theme') === 'dark' || document.body.getAttribute('data-theme') === 'dark';
@@ -758,8 +764,8 @@ async function generateComparison() {
                     tickfont: { color: textColor }
                 },
                 yaxis: {
-                    title: { text: 'Loss Variance', font: { color: textColor } },
-                    range: [0, maxVariance * 1.1], // Add 10% padding
+                    title: { text: 'Coefficient of Variation (%)', font: { color: textColor } },
+                    range: [0, maxCV * 1.1], // Add 10% padding
                     gridcolor: borderColor,
                     linecolor: borderColor,
                     zerolinecolor: borderColor,
@@ -769,14 +775,17 @@ async function generateComparison() {
                 plot_bgcolor: 'transparent',
                 margin: { l: 60, r: 20, t: 50, b: 60 },
                 shapes: [
-                    { type: 'rect', xref: 'paper', yref: 'y', x0: 0, y0: 0, x1: 1, y1: 0.005, fillcolor: 'rgba(40, 167, 69, 0.2)', line: { width: 0 }, layer: 'below' },
-                    { type: 'rect', xref: 'paper', yref: 'y', x0: 0, y0: 0.005, x1: 1, y1: 0.02, fillcolor: 'rgba(255, 193, 7, 0.2)', line: { width: 0 }, layer: 'below' },
-                    { type: 'rect', xref: 'paper', yref: 'y', x0: 0, y0: 0.02, x1: 1, y1: maxVariance * 1.1, fillcolor: 'rgba(220, 53, 69, 0.2)', line: { width: 0 }, layer: 'below' }
+                    // Excellent stability zone: CV < 5%
+                    { type: 'rect', xref: 'paper', yref: 'y', x0: 0, y0: 0, x1: 1, y1: 5, fillcolor: 'rgba(40, 167, 69, 0.2)', line: { width: 0 }, layer: 'below' },
+                    // Good stability zone: CV between 5% and 15%
+                    { type: 'rect', xref: 'paper', yref: 'y', x0: 0, y0: 5, x1: 1, y1: 15, fillcolor: 'rgba(255, 193, 7, 0.2)', line: { width: 0 }, layer: 'below' },
+                    // Unstable zone: CV >= 15%
+                    { type: 'rect', xref: 'paper', yref: 'y', x0: 0, y0: 15, x1: 1, y1: maxCV * 1.1, fillcolor: 'rgba(220, 53, 69, 0.2)', line: { width: 0 }, layer: 'below' }
                 ],
                 annotations: [
-                    { text: 'Excellent', x: 0.95, y: 0.0025, xref: 'paper', yref: 'y', showarrow: false, font: { color: 'rgba(40, 167, 69, 0.9)', size: 10 }, xanchor: 'right' },
-                    { text: 'Good', x: 0.95, y: 0.0125, xref: 'paper', yref: 'y', showarrow: false, font: { color: 'rgba(255, 193, 7, 0.9)', size: 10 }, xanchor: 'right' },
-                    { text: 'Unstable', x: 0.95, y: Math.min(maxVariance * 0.6, 0.06), xref: 'paper', yref: 'y', showarrow: false, font: { color: 'rgba(220, 53, 69, 0.9)', size: 10 }, xanchor: 'right' }
+                    { text: 'Excellent (<5%)', x: 0.95, y: 2.5, xref: 'paper', yref: 'y', showarrow: false, font: { color: 'rgba(40, 167, 69, 0.9)', size: 10 }, xanchor: 'right' },
+                    { text: 'Good (5-15%)', x: 0.95, y: 10, xref: 'paper', yref: 'y', showarrow: false, font: { color: 'rgba(255, 193, 7, 0.9)', size: 10 }, xanchor: 'right' },
+                    { text: 'Unstable (>15%)', x: 0.95, y: Math.min(maxCV * 0.6, 30), xref: 'paper', yref: 'y', showarrow: false, font: { color: 'rgba(220, 53, 69, 0.9)', size: 10 }, xanchor: 'right' }
                 ],
                 showlegend: false,
                 font: { color: textColor } // Ensure all text uses the correct color
