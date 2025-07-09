@@ -4734,13 +4734,11 @@ console.log('code block');
     }
 }
 
-// Add global variable at the top of the file
-let trainingInterface;
-
-document.addEventListener('DOMContentLoaded', () => {
-    trainingInterface = new TrainingInterface();
-    window.trainingInterface = trainingInterface; // Make it available globally
-
+// Initialize when page loads
+document.addEventListener('DOMContentLoaded', function() {
+    window.trainingInterface = new TrainingInterface();
+    window.trainingInterface.init();
+    
     // Add event listener for the save button
     const saveButton = document.getElementById('save-chat-btn');
     if (saveButton) {

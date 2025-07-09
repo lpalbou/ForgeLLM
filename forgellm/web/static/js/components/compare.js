@@ -86,6 +86,7 @@ class SessionDataManager {
         const session = sessionData.raw_session || sessionData;
 
         return {
+            // Basic training parameters
             max_seq_length: config.max_seq_length || config.max_sequence_length || 'N/A',
             max_iterations: config.max_iterations || config.iters || session.latest_iteration || 'N/A',
             learning_rate: config.learning_rate || config.lr || 'N/A',
@@ -93,7 +94,22 @@ class SessionDataManager {
             weight_decay: config.weight_decay || 'N/A',
             batch_size: config.batch_size || 'N/A',
             warmup_steps: config.warmup_steps || 'N/A',
-            fine_tune_type: config.fine_tune_type || 'Full'
+            fine_tune_type: config.fine_tune_type || 'Full',
+            
+            // Advanced parameters
+            lr_schedule: config.lr_schedule || 'N/A',
+            save_every: config.save_every || 'N/A',
+            eval_every: config.steps_per_eval || config.eval_every || 'N/A',
+            validation_split: config.validation_split || 'N/A',
+            validation_fast_pct: config.validation_fast_pct || 'N/A',
+            enable_early_stopping: config.enable_early_stopping,
+            
+            // Additional parameters
+            num_layers: config.num_layers || config.layers || 'N/A',
+            gradient_accumulation_steps: config.gradient_accumulation_steps || 'N/A',
+            max_grad_norm: config.max_grad_norm || 'N/A',
+            seed: config.seed || 'N/A',
+            dataloader_num_workers: config.dataloader_num_workers || 'N/A'
         };
     }
 
@@ -111,7 +127,7 @@ class SessionDataManager {
             return {
                 rank: config.lora_rank || config.rank || 'N/A',
                 scale: config.lora_scale || config.scale || 'N/A',
-                dropout: config.lora_dropout || config.dropout || 'N/A',
+                dropout: config.lora_dropout !== undefined ? config.lora_dropout : (config.dropout !== undefined ? config.dropout : 'N/A'),
                 layers: this.formatLayersCount(config.num_layers || config.layers),
                 target_modules: this.formatTargetModules(config.lora_modules || config.target_modules)
             };
@@ -345,11 +361,33 @@ async function getTrainingParametersAsync(session) {
 function getTrainingParameters(session, extraConfig = null) {
     const sessionName = session.session_name || '';
     
-    // Extract values directly from session name using regex
-    const lrMatch = sessionName.match(/lr(\d+e?_?\d*)/i);
+    // FIXED: Improved regex to capture full scientific notation including decimal points and underscores
+    // Pattern explanation: lr followed by number with optional scientific notation
+    // Examples: lr3e-5, lr3.33e-5, lr3e_05, lr0.001, lr1e-4, lr2.5e-6
+    const lrMatch = sessionName.match(/lr([0-9]+(?:[._][0-9]+)?(?:[eE][_+-]?[0-9]+)?)/i);
     const bsMatch = sessionName.match(/bs(\d+)/i);
     const seqMatch = sessionName.match(/seq(\d+)/i);
     const decayMatch = sessionName.match(/decay([0-9.]+)/i);
+    
+    // ENHANCED: Get learning rate from config first (more accurate), then fall back to regex extraction
+    let learningRate = '';
+    if (session.config && session.config.learning_rate) {
+        learningRate = session.config.learning_rate;
+    } else if (extraConfig && extraConfig.learning_rate) {
+        learningRate = extraConfig.learning_rate;
+    } else if (lrMatch) {
+        // Enhanced conversion: Handle scientific notation with underscores properly
+        let extractedLR = lrMatch[1];
+        // Priority: Handle scientific notation underscores first (e_ or E_ -> e- or E-)
+        if (extractedLR.includes('e_')) {
+            extractedLR = extractedLR.replace('e_', 'e-');
+        } else if (extractedLR.includes('E_')) {
+            extractedLR = extractedLR.replace('E_', 'E-');
+        }
+        // Then convert any remaining underscores to periods (for decimal points)
+        extractedLR = extractedLR.replace(/_/g, '.');
+        learningRate = extractedLR;
+    }
     
     // Try to extract weight decay, LR decay factor, and max sequence length from session config or extraConfig
     let weightDecay = '';
@@ -370,14 +408,14 @@ function getTrainingParameters(session, extraConfig = null) {
         maxSeqLength = maxSeqLength || extraConfig.max_seq_length || '';
     }
     
-    // Check if session already has fine_tune_type information
+    // ENHANCED: Check if session already has fine_tune_type information - PRIORITIZE CONFIG DATA
     let fineTuneTypeFromSession = '';
-    if (session.fine_tune_type) {
-        fineTuneTypeFromSession = session.fine_tune_type;
-    } else if (session.config && session.config.fine_tune_type) {
+    if (session.config && session.config.fine_tune_type) {
         fineTuneTypeFromSession = session.config.fine_tune_type;
     } else if (extraConfig && extraConfig.fine_tune_type) {
         fineTuneTypeFromSession = extraConfig.fine_tune_type;
+    } else if (session.fine_tune_type) {
+        fineTuneTypeFromSession = session.fine_tune_type;
     }
     
     // Determine training type based on folder structure
@@ -449,7 +487,7 @@ function getTrainingParameters(session, extraConfig = null) {
     console.log(`Session Debug - Name: "${sessionName}", Log: "${session.log_file}", FromSession: "${fineTuneTypeFromSession}", Detected: "${fineTuneType}"`);
     
     return {
-        learningRate: lrMatch ? lrMatch[1].replace('_', '-') : '',
+        learningRate: learningRate, // Use the enhanced learning rate extraction
         learningRateDecay: decayMatch ? decayMatch[1] : '',
         lrDecayFactor: lrDecayFactor,
         weightDecay: weightDecay,
@@ -473,6 +511,16 @@ function formatScientificNotation(value) {
     
     const num = parseFloat(value);
     if (isNaN(num)) return value;
+    
+    // ENHANCED: Better precision handling for scientific notation
+    // If the value is already in scientific notation format, preserve it with better precision
+    if (typeof value === 'string' && value.toLowerCase().includes('e')) {
+        // If it's already in scientific notation, ensure proper precision
+        if (num < 0.01 && num > 0) {
+            return num.toExponential(2); // 2 decimal places for very small numbers
+        }
+        return value; // Return as-is if already formatted
+    }
     
     // Only convert to scientific notation for small numbers (< 0.01)
     if (num < 0.01 && num > 0) {
@@ -2667,6 +2715,11 @@ style.textContent = `
     color: #fff !important;
 }
 
+.bg-olive {
+    background-color: #808000 !important;
+    color: #fff !important;
+}
+
 `;
 document.head.appendChild(style);
 
@@ -2807,7 +2860,7 @@ function createSummaryTableRow(session, index) {
             <small class="text-muted">${dateTime}</small>
         </td>
         <td>
-            <span class="badge bg-${getTrainingTypeBadgeColor(trainingType)}">${trainingType}</span>
+            <span class="badge bg-${getTrainingTypeBadgeColor(trainingType)}">${formatTrainingTypeDisplay(trainingType)}</span>
         </td>
         <td>
             <span class="badge bg-warning text-dark">${trainingMethod}</span>
@@ -2821,7 +2874,7 @@ function createSummaryTableRow(session, index) {
         </td>
         <td>
             <span class="fw-bold ${bestLoss.loss === Infinity ? 'text-muted' : 'text-success'}">
-                ${bestLoss.loss === Infinity ? 'N/A' : bestLoss.loss.toFixed(4)}
+                ${bestLoss.loss === Infinity ? 'N/A' : bestLoss.loss.toFixed(3)}
             </span>
         </td>
         <td>${formatScientificNotation(params.learning_rate)}</td>
@@ -2873,9 +2926,18 @@ function createSummaryTableRow(session, index) {
 function getTrainingTypeBadgeColor(trainingType) {
     switch (trainingType.toLowerCase()) {
         case 'lora': return 'success';
-        case 'dora': return 'info';
+        case 'dora': return 'olive'; // Custom olive green class
         case 'full': return 'primary';
         default: return 'secondary';
+    }
+}
+
+function formatTrainingTypeDisplay(trainingType) {
+    switch (trainingType.toLowerCase()) {
+        case 'lora': return 'LoRA';
+        case 'dora': return 'DoRA';
+        case 'full': return 'Full';
+        default: return trainingType;
     }
 }
 
@@ -2987,7 +3049,7 @@ function createFallbackTableRow(session, index) {
             <small class="text-muted">${dateTime}</small>
         </td>
         <td>
-            <span class="badge bg-${getTrainingTypeBadgeColor(trainingType)}">${trainingType}</span>
+            <span class="badge bg-${getTrainingTypeBadgeColor(trainingType)}">${formatTrainingTypeDisplay(trainingType)}</span>
         </td>
         <td>
             <span class="badge bg-warning text-dark">${trainingMethod}</span>
@@ -3063,10 +3125,15 @@ if (document.body) {
     });
 } 
 
-// Simplified function to fetch loss data for a session
+// Enhanced function to fetch loss data and accurate training parameters for a session
 async function fetchSessionLossData(session) {
     try {
-        if (!session.log_file) return { trainingLoss: 'N/A', validationLoss: 'N/A' };
+        if (!session.log_file) return { 
+            trainingLoss: 'N/A', 
+            validationLoss: 'N/A',
+            accurateFineTuneType: null,
+            accurateLearningRate: null
+        };
 
         const response = await fetch(`/api/dashboard/historical`, {
             method: 'POST',
@@ -3074,7 +3141,12 @@ async function fetchSessionLossData(session) {
             body: JSON.stringify({ log_file: session.log_file })
         });
 
-        if (!response.ok) return { trainingLoss: 'N/A', validationLoss: 'N/A' };
+        if (!response.ok) return { 
+            trainingLoss: 'N/A', 
+            validationLoss: 'N/A',
+            accurateFineTuneType: null,
+            accurateLearningRate: null
+        };
 
         const sessionData = await response.json();
         
@@ -3096,9 +3168,23 @@ async function fetchSessionLossData(session) {
             }
         }
         
-        return { trainingLoss, validationLoss };
+        // ENHANCED: Get accurate training parameters using async method
+        const accurateParams = await getTrainingParametersAsync(session);
+        
+        return { 
+            trainingLoss, 
+            validationLoss,
+            accurateFineTuneType: accurateParams.fineTuneType,
+            accurateLearningRate: accurateParams.learningRate
+        };
     } catch (error) {
-        return { trainingLoss: 'N/A', validationLoss: 'N/A' };
+        console.error('Error fetching session data:', error);
+        return { 
+            trainingLoss: 'N/A', 
+            validationLoss: 'N/A',
+            accurateFineTuneType: null,
+            accurateLearningRate: null
+        };
     }
 } 
 
@@ -3106,21 +3192,92 @@ async function fetchSessionLossData(session) {
 async function populateLossBadges(sessions) {
     for (const session of sessions) {
         const sessionId = session.session_id || session.id || '';
-        const container = document.querySelector(`.loss-badges-header[data-session-id="${sessionId}"]`);
+        const lossBadgesContainer = document.querySelector(`.loss-badges-header[data-session-id="${sessionId}"]`);
+        const trainingBadgesContainer = document.querySelector(`[data-session-id="${sessionId}"] .training-badges`);
+        const lrInfoContainer = document.querySelector(`[data-session-id="${sessionId}"] .session-compact-info .info-item:nth-child(2) .info-text`);
         
-        if (container) {
-            // Fetch and update this session's badges
-            fetchSessionLossData(session).then(lossData => {
-                container.innerHTML = `
+        if (lossBadgesContainer) {
+            // Fetch enhanced session data and update badges
+            fetchSessionLossData(session).then(enhancedData => {
+                // Update loss badges
+                lossBadgesContainer.innerHTML = `
                     <span class="badge bg-warning text-dark loss-badge" title="Latest Training Loss">
-                        T: ${lossData.trainingLoss}
+                        T: ${enhancedData.trainingLoss}
                     </span>
                     <span class="badge bg-info text-white loss-badge" title="Latest Validation Loss">
-                        V: ${lossData.validationLoss}
+                        V: ${enhancedData.validationLoss}
                     </span>
                 `;
+                
+                // ENHANCED: Update training type badges with accurate data if available
+                if (trainingBadgesContainer && enhancedData.accurateFineTuneType) {
+                    // Get existing parameters for other badges
+                    const params = getTrainingParameters(session);
+                    
+                    // Create updated training badges with accurate fine-tune type
+                    const trainingBadges = [];
+                    if (enhancedData.accurateFineTuneType && enhancedData.accurateFineTuneType !== '-') {
+                        let bgColor, displayText;
+                        
+                        // Normalize the fine-tune type for comparison
+                        const normalizedType = enhancedData.accurateFineTuneType.toLowerCase();
+                        
+                        if (normalizedType === 'full') {
+                            bgColor = 'bg-primary';
+                            displayText = 'Full';
+                        } else if (normalizedType === 'lora') {
+                            bgColor = 'bg-success';
+                            displayText = 'LoRA';
+                        } else if (normalizedType === 'dora') {
+                            bgColor = 'bg-olive'; // Custom olive green class
+                            displayText = 'DoRA';
+                        } else {
+                            // Fallback for any other types
+                            bgColor = 'bg-secondary';
+                            displayText = enhancedData.accurateFineTuneType;
+                        }
+                        
+                        trainingBadges.push(`<span class="badge ${bgColor}">${displayText}</span>`);
+                    }
+                    if (params.trainingTypeShort && params.trainingTypeShort !== '-') {
+                        trainingBadges.push(`<span class="badge bg-warning text-dark">${params.trainingTypeShort}</span>`);
+                    }
+                    
+                    // Add sequence length badge
+                    const seqLength = params.maxSeqLength || params.sequenceLength;
+                    if (seqLength && seqLength !== '-' && seqLength !== '') {
+                        trainingBadges.push(`<span class="badge bg-secondary">${seqLength}</span>`);
+                    }
+                    
+                    trainingBadgesContainer.innerHTML = trainingBadges.join(' ');
+                }
+                
+                // ENHANCED: Update learning rate display with accurate data if available
+                if (lrInfoContainer && enhancedData.accurateLearningRate) {
+                    const params = getTrainingParameters(session);
+                    let lrDisplay = formatScientificNotation(enhancedData.accurateLearningRate);
+                    let additionalParams = [];
+                    
+                    // Add LR decay factor if available
+                    if (params.lrDecayFactor && params.lrDecayFactor !== '') {
+                        additionalParams.push(`LDR ${params.lrDecayFactor}`);
+                    }
+                    
+                    // Add weight decay if available
+                    if (params.weightDecay && params.weightDecay !== '') {
+                        additionalParams.push(`WD ${params.weightDecay}`);
+                    }
+                    
+                    // Combine everything
+                    if (additionalParams.length > 0) {
+                        lrDisplay = `${lrDisplay} | ${additionalParams.join(' | ')}`;
+                    }
+                    
+                    lrInfoContainer.innerHTML = `LR: ${lrDisplay}`;
+                }
+                
             }).catch(() => {
-                container.innerHTML = `
+                lossBadgesContainer.innerHTML = `
                     <span class="badge bg-secondary text-white loss-badge">T: N/A</span>
                     <span class="badge bg-secondary text-white loss-badge">V: N/A</span>
                 `;
@@ -3160,9 +3317,27 @@ function generateSessionCard(session, options = {}) {
     // Create badge combinations for training type and sequence length
     const trainingBadges = [];
     if (params.fineTuneType && params.fineTuneType !== '-') {
-        const bgColor = params.fineTuneType === 'Full' ? 'bg-primary' : 
-                       params.fineTuneType === 'LoRA' ? 'bg-success' : 'bg-info';
-        trainingBadges.push(`<span class="badge ${bgColor}">${params.fineTuneType}</span>`);
+        let bgColor, displayText;
+        
+        // Normalize the fine-tune type for comparison
+        const normalizedType = params.fineTuneType.toLowerCase();
+        
+        if (normalizedType === 'full') {
+            bgColor = 'bg-primary';
+            displayText = 'Full';
+        } else if (normalizedType === 'lora') {
+            bgColor = 'bg-success';
+            displayText = 'LoRA';
+        } else if (normalizedType === 'dora') {
+            bgColor = 'bg-olive'; // Custom olive green class
+            displayText = 'DoRA';
+        } else {
+            // Fallback for any other types
+            bgColor = 'bg-secondary';
+            displayText = params.fineTuneType;
+        }
+        
+        trainingBadges.push(`<span class="badge ${bgColor}">${displayText}</span>`);
     }
     if (params.trainingTypeShort && params.trainingTypeShort !== '-') {
         trainingBadges.push(`<span class="badge bg-warning text-dark">${params.trainingTypeShort}</span>`);
@@ -3201,6 +3376,9 @@ function generateSessionCard(session, options = {}) {
         clickHandler = `onclick="${customClickHandler}('${sessionId.replace(/'/g, "\\'")}')"`;
     } else if (isCompareTab) {
         clickHandler = `onclick="handleSessionChange('${sessionId.replace(/'/g, "\\'")}', !selectedSessions.has('${sessionId.replace(/'/g, "\\'")}'))"`;
+    } else {
+        // Training tab - populate form with session parameters
+        clickHandler = `onclick="populateTrainingFormFromSession('${sessionId.replace(/'/g, "\\'")}')" style="cursor: pointer;"`;
     }
 
     return `
@@ -3274,5 +3452,190 @@ function generateSessionCard(session, options = {}) {
             </div>
         </div>
     `;
+}
+
+// Function to populate training form from session configuration
+async function populateTrainingFormFromSession(sessionId) {
+    try {
+        console.log('Populating training form from session:', sessionId);
+        
+        // Get session data using SessionDataManager
+        const sessionData = await sessionDataManager.loadSessionData(sessionId);
+        if (!sessionData) {
+            console.error('Failed to load session data');
+            return;
+        }
+        
+        const config = sessionData.config || {};
+        const session = sessionData.raw_session || sessionData;
+        const params = sessionDataManager.extractTrainingParameters(sessionData);
+        const loraParams = sessionDataManager.extractLoRAParameters(sessionData);
+        
+        console.log('Session config:', config);
+        console.log('Raw session:', session);
+        console.log('Extracted params:', params);
+        console.log('LoRA params:', loraParams);
+        
+        // === 1. BASE MODEL SELECTION ===
+        // Extract base model from various possible locations
+        const baseModel = session.base_model || config.base_model || config.model_name || sessionData.model_name;
+        if (baseModel) {
+            const modelSelect = document.getElementById('model-select');
+            if (modelSelect) {
+                // Try to find matching option in dropdown
+                let foundMatch = false;
+                for (let i = 0; i < modelSelect.options.length; i++) {
+                    const option = modelSelect.options[i];
+                    // Check if the option value or text contains the base model name
+                    if (option.value === baseModel || option.textContent.includes(baseModel.split('/').pop())) {
+                        modelSelect.selectedIndex = i;
+                        foundMatch = true;
+                        console.log(`Selected base model: ${baseModel}`);
+                        break;
+                    }
+                }
+                if (!foundMatch) {
+                    console.warn(`Could not find base model "${baseModel}" in dropdown`);
+                }
+            }
+        }
+        
+        // === 2. BASIC TRAINING PARAMETERS ===
+        const setValue = (elementId, value) => {
+            if (value !== 'N/A' && value !== undefined && value !== null && value !== '') {
+                const element = document.getElementById(elementId);
+                if (element) {
+                    element.value = value;
+                    console.log(`Set ${elementId} = ${value}`);
+                }
+            }
+        };
+        
+        setValue('batch-size', params.batch_size);
+        setValue('learning-rate', params.learning_rate);
+        setValue('max-iterations', params.max_iterations);
+        setValue('warmup-steps', params.warmup_steps);
+        setValue('max-seq-length', params.max_seq_length);
+        setValue('weight-decay', params.weight_decay);
+        setValue('lr-decay-factor', params.lr_decay_factor);
+        
+        // === 3. FINE-TUNING TYPE ===
+        if (params.fine_tune_type !== 'N/A') {
+            const fineTuneSelect = document.getElementById('fine-tune-type');
+            if (fineTuneSelect) {
+                const normalizedType = params.fine_tune_type.toLowerCase();
+                fineTuneSelect.value = normalizedType;
+                // Trigger change event to show/hide LoRA parameters
+                fineTuneSelect.dispatchEvent(new Event('change'));
+                console.log(`Set fine-tune type: ${normalizedType}`);
+            }
+        }
+        
+        // === 4. LAYERS TO FINE-TUNE ===
+        if (params.num_layers !== 'N/A') {
+            setValue('num-layers', params.num_layers);
+        } else if (loraParams.layers !== '-' && loraParams.layers !== 'N/A') {
+            // Convert formatted layers back to number
+            const layersValue = loraParams.layers === 'All' ? -1 : parseInt(loraParams.layers);
+            if (!isNaN(layersValue)) {
+                setValue('num-layers', layersValue);
+            }
+        }
+        
+        // === 5. LORA/DORA PARAMETERS ===
+        if (loraParams.rank !== '-' && loraParams.rank !== 'N/A') {
+            setValue('lora-rank', loraParams.rank);
+        }
+        if (loraParams.scale !== '-' && loraParams.scale !== 'N/A') {
+            setValue('lora-scale', loraParams.scale);
+        }
+        if (loraParams.dropout !== '-' && loraParams.dropout !== 'N/A') {
+            setValue('lora-dropout', loraParams.dropout);
+        }
+        
+        // Set target modules with enhanced pattern matching
+        if (loraParams.target_modules !== '-' && loraParams.target_modules !== 'N/A') {
+            const modulesSelect = document.getElementById('lora-modules');
+            if (modulesSelect) {
+                const modules = loraParams.target_modules.toLowerCase();
+                if (modules.includes('q_proj') && modules.includes('v_proj') && !modules.includes('mlp')) {
+                    modulesSelect.value = 'default';
+                } else if (modules.includes('all') || modules.includes('linear')) {
+                    modulesSelect.value = 'all_linear';
+                } else if (modules.includes('attention') && !modules.includes('mlp')) {
+                    modulesSelect.value = 'attention_only';
+                } else {
+                    modulesSelect.value = 'custom';
+                }
+                console.log(`Set LoRA modules: ${modulesSelect.value} (from: ${loraParams.target_modules})`);
+            }
+        }
+        
+        // === 6. ADVANCED PARAMETERS ===
+        // LR Schedule
+        if (params.lr_schedule && params.lr_schedule !== 'N/A') {
+            const lrScheduleSelect = document.getElementById('lr-schedule');
+            if (lrScheduleSelect) {
+                // Try to match the schedule value
+                const scheduleValue = params.lr_schedule.toLowerCase();
+                for (let i = 0; i < lrScheduleSelect.options.length; i++) {
+                    if (lrScheduleSelect.options[i].value.toLowerCase() === scheduleValue) {
+                        lrScheduleSelect.selectedIndex = i;
+                        console.log(`Set LR schedule: ${params.lr_schedule}`);
+                        break;
+                    }
+                }
+            }
+        }
+        
+        // Save frequency and evaluation frequency
+        setValue('save-every', params.save_every);
+        setValue('eval-every', params.eval_every);
+        
+        // === 7. VALIDATION PARAMETERS ===
+        setValue('val-fast-pct', params.validation_fast_pct);
+        setValue('validation-split', params.validation_split);
+        
+        // Early stopping
+        if (params.enable_early_stopping !== undefined) {
+            const earlyStoppingCheckbox = document.getElementById('enable-early-stopping');
+            if (earlyStoppingCheckbox) {
+                earlyStoppingCheckbox.checked = params.enable_early_stopping;
+                console.log(`Set early stopping: ${params.enable_early_stopping}`);
+            }
+        }
+        
+        // === 8. ADDITIONAL PARAMETERS ===
+        setValue('gradient-accumulation-steps', params.gradient_accumulation_steps);
+        setValue('max-grad-norm', params.max_grad_norm);
+        setValue('seed', params.seed);
+        setValue('dataloader-num-workers', params.dataloader_num_workers);
+        
+        // === SUCCESS FEEDBACK ===
+        const modelName = (baseModel || sessionData.model_name || 'Unknown').replace(/^dataset_cpt_/, '').split('/').pop();
+        console.log(`Successfully populated ALL training form parameters from: ${modelName}`);
+        
+        // Show a brief visual feedback
+        const trainingTab = document.querySelector('#training');
+        if (trainingTab) {
+            trainingTab.scrollTop = 0; // Scroll to top of training tab
+        }
+        
+        // Show success message with details
+        if (window.trainingInterface && typeof window.trainingInterface.showAlert === 'function') {
+            const paramCount = Object.keys(params).filter(key => params[key] !== 'N/A').length + 
+                             Object.keys(loraParams).filter(key => loraParams[key] !== '-' && loraParams[key] !== 'N/A').length;
+            window.trainingInterface.showAlert(
+                `Successfully loaded ${paramCount} training parameters from: ${modelName}`, 
+                'success'
+            );
+        }
+        
+    } catch (error) {
+        console.error('Error populating training form:', error);
+        if (window.trainingInterface && typeof window.trainingInterface.showAlert === 'function') {
+            window.trainingInterface.showAlert('Failed to load training parameters: ' + error.message, 'danger');
+        }
+    }
 }
 
