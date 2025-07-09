@@ -123,20 +123,23 @@ function getTrainingParameters(session, extraConfig = null) {
     const seqMatch = sessionName.match(/seq(\d+)/i);
     const decayMatch = sessionName.match(/decay([0-9.]+)/i);
     
-    // Try to extract weight decay and LR decay factor from session config or extraConfig
+    // Try to extract weight decay, LR decay factor, and max sequence length from session config or extraConfig
     let weightDecay = '';
     let lrDecayFactor = '';
+    let maxSeqLength = '';
     
     // Check session config first
     if (session.config) {
         weightDecay = session.config.weight_decay || '';
         lrDecayFactor = session.config.lr_decay_factor || '';
+        maxSeqLength = session.config.max_seq_length || '';
     }
     
     // Check extraConfig if available
     if (extraConfig) {
         weightDecay = weightDecay || extraConfig.weight_decay || '';
         lrDecayFactor = lrDecayFactor || extraConfig.lr_decay_factor || '';
+        maxSeqLength = maxSeqLength || extraConfig.max_seq_length || '';
     }
     
     // Check if session already has fine_tune_type information
@@ -225,6 +228,7 @@ function getTrainingParameters(session, extraConfig = null) {
         batchSize: bsMatch ? bsMatch[1] : '',
         iterations: session.latest_iteration || '',
         sequenceLength: seqMatch ? seqMatch[1] : '',
+        maxSeqLength: maxSeqLength,
         trainingType: trainingType,
         trainingTypeShort: trainingTypeShort,
         fineTuneType: fineTuneType
@@ -296,7 +300,7 @@ async function loadSessions() {
             // ENABLE FUSE BUTTON FOR ALL MODELS - no detection logic needed
             // All models can be fused, regardless of type
             
-            // Create badge combinations for training type
+            // Create badge combinations for training type and sequence length
             const trainingBadges = [];
             if (params.fineTuneType && params.fineTuneType !== '-') {
                 const bgColor = params.fineTuneType === 'Full' ? 'bg-primary' : 
@@ -306,6 +310,14 @@ async function loadSessions() {
             if (params.trainingTypeShort && params.trainingTypeShort !== '-') {
                 trainingBadges.push(`<span class="badge bg-warning text-dark">${params.trainingTypeShort}</span>`);
             }
+            
+            // Add sequence length badge
+            const seqLength = params.maxSeqLength || params.sequenceLength;
+            if (seqLength && seqLength !== '-' && seqLength !== '') {
+                // Show the actual number (e.g., 3072, 2048, 4096)
+                trainingBadges.push(`<span class="badge bg-secondary">${seqLength}</span>`);
+            }
+            
             const trainingBadgeHtml = trainingBadges.join(' ');
 
             // Create comprehensive learning rate display with LR decay and weight decay
@@ -1789,8 +1801,9 @@ async function updateSessionBadgesWithActualData(sessions) {
                 const actualFineTuneType = config.fine_tune_type;
                 const actualWeightDecay = config.weight_decay;
                 const actualLrDecayFactor = config.lr_decay_factor;
+                const actualMaxSeqLength = config.max_seq_length;
                 
-                if (!actualFineTuneType && !actualWeightDecay && !actualLrDecayFactor) return;
+                if (!actualFineTuneType && !actualWeightDecay && !actualLrDecayFactor && !actualMaxSeqLength) return;
                 
                 // Update the badge in the UI
                 const sessionId = session.session_id || session.id || '';
@@ -1860,6 +1873,34 @@ async function updateSessionBadgesWithActualData(sessions) {
                                 
                                 lrInfoSpan.textContent = newLrDisplay;
                                 console.log(`Updated LR display for ${session.session_name}: ${newLrDisplay}`);
+                            }
+                        }
+                        
+                        // Update sequence length badge if we have actual data
+                        if (actualMaxSeqLength) {
+                            const trainingBadges = sessionCard.querySelector('.training-badges');
+                            if (trainingBadges) {
+                                // Check if sequence length badge already exists
+                                const existingSeqBadges = trainingBadges.querySelectorAll('.badge.bg-secondary');
+                                let hasSeqBadge = false;
+                                
+                                existingSeqBadges.forEach(badge => {
+                                    const text = badge.textContent.trim();
+                                    if (/^\d+$/.test(text)) {
+                                        hasSeqBadge = true;
+                                    }
+                                });
+                                
+                                // Add sequence length badge if it doesn't exist
+                                if (!hasSeqBadge) {
+                                    const seqBadge = document.createElement('span');
+                                    seqBadge.className = 'badge bg-secondary';
+                                    seqBadge.textContent = actualMaxSeqLength;
+                                    trainingBadges.appendChild(document.createTextNode(' '));
+                                    trainingBadges.appendChild(seqBadge);
+                                    
+                                    console.log(`Added sequence length badge for ${session.session_name}: ${actualMaxSeqLength}`);
+                                }
                             }
                         }
                     }
