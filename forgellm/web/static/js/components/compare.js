@@ -3341,6 +3341,48 @@ window.generateSessionCard = function generateSessionCard(session, options = {})
     `;
 }
 
+// Helper function to calculate model match score for precise base model selection
+function calculateModelMatchScore(baseModel, optionValue, optionText) {
+    // Normalize strings for comparison
+    const normalize = (str) => str.toLowerCase().replace(/[/_-]/g, '').replace(/\s+/g, '');
+    
+    const normalizedBase = normalize(baseModel);
+    const normalizedValue = normalize(optionValue);
+    const normalizedText = normalize(optionText);
+    
+    // Calculate similarity scores
+    let valueScore = 0;
+    let textScore = 0;
+    
+    // Exact match gets highest score
+    if (normalizedValue === normalizedBase) valueScore = 1.0;
+    else if (normalizedValue.includes(normalizedBase)) valueScore = 0.9;
+    else if (normalizedBase.includes(normalizedValue)) valueScore = 0.8;
+    
+    if (normalizedText === normalizedBase) textScore = 1.0;
+    else if (normalizedText.includes(normalizedBase)) textScore = 0.9;
+    else if (normalizedBase.includes(normalizedText)) textScore = 0.8;
+    
+    // For models with organization prefix (e.g., "Qwen/Qwen3-32B-MLX-bf16")
+    if (baseModel.includes('/')) {
+        const [org, modelName] = baseModel.split('/');
+        const normalizedModelName = normalize(modelName);
+        
+        // Check if the option contains the model name part
+        if (normalizedValue.includes(normalizedModelName)) valueScore = Math.max(valueScore, 0.85);
+        if (normalizedText.includes(normalizedModelName)) textScore = Math.max(textScore, 0.85);
+        
+        // Penalize if it contains a different organization
+        if (optionValue.includes('/') && !normalize(optionValue).includes(normalize(org))) {
+            valueScore *= 0.7;
+            textScore *= 0.7;
+        }
+    }
+    
+    // Return the higher of the two scores
+    return Math.max(valueScore, textScore);
+}
+
 // Function to populate training form from session configuration
 async function populateTrainingFormFromSession(sessionId) {
     try {
@@ -3369,20 +3411,84 @@ async function populateTrainingFormFromSession(sessionId) {
         if (baseModel) {
             const modelSelect = document.getElementById('model-select');
             if (modelSelect) {
-                // Try to find matching option in dropdown
+                console.log(`🎯 Looking for exact base model: "${baseModel}"`);
+                
+                // ENHANCED: Precise base model matching with multiple strategies
                 let foundMatch = false;
+                let bestMatch = null;
+                let bestMatchScore = 0;
+                
                 for (let i = 0; i < modelSelect.options.length; i++) {
                     const option = modelSelect.options[i];
-                    // Check if the option value or text contains the base model name
-                    if (option.value === baseModel || option.textContent.includes(baseModel.split('/').pop())) {
+                    const optionValue = option.value;
+                    const optionText = option.textContent;
+                    
+                    console.log(`   Checking option ${i}: value="${optionValue}", text="${optionText}"`);
+                    
+                    // Strategy 1: EXACT VALUE MATCH (highest priority)
+                    if (optionValue === baseModel) {
+                        console.log(`   ✅ EXACT VALUE MATCH found: ${optionValue}`);
                         modelSelect.selectedIndex = i;
                         foundMatch = true;
-                        console.log(`Selected base model: ${baseModel}`);
                         break;
                     }
+                    
+                    // Strategy 2: EXACT MODEL NAME MATCH (clean text comparison)
+                    // Remove icons and size info from option text for clean comparison
+                    const cleanOptionText = optionText.replace(/^[⚡🤖]\s*/, '').replace(/\s*\([^)]*\)$/, '').trim();
+                    if (cleanOptionText === baseModel) {
+                        console.log(`   ✅ EXACT TEXT MATCH found: "${cleanOptionText}" === "${baseModel}"`);
+                        modelSelect.selectedIndex = i;
+                        foundMatch = true;
+                        break;
+                    }
+                    
+                    // Strategy 3: NORMALIZED COMPARISON (handle different formats)
+                    const normalizedBase = baseModel.toLowerCase().replace(/[/_-]/g, '');
+                    const normalizedOption = cleanOptionText.toLowerCase().replace(/[/_-]/g, '');
+                    if (normalizedOption === normalizedBase) {
+                        console.log(`   ✅ NORMALIZED MATCH found: "${normalizedOption}" === "${normalizedBase}"`);
+                        modelSelect.selectedIndex = i;
+                        foundMatch = true;
+                        break;
+                    }
+                    
+                    // Strategy 4: PARTIAL MATCH SCORING (only if no exact matches found)
+                    // This is much more careful than the previous contains() check
+                    if (baseModel.includes('/')) {
+                        const [org, modelName] = baseModel.split('/');
+                        const modelNameOnly = modelName || org;
+                        
+                        // Check if this option represents the same model with different format
+                        if (cleanOptionText.includes(modelNameOnly) || optionValue.includes(modelNameOnly)) {
+                            // Calculate match score based on similarity
+                            const score = calculateModelMatchScore(baseModel, optionValue, cleanOptionText);
+                            if (score > bestMatchScore && score >= 0.8) { // High threshold for safety
+                                bestMatch = i;
+                                bestMatchScore = score;
+                                console.log(`   📊 Potential match with score ${score}: "${cleanOptionText}"`);
+                            }
+                        }
+                    }
                 }
-                if (!foundMatch) {
-                    console.warn(`Could not find base model "${baseModel}" in dropdown`);
+                
+                // Use best partial match only if no exact match was found
+                if (!foundMatch && bestMatch !== null) {
+                    console.log(`   ⚠️  Using best partial match (score: ${bestMatchScore}): option ${bestMatch}`);
+                    modelSelect.selectedIndex = bestMatch;
+                    foundMatch = true;
+                }
+                
+                if (foundMatch) {
+                    const selectedOption = modelSelect.options[modelSelect.selectedIndex];
+                    console.log(`✅ Successfully selected base model: "${selectedOption.textContent}" (value: "${selectedOption.value}")`);
+                } else {
+                    console.warn(`❌ Could not find base model "${baseModel}" in dropdown`);
+                    console.log('Available options:');
+                    for (let i = 0; i < modelSelect.options.length; i++) {
+                        const opt = modelSelect.options[i];
+                        console.log(`   ${i}: value="${opt.value}", text="${opt.textContent}"`);
+                    }
                 }
             }
         }
