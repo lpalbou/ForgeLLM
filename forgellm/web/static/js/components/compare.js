@@ -407,6 +407,20 @@ function formatValue(value) {
     return value === '' ? '-' : value;
 }
 
+function formatScientificNotation(value) {
+    if (value === undefined || value === null || value === '' || value === 'N/A') return value;
+    
+    const num = parseFloat(value);
+    if (isNaN(num)) return value;
+    
+    // Only convert to scientific notation for small numbers (< 0.01)
+    if (num < 0.01 && num > 0) {
+        return num.toExponential(2); // 2 decimal places in scientific notation
+    }
+    
+    return value; // Return original for normal numbers
+}
+
 // Load and display sessions
 async function loadSessions() {
     try {
@@ -479,7 +493,7 @@ async function loadSessions() {
             const trainingBadgeHtml = trainingBadges.join(' ');
 
             // Create comprehensive learning rate display with LR decay and weight decay
-            let lrDisplay = formatValue(params.learningRate);
+            let lrDisplay = formatScientificNotation(params.learningRate);
             let additionalParams = [];
             
             // Add LR decay factor if available
@@ -535,21 +549,21 @@ async function loadSessions() {
                                 <i class="fas fa-file-code"></i>
                             </button>
                             <button class="btn btn-xs btn-outline-secondary" 
-                                    onclick="showSessionFolder('${sessionId.replace(/'/g, "\\'")}'); event.preventDefault(); event.stopPropagation();"
-                                    title="Browse Session Folder">
-                                <i class="fas fa-folder-open"></i>
-                            </button>
-                            <button class="btn btn-xs btn-outline-secondary" 
                                     onclick="fuseSessionAdapter('${sessionId.replace(/'/g, "\\'")}'); event.preventDefault(); event.stopPropagation();"
-                                    title="Fuse this adapter with base model">
+                                    title="Fuse Adapter">
                                 <i class="fas fa-layer-group"></i>
                             </button>
                             <button class="btn btn-xs btn-outline-secondary" 
                                     onclick="testSessionInPlayground('${sessionId.replace(/'/g, "\\'")}'); event.preventDefault(); event.stopPropagation();"
                                     title="Test in Playground">
-                                <i class="fas fa-vial"></i>
+                                <i class="fas fa-flask"></i>
                             </button>
-                            <button class="btn btn-xs btn-outline-danger ms-auto" 
+                            <button class="btn btn-xs btn-outline-secondary ms-auto" 
+                                    onclick="showSessionFolder('${sessionId.replace(/'/g, "\\'")}'); event.preventDefault(); event.stopPropagation();"
+                                    title="View Folder">
+                                <i class="fas fa-folder-open"></i>
+                            </button>
+                            <button class="btn btn-xs btn-outline-danger" 
                                     onclick="deleteSession('${sessionId.replace(/'/g, "\\'")}'); event.preventDefault(); event.stopPropagation();"
                                     title="Delete Session">
                                 <i class="fas fa-trash"></i>
@@ -2438,7 +2452,7 @@ const style = document.createElement('style');
 style.textContent = `
 /* Session List Container */
 #compare-sessions-list {
-    max-height: 631px;
+    max-height: 677px;
     overflow-y: auto;
     padding-right: 5px;
 }
@@ -2944,7 +2958,7 @@ function createSummaryTableRow(session, index) {
                 ${bestLoss.loss === Infinity ? 'N/A' : bestLoss.loss.toFixed(4)}
             </span>
         </td>
-        <td>${params.learning_rate}</td>
+        <td>${formatScientificNotation(params.learning_rate)}</td>
         <td>${params.lr_decay_factor}</td>
         <td>${params.weight_decay}</td>
         <td>${params.batch_size}</td>
@@ -3122,7 +3136,7 @@ function createFallbackTableRow(session, index) {
         <td>
             <span class="text-muted">N/A</span>
         </td>
-        <td>${params.learning_rate || 'N/A'}</td>
+        <td>${formatScientificNotation(params.learning_rate) || 'N/A'}</td>
         <td>${params.lr_decay_factor || 'N/A'}</td>
         <td>${params.weight_decay || 'N/A'}</td>
         <td>${params.batch_size || 'N/A'}</td>

@@ -9,6 +9,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 🚀 Compare Tab Major Enhancements
 
+#### **Interactive Curve Highlighting**
+- **Dynamic Chart Highlighting**: Added real-time curve highlighting when hovering over session cards
+  - **Visual Connection**: Easy identification of which curve corresponds to which training session
+  - **Multi-Chart Support**: Highlighting works simultaneously across all 4 comparison charts
+    - **Loss Analysis**: Validation loss curves with hover highlighting
+    - **Perplexity Analysis**: Perplexity evolution with visual emphasis
+    - **Loss Stability**: Coefficient of variation curves with highlighting support
+    - **Generalization Gap**: Train/validation gap analysis with hover effects
+  - **Enhanced Visual Feedback**: 
+    - **Hovered Curve**: Thicker line (4px width) with full opacity for clear emphasis
+    - **Non-Hovered Curves**: Dimmed with reduced opacity (0.4) and thinner lines (1.5px)
+    - **Color Preservation**: Same color scheme maintained, only visual emphasis changes
+  - **Smooth Interaction**: Instant chart updates on hover with no performance impact
+  - **Selected Sessions Only**: Hover effects only apply to selected session cards for intuitive UX
+  - **Professional Polish**: Seamless integration with existing chart rendering system
+
+#### **Summary Table Enhancements**
+- **Optimized Column Layout**: Reordered summary table columns for better data flow
+  - **New Order**: Training Session → Type → Method → Seq Len → **Iterations → Best Checkpoint → Best Loss** → Learning Rate → etc.
+  - **Logical Progression**: Performance metrics (iterations, checkpoint, loss) now grouped together
+  - **Improved Readability**: Key performance indicators positioned prominently for quick assessment
+- **Streamlined Interface**: Removed redundant "Selected Sessions" panel from left sidebar
+  - **Cleaner Design**: Left panel now focuses purely on session selection and search
+  - **Enhanced Usability**: More space for session cards and improved visual hierarchy
+  - **Summary Table Focus**: Full-width summary table serves as primary overview for selected sessions
+
 #### **Single Session Analysis Support**
 - **Expanded Functionality**: Compare tab now supports viewing single training sessions (previously required 2+ sessions)
   - **Immediate Chart Generation**: Charts appear as soon as one session is selected
