@@ -879,6 +879,10 @@
         .fullscreen-overlay .d-flex.justify-content-between.align-items-center.px-3.py-2.border-bottom {
             padding: 16px 24px !important;
         }
+
+        .alert-warning {
+            background-color: #dfb276;
+        }
     </style>
 </head>
 <body>
@@ -1440,8 +1444,8 @@
                             <div class="card-body">
                                 <!-- Dataset Warning -->
                                 <div class="alert alert-warning" role="alert">
-                                    <i class="fas fa-exclamation-triangle me-2"></i>
-                                    <strong>Important:</strong> Only compare sessions trained on the same dataset for meaningful results.
+                                    <small><i class="fas fa-exclamation-triangle me-2"></i>
+                                    <strong>Important:</strong> <i>Only compare sessions trained on the same dataset for meaningful results</i></small>.
                                 </div>
                                 
                                 <!-- Session List -->

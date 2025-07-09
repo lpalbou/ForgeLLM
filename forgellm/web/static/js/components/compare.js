@@ -279,8 +279,8 @@ async function loadSessions() {
 
 // Handle session selection change
 async function handleSessionChange(sessionId, isSelected) {
-    // Check if dark mode is enabled
-    const isDarkMode = document.documentElement.getAttribute('data-theme') === 'dark' || document.body.getAttribute('data-theme') === 'dark';
+    // Check if dark mode is enabled (theme is only set on body)
+    const isDarkMode = document.body.getAttribute('data-theme') === 'dark';
     const defaultBgColor = isDarkMode ? '#2d2d2d' : '#f8f9fa';
 
     console.log(`Handling session change for ${sessionId}, isSelected: ${isSelected}`);
@@ -375,8 +375,8 @@ async function handleSessionChange(sessionId, isSelected) {
 }
 
 function updateSessionColorsAndUI() {
-    // Check if dark mode is enabled
-    const isDarkMode = document.documentElement.getAttribute('data-theme') === 'dark' || document.body.getAttribute('data-theme') === 'dark';
+    // Check if dark mode is enabled (theme is only set on body)
+    const isDarkMode = document.body.getAttribute('data-theme') === 'dark';
     const defaultBgColor = isDarkMode ? '#2d2d2d' : '#f8f9fa';
     
     console.log('Updating session colors and UI');
@@ -470,7 +470,7 @@ function renderComparisonChart(containerId, traces, layoutOptions) {
     const containerHeight = container.offsetHeight;
     if (containerWidth < 50 || containerHeight < 50) return;
 
-    const isDarkMode = document.documentElement.getAttribute('data-theme') === 'dark' || document.body.getAttribute('data-theme') === 'dark';
+    const isDarkMode = document.body.getAttribute('data-theme') === 'dark';
     const textColor = isDarkMode ? '#F5F5F5' : '#333333';
     const borderColor = isDarkMode ? '#555555' : '#DDDDDD';
 
@@ -530,7 +530,10 @@ function renderComparisonChart(containerId, traces, layoutOptions) {
             automargin: true
         },
         shapes: layoutOptions.shapes || [],
-        annotations: layoutOptions.annotations || []
+        annotations: (layoutOptions.annotations || []).map(annotation => ({
+            ...annotation,
+            font: { ...annotation.font, color: annotation.font?.color || textColor }
+        }))
     };
 
     Plotly.react(container, traces, layout, {
@@ -697,7 +700,7 @@ async function generateComparison() {
                 console.log('No stability data available');
                 
                 // Get theme colors
-                const isDarkMode = document.documentElement.getAttribute('data-theme') === 'dark' || document.body.getAttribute('data-theme') === 'dark';
+                const isDarkMode = document.body.getAttribute('data-theme') === 'dark';
                 const textColor = isDarkMode ? '#F5F5F5' : '#333333';
                 const borderColor = isDarkMode ? '#555555' : '#DDDDDD';
                 
@@ -744,7 +747,7 @@ async function generateComparison() {
             console.log(`Stability chart: ${stabilityTraces.length} traces, max iteration: ${maxIteration}, max CV: ${maxCV}%`);
             
             // Create the chart with proper ranges
-            const isDarkMode = document.documentElement.getAttribute('data-theme') === 'dark' || document.body.getAttribute('data-theme') === 'dark';
+            const isDarkMode = document.body.getAttribute('data-theme') === 'dark';
             const textColor = isDarkMode ? '#F5F5F5' : '#333333';
             const borderColor = isDarkMode ? '#555555' : '#DDDDDD';
             
@@ -1657,14 +1660,14 @@ style.textContent = `
     cursor: pointer;
 }
 
-/* Light mode */
-:root:not([data-theme="dark"]) .session-card {
+/* Light mode - default background for session cards */
+.session-card {
     background-color: #f8f9fa;
 }
 
 /* Dark mode - using proper dark theme background */
 [data-theme="dark"] .session-card {
-    background-color: #2d2d2d;
+    background-color: #2d2d2d !important;
     border-color: #404040;
 }
 
@@ -1882,4 +1885,30 @@ style.textContent = `
     padding: 0.25rem 0.5rem;
 }
 `;
-document.head.appendChild(style); 
+document.head.appendChild(style);
+
+// Listen for theme changes and regenerate comparison charts
+function handleThemeChange() {
+    // Only regenerate if we have active comparisons
+    if (selectedSessions.size >= 2) {
+        console.log('Theme changed, regenerating comparison charts...');
+        generateComparison();
+    }
+}
+
+// Watch for theme changes on the body element
+const themeObserver = new MutationObserver((mutations) => {
+    mutations.forEach((mutation) => {
+        if (mutation.type === 'attributes' && mutation.attributeName === 'data-theme') {
+            handleThemeChange();
+        }
+    });
+});
+
+// Start observing theme changes
+if (document.body) {
+    themeObserver.observe(document.body, {
+        attributes: true,
+        attributeFilter: ['data-theme']
+    });
+} 
