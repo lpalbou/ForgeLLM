@@ -278,7 +278,7 @@ async function restoreSelectedSessions() {
             for (const sessionId of sessionsArray) {
                 console.log(`Trying to restore session: ${sessionId}`);
                 const escapedSessionId = escapeSelector(sessionId);
-                const sessionCard = document.querySelector(`#session-card-${escapedSessionId}`);
+                const sessionCard = document.querySelector(`#compare-session-card-${escapedSessionId}`);
                 if (sessionCard) {
                     console.log(`Found session card for ${sessionId}, selecting it`);
                     await handleSessionChange(sessionId, true);
@@ -552,6 +552,12 @@ async function loadSessions() {
             container.innerHTML = '<div class="text-muted">No sessions found</div>';
             return;
         }
+
+        // 1. Pre-load all session data into the cache for consistency
+        await Promise.all(sessions.map(session => 
+            window.sessionDataManager.loadSessionData(session.session_id)
+        ));
+        console.log('All session data has been pre-loaded into the cache.');
         
         // Sort sessions by model name and size
         sessions = sortSessions(sessions);
@@ -561,7 +567,7 @@ async function loadSessions() {
             return generateSessionCard(session, {
                 isCompareTab: true,
                 showSelectionFeatures: true,
-                containerId: 'session-card'
+                containerId: 'compare-session-card'
             });
         }).join('');
         
@@ -569,7 +575,7 @@ async function loadSessions() {
         
         // Add hover event listeners to session cards for chart highlighting
         sessions.forEach(session => {
-            const sessionCard = document.querySelector(`#session-card-${escapeSelector(session.session_id)}`);
+            const sessionCard = document.querySelector(`#compare-session-card-${escapeSelector(session.session_id)}`);
             if (sessionCard) {
                 sessionCard.addEventListener('mouseenter', () => handleSessionHover(session.session_id));
                 sessionCard.addEventListener('mouseleave', () => handleSessionHoverEnd());
@@ -580,8 +586,12 @@ async function loadSessions() {
         // This prevents the race condition where badges are populated before elements exist
         setTimeout(() => {
             console.log('Populating loss badges for Compare tab after DOM render');
-            populateLossBadges(sessions);
-        }, 50); // Small delay to ensure DOM rendering is complete
+            if (typeof window.populateLossBadges === 'function') {
+                window.populateLossBadges(sessions);
+            } else {
+                console.warn('populateLossBadges function not found on window');
+            }
+        }, 100); // Increased delay to ensure DOM rendering is complete
         
         // Tooltips removed - all information is now displayed directly in badges and info lines
         
@@ -606,8 +616,7 @@ async function loadSessions() {
             setTimeout(() => {
                 restoreSelectedSessions();
                 initializeSessionSearch(); // Initialize search functionality
-                // Also repopulate badges after restoration in case of timing issues
-                setTimeout(() => populateLossBadges(sessions), 50);
+                // NOTE: Removed duplicate populateLossBadges call that was causing badges to revert to placeholders
             }, 100);
         }
         
@@ -629,7 +638,7 @@ async function handleSessionChange(sessionId, isSelected) {
     console.log(`Handling session change for ${sessionId}, isSelected: ${isSelected}`);
 
     // First update the visual state immediately for better UX
-    const sessionCard = document.querySelector(`#session-card-${escapeSelector(sessionId)}`);
+    const sessionCard = document.querySelector(`#compare-session-card-${escapeSelector(sessionId)}`);
     if (sessionCard) {
         if (isSelected) {
             // Apply all selected styles directly
@@ -725,7 +734,7 @@ function updateSessionColorsAndUI() {
     // Apply selected state to selected session cards
     for (const [sessionId, sessionData] of selectedSessions) {
         console.log(`Applying selected state to session: ${sessionId}`);
-        const sessionCard = document.querySelector(`#session-card-${escapeSelector(sessionId)}`);
+        const sessionCard = document.querySelector(`#compare-session-card-${escapeSelector(sessionId)}`);
         if (sessionCard) {
             console.log(`Found session card for ${sessionId}`);
             sessionCard.classList.add('selected-session-card');
@@ -1894,10 +1903,41 @@ ${JSON.stringify(rawData, null, 2)}
 document.addEventListener('shown.bs.tab', function(event) {
     // If we're entering the compare tab
     if (event.target.getAttribute('data-bs-target') === '#compare') {
-        console.log('Compare tab activated, loading sessions');
+        console.log('Compare tab activated, checking if sessions need to be loaded');
         setTimeout(() => {
             if (elementsExist()) {
-                loadSessions();
+                // Only load sessions if the container is empty or has error message
+                const container = document.getElementById('compare-sessions-list');
+                if (!container || container.children.length === 0 || container.innerHTML.includes('Error loading sessions')) {
+                    console.log('Container is empty or has error, loading sessions');
+                    loadSessions();
+                } else {
+                    console.log('Sessions already loaded, skipping duplicate load');
+                    
+                    // Check if badges need to be populated
+                    const badges = container.querySelectorAll('.loss-badge');
+                    const realBadges = Array.from(badges).filter(badge => {
+                        const text = badge.textContent;
+                        return !text.includes('...') && !text.includes('Tx:') && !text.includes('Vy:');
+                    });
+                    
+                    if (realBadges.length === 0) {
+                        console.log('Badges not populated, triggering badge population');
+                        // Get sessions and populate badges
+                        fetch('/api/training/sessions')
+                            .then(response => response.json())
+                            .then(data => {
+                                const sessions = data.training_sessions || [];
+                                if (typeof window.populateLossBadges === 'function') {
+                                    window.populateLossBadges(sessions);
+                                    console.log('Badge population triggered for Compare tab');
+                                }
+                            })
+                            .catch(error => console.error('Error fetching sessions for badge population:', error));
+                    } else {
+                        console.log('Badges already populated, no action needed');
+                    }
+                }
             }
         }, 100);
     }
@@ -3131,176 +3171,7 @@ if (document.body) {
     });
 } 
 
-// Enhanced function to fetch loss data and accurate training parameters for a session - Make it globally accessible
-window.fetchSessionLossData = async function fetchSessionLossData(session) {
-    try {
-        if (!session.log_file) return { 
-            trainingLoss: 'N/A', 
-            validationLoss: 'N/A',
-            accurateFineTuneType: null,
-            accurateLearningRate: null
-        };
 
-        const response = await fetch(`/api/dashboard/historical`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ log_file: session.log_file })
-        });
-
-        if (!response.ok) return { 
-            trainingLoss: 'N/A', 
-            validationLoss: 'N/A',
-            accurateFineTuneType: null,
-            accurateLearningRate: null
-        };
-
-        const sessionData = await response.json();
-        
-        // Extract latest loss values directly
-        let trainingLoss = 'N/A', validationLoss = 'N/A';
-        
-        if (sessionData.charts?.loss?.data) {
-            const trainData = sessionData.charts.loss.data.find(c => c.name === 'Training Loss');
-            const valData = sessionData.charts.loss.data.find(c => c.name === 'Validation Loss');
-            
-            if (trainData?.y?.length > 0) {
-                const latest = trainData.y[trainData.y.length - 1];
-                trainingLoss = latest < 0.01 ? latest.toExponential(1) : latest.toFixed(3);
-            }
-            
-            if (valData?.y?.length > 0) {
-                const latest = valData.y[valData.y.length - 1];
-                validationLoss = latest < 0.01 ? latest.toExponential(1) : latest.toFixed(3);
-            }
-        }
-        
-        // ENHANCED: Get accurate training parameters using async method
-        const accurateParams = await getTrainingParametersAsync(session);
-        
-        return { 
-            trainingLoss, 
-            validationLoss,
-            accurateFineTuneType: accurateParams.fineTuneType,
-            accurateLearningRate: accurateParams.learningRate
-        };
-    } catch (error) {
-        console.error('Error fetching session data:', error);
-        return { 
-            trainingLoss: 'N/A', 
-            validationLoss: 'N/A',
-            accurateFineTuneType: null,
-            accurateLearningRate: null
-        };
-    }
-} 
-
-// Re-architected function to populate all session card badges using the centralized SessionDataManager
-// This eliminates redundant API calls and ensures data consistency.
-window.populateLossBadges = async function populateLossBadges(sessions) {
-    for (const session of sessions) {
-        const sessionId = session.session_id || session.id || '';
-        const lossBadgesContainer = document.querySelector(`.loss-badges-header[data-session-id="${sessionId}"]`);
-        const trainingBadgesContainer = document.querySelector(`[data-session-id="${sessionId}"] .training-badges`);
-        const lrInfoContainer = document.querySelector(`[data-session-id="${sessionId}"] .session-compact-info .info-item:nth-child(2) .info-text`);
-        
-        if (lossBadgesContainer) {
-            // Use the centralized SessionDataManager to ensure consistent, cached data loading
-            window.sessionDataManager.loadSessionData(sessionId).then(sessionData => {
-                if (!sessionData) {
-                    lossBadgesContainer.innerHTML = `
-                        <span class="badge bg-danger text-white loss-badge" title="Error loading data">T: ERR</span>
-                        <span class="badge bg-danger text-white loss-badge" title="Error loading data">V: ERR</span>
-                    `;
-                    return;
-                }
-
-                // Get latest loss values using SessionDataManager helpers
-                const latestTrainingLoss = window.sessionDataManager.getLatestTrainingLoss(sessionData);
-                const latestValidationLoss = window.sessionDataManager.getLatestValidationLoss(sessionData);
-                
-                const trainingLoss = window.sessionDataManager.formatLossValue(latestTrainingLoss.loss);
-                const validationLoss = window.sessionDataManager.formatLossValue(latestValidationLoss.loss);
-
-                // Update loss badges with correct values
-                lossBadgesContainer.innerHTML = `
-                    <span class="badge bg-warning text-dark loss-badge" title="Latest Training Loss">
-                        T: ${trainingLoss}
-                    </span>
-                    <span class="badge bg-info text-white loss-badge" title="Latest Validation Loss">
-                        V: ${validationLoss}
-                    </span>
-                `;
-                
-                // Get accurate parameters from the fully loaded session data
-                const accurateParams = window.sessionDataManager.extractTrainingParameters(sessionData);
-                const heuristicParams = getTrainingParameters(session); // For training type (CPT/SFT) which isn't in config
-
-                // Update training type badges with accurate fine-tune type
-                if (trainingBadgesContainer && accurateParams.fine_tune_type) {
-                    const trainingBadges = [];
-                    if (accurateParams.fine_tune_type && accurateParams.fine_tune_type !== '-') {
-                        let bgColor, displayText;
-                        const normalizedType = accurateParams.fine_tune_type.toLowerCase();
-                        
-                        if (normalizedType === 'full') {
-                            bgColor = 'bg-primary';
-                            displayText = 'Full';
-                        } else if (normalizedType === 'lora') {
-                            bgColor = 'bg-success';
-                            displayText = 'LoRA';
-                        } else if (normalizedType === 'dora') {
-                            bgColor = 'bg-olive';
-                            displayText = 'DoRA';
-                        } else {
-                            bgColor = 'bg-secondary';
-                            displayText = accurateParams.fine_tune_type;
-                        }
-                        
-                        trainingBadges.push(`<span class="badge ${bgColor}">${displayText}</span>`);
-                    }
-                    
-                    if (heuristicParams.trainingTypeShort && heuristicParams.trainingTypeShort !== '-') {
-                        trainingBadges.push(`<span class="badge bg-warning text-dark">${heuristicParams.trainingTypeShort}</span>`);
-                    }
-                    
-                    const seqLength = accurateParams.max_seq_length || heuristicParams.sequenceLength;
-                    if (seqLength && seqLength !== '-' && seqLength !== '' && seqLength !== 'N/A') {
-                        trainingBadges.push(`<span class="badge bg-secondary">${seqLength}</span>`);
-                    }
-                    
-                    trainingBadgesContainer.innerHTML = trainingBadges.join(' ');
-                }
-                
-                // Update learning rate display with accurate data
-                if (lrInfoContainer && accurateParams.learning_rate) {
-                    let lrDisplay = formatScientificNotation(accurateParams.learning_rate);
-                    let additionalParams = [];
-                    
-                    if (accurateParams.lr_decay_factor && accurateParams.lr_decay_factor !== 'N/A') {
-                        additionalParams.push(`LDR ${accurateParams.lr_decay_factor}`);
-                    }
-                    
-                    if (accurateParams.weight_decay && accurateParams.weight_decay !== 'N/A') {
-                        additionalParams.push(`WD ${accurateParams.weight_decay}`);
-                    }
-                    
-                    if (additionalParams.length > 0) {
-                        lrDisplay = `${lrDisplay} | ${additionalParams.join(' | ')}`;
-                    }
-                    
-                    lrInfoContainer.innerHTML = `LR: ${lrDisplay}`;
-                }
-
-            }).catch((error) => {
-                console.error(`Error populating badges for ${sessionId}:`, error);
-                lossBadgesContainer.innerHTML = `
-                    <span class="badge bg-danger text-white loss-badge">T: N/A</span>
-                    <span class="badge bg-danger text-white loss-badge">V: N/A</span>
-                `;
-            });
-        }
-    }
-}
 
 // Reusable session card generation function - Make it globally accessible
 window.generateSessionCard = function generateSessionCard(session, options = {}) {
@@ -3409,12 +3280,12 @@ window.generateSessionCard = function generateSessionCard(session, options = {})
                     <div class="session-name" title="${cleanModelName}">${cleanModelName}</div>
                     <div class="header-badges">
                         <!-- Loss badges (will be populated asynchronously) -->
-                        <div class="loss-badges-header" data-session-id="${sessionId}">
+                        <div class="loss-badges-header">
                             <span class="badge bg-light text-dark loss-badge-loading">
-                                T: <span class="loading-dots">...</span>
+                                Tx: <span class="loading-dots">...</span>
                             </span>
                             <span class="badge bg-light text-dark loss-badge-loading">
-                                V: <span class="loading-dots">...</span>
+                                Vy: <span class="loading-dots">...</span>
                             </span>
                         </div>
                     </div>
@@ -3651,6 +3522,212 @@ async function populateTrainingFormFromSession(sessionId) {
         console.error('Error populating training form:', error);
         if (window.trainingInterface && typeof window.trainingInterface.showAlert === 'function') {
             window.trainingInterface.showAlert('Failed to load training parameters: ' + error.message, 'danger');
+        }
+    }
+}
+
+// Enhanced function to fetch comprehensive session data including accurate LR, LDR, WD
+window.fetchSessionLossData = async function fetchSessionLossData(session) {
+    try {
+        if (!session.log_file) return { 
+            trainingLoss: 'N/A', 
+            validationLoss: 'N/A',
+            accurateFineTuneType: null,
+            accurateLearningRate: null,
+            accurateLrDecayFactor: null,
+            accurateWeightDecay: null
+        };
+
+        const response = await fetch(`/api/dashboard/historical`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ log_file: session.log_file })
+        });
+
+        if (!response.ok) return { 
+            trainingLoss: 'N/A', 
+            validationLoss: 'N/A',
+            accurateFineTuneType: null,
+            accurateLearningRate: null,
+            accurateLrDecayFactor: null,
+            accurateWeightDecay: null
+        };
+
+        const sessionData = await response.json();
+        
+        // Extract latest loss values directly
+        let trainingLoss = 'N/A', validationLoss = 'N/A';
+        
+        if (sessionData.charts?.loss?.data) {
+            const trainData = sessionData.charts.loss.data.find(c => c.name === 'Training Loss');
+            const valData = sessionData.charts.loss.data.find(c => c.name === 'Validation Loss');
+            
+            if (trainData?.y?.length > 0) {
+                const latest = trainData.y[trainData.y.length - 1];
+                trainingLoss = latest < 0.01 ? latest.toExponential(1) : latest.toFixed(3);
+            }
+            
+            if (valData?.y?.length > 0) {
+                const latest = valData.y[valData.y.length - 1];
+                validationLoss = latest < 0.01 ? latest.toExponential(1) : latest.toFixed(3);
+            }
+        }
+        
+        // Get accurate training parameters using async method
+        const accurateParams = await getTrainingParametersAsync(session);
+        
+        return { 
+            trainingLoss, 
+            validationLoss,
+            accurateFineTuneType: accurateParams.fineTuneType,
+            accurateLearningRate: accurateParams.learningRate,
+            accurateLrDecayFactor: accurateParams.lrDecayFactor,
+            accurateWeightDecay: accurateParams.weightDecay
+        };
+    } catch (error) {
+        console.error('Error fetching session data:', error);
+        return { 
+            trainingLoss: 'N/A', 
+            validationLoss: 'N/A',
+            accurateFineTuneType: null,
+            accurateLearningRate: null,
+            accurateLrDecayFactor: null,
+            accurateWeightDecay: null
+        };
+    }
+} 
+
+// UNIVERSAL function to populate session card badges - works for BOTH Compare tab AND Training tab
+window.populateLossBadges = async function populateLossBadges(sessions) {
+    console.log('[Universal] populateLossBadges called for', sessions.length, 'sessions');
+    
+    for (const session of sessions) {
+        const sessionId = session.session_id || session.id || '';
+        
+        // UNIVERSAL APPROACH: Try to find session card in BOTH possible containers
+        let sessionCard = null;
+        
+        // Determine which tab is currently active to prioritize the right container
+        const navButtons = document.querySelectorAll('button.nav-link');
+        let trainingTabActive = false;
+        let compareTabActive = false;
+        
+        for (const button of navButtons) {
+            if (button.textContent.trim() === 'Training' && button.classList.contains('active')) {
+                trainingTabActive = true;
+            }
+            if (button.textContent.trim() === 'Compare' && button.classList.contains('active')) {
+                compareTabActive = true;
+            }
+        }
+        
+        if (trainingTabActive) {
+            // Training tab is active - prioritize Training tab container
+            sessionCard = document.querySelector(`#training-session-card-${sessionId.replace(/[^a-zA-Z0-9_-]/g, '\\$&')}`);
+            if (!sessionCard) {
+                sessionCard = document.querySelector(`#compare-session-card-${sessionId.replace(/[^a-zA-Z0-9_-]/g, '\\$&')}`);
+            }
+        } else {
+            // Compare tab is active (or default) - prioritize Compare tab container
+            sessionCard = document.querySelector(`#compare-session-card-${sessionId.replace(/[^a-zA-Z0-9_-]/g, '\\$&')}`);
+            if (!sessionCard) {
+                sessionCard = document.querySelector(`#training-session-card-${sessionId.replace(/[^a-zA-Z0-9_-]/g, '\\$&')}`);
+            }
+        }
+        
+        // If still not found, try any container with this session ID
+        if (!sessionCard) {
+            sessionCard = document.querySelector(`[data-session-id="${sessionId}"]`);
+        }
+        
+        if (!sessionCard) {
+            console.warn('[Universal] No session-card found for', sessionId, 'in any container');
+            continue;
+        }
+        
+        // Find the required elements within the session card
+        const lossBadgesContainer = sessionCard.querySelector('.loss-badges-header');
+        const trainingBadgesContainer = sessionCard.querySelector('.training-badges');
+        const lrInfoContainer = sessionCard.querySelector('.session-compact-info .info-item:nth-child(2) .info-text');
+        
+        if (!lossBadgesContainer) {
+            console.warn('[Universal] No loss-badges-header in card for', sessionId);
+            continue;
+        }
+        
+        try {
+            // Fetch comprehensive session data
+            const data = await fetchSessionLossData(session);
+            console.log(`[Universal] ${session.session_name} data:`, data);
+            
+            // 1. UPDATE LOSS BADGES (T: and V:)
+            const newHTML = `
+                <span class="badge bg-warning text-dark loss-badge" title="Latest Training Loss">T: ${data.trainingLoss}</span>
+                <span class="badge bg-info text-white loss-badge" title="Latest Validation Loss">V: ${data.validationLoss}</span>
+            `;
+            lossBadgesContainer.innerHTML = newHTML;
+            console.log(`[Universal] Updated loss badges for ${sessionId}: T: ${data.trainingLoss}, V: ${data.validationLoss}`);
+            
+            // 2. UPDATE TRAINING TYPE BADGES (LoRA/DoRA/Full + CPT/SFT + seq length)
+            if (trainingBadgesContainer) {
+                const heuristic = getTrainingParameters(session); // For CPT/SFT, seq length, etc.
+                const badges = [];
+                
+                // Add fine-tune type badge with accurate data
+                if (data.accurateFineTuneType) {
+                    const t = data.accurateFineTuneType.toLowerCase();
+                    const [bg, txt] = t === 'lora' ? ['bg-success', 'LoRA'] :
+                                      t === 'dora' ? ['bg-olive', 'DoRA'] :
+                                      ['bg-primary', 'Full'];
+                    badges.push(`<span class="badge ${bg}">${txt}</span>`);
+                }
+                
+                // Add training type (CPT/SFT)
+                if (heuristic.trainingTypeShort) {
+                    badges.push(`<span class="badge bg-warning text-dark">${heuristic.trainingTypeShort}</span>`);
+                }
+                
+                // Add sequence length
+                if (heuristic.sequenceLength) {
+                    badges.push(`<span class="badge bg-secondary">${heuristic.sequenceLength}</span>`);
+                }
+                
+                trainingBadgesContainer.innerHTML = badges.join(' ');
+            }
+            
+            // 3. UPDATE LR LINE (LR: 3.30e-5 | LDR 0.15 | WD 0.015)
+            if (lrInfoContainer) {
+                let lrDisplay = 'N/A';
+                const extras = [];
+                
+                // Use accurate learning rate from API
+                if (data.accurateLearningRate) {
+                    lrDisplay = formatScientificNotation(data.accurateLearningRate);
+                }
+                
+                // Add LDR (Learning Decay Rate) if available  
+                if (data.accurateLrDecayFactor && parseFloat(data.accurateLrDecayFactor) > 0) {
+                    extras.push(`LDR ${data.accurateLrDecayFactor}`);
+                }
+                
+                // Add WD (Weight Decay) if available
+                if (data.accurateWeightDecay && parseFloat(data.accurateWeightDecay) > 0) {
+                    extras.push(`WD ${data.accurateWeightDecay}`);
+                }
+                
+                // Combine everything: LR: 3.30e-5 | LDR 0.15 | WD 0.015
+                const finalDisplay = extras.length > 0 ? `${lrDisplay} | ${extras.join(' | ')}` : lrDisplay;
+                lrInfoContainer.textContent = `LR: ${finalDisplay}`;
+                
+                console.log(`[Universal] Updated LR line for ${sessionId}: LR: ${finalDisplay}`);
+            }
+            
+        } catch (err) {
+            console.warn(`[Universal] Error for session ${sessionId}:`, err);
+            // Show error state in badges
+            lossBadgesContainer.innerHTML = `
+                <span class="badge bg-danger text-white loss-badge">T: N/A</span>
+                <span class="badge bg-danger text-white loss-badge">V: N/A</span>`;
         }
     }
 }

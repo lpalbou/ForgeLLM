@@ -646,8 +646,10 @@ class TrainingInterface {
         // Use the same compact layout as Compare tab
         container.innerHTML = sessionsHTML;
         
-        // Populate loss badges for training tab sessions
-        populateLossBadges(trainingSessions);
+        // Populate loss badges for training tab sessions with a small delay to ensure DOM is ready
+        setTimeout(() => {
+            populateLossBadges(trainingSessions);
+        }, 100);
     }
     
     updateTrainingSessionsDropdown(trainingSessions) {
