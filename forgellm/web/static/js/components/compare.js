@@ -1028,13 +1028,28 @@ async function generateComparison() {
                     
                     // Only add trace if we have points
                     if (points.length > 0) {
+                        // Apply hover highlighting logic for stability chart
+                        let lineWidth = 2;
+                        let opacity = 1.0;
+                        
+                        if (hoveredSessionId) {
+                            if (sessionId === hoveredSessionId) {
+                                lineWidth = 4; // Thicker line for hovered session
+                                opacity = 1.0;
+                            } else {
+                                lineWidth = 1.5; // Thinner line for non-hovered sessions
+                                opacity = 0.4; // Dimmed for non-hovered sessions
+                            }
+                        }
+                        
                         stabilityTraces.push({
                             x: points.map(p => p.x),
                             y: points.map(p => p.y),
                             type: 'scatter',
                             mode: 'lines',
                             name: sessionData.session_name,
-                            line: { color: sessionData.color, width: 2 }
+                            line: { color: sessionData.color, width: lineWidth },
+                            opacity: opacity
                         });
                         
                         console.log(`Added stability trace for ${sessionId} with ${points.length} points, CV range: [${Math.min(...points.map(p => p.y))}, ${Math.max(...points.map(p => p.y))}]%`);
