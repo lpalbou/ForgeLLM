@@ -5,6 +5,79 @@ All notable changes to ForgetLLM will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.8] - 2025-01-09
+
+### 🚀 Compare Tab Major Enhancements
+
+#### **Single Session Analysis Support**
+- **Expanded Functionality**: Compare tab now supports viewing single training sessions (previously required 2+ sessions)
+  - **Immediate Chart Generation**: Charts appear as soon as one session is selected
+  - **Dynamic Chart Titles**: Titles automatically adjust between "Analysis" and "Comparison" modes
+  - **Enhanced Placeholder**: Updated instructions to reflect single-session capability
+  - **Improved User Experience**: No more waiting to select multiple sessions to see training metrics
+
+#### **Enhanced Visual Feedback & Interactivity**
+- **Clickable Session Cards**: Clear visual feedback when hovering over session cards
+  - **Hover Animation**: Cards lift 2px with smooth transition effect
+  - **Enhanced Shadow**: Blue-tinted shadow indicates clickable state
+  - **Border Highlight**: Left border changes to primary blue on hover
+  - **Theme-Aware**: Different shadow opacity for light/dark modes
+- **Professional Card Design**: Improved visual hierarchy and user interaction cues
+
+#### **Session Management Interface Improvements**
+- **Always-Visible Clear All Button**: Repositioned Clear All button for better accessibility
+  - **Top Placement**: Moved from bottom of panel to top, right after dataset warning
+  - **Always Accessible**: No longer hidden until sessions are selected
+  - **Full-Width Design**: Enhanced visual prominence with `w-100` styling
+  - **Improved UX**: Users can quickly clear selections without scrolling or selecting sessions first
+
+#### **Session Card Feature Expansion**
+- **Comprehensive Session Actions**: Added powerful new action buttons to each session card
+  - **📁 Folder Browser Button**: Opens session training folder in modal browser
+    - **Read-Only File Explorer**: Navigate through session directories and files
+    - **Session Path Detection**: Automatically extracts directory from log file path
+    - **Modal Integration**: Uses existing file browser with view-only mode
+  - **🗑️ Delete Session Button**: Red delete button with confirmation for session removal
+    - **Confirmation Dialog**: Two-step confirmation process to prevent accidental deletion
+    - **Backend API**: New `/api/training/sessions/delete` endpoint for safe session removal
+    - **Auto-Refresh**: Session list automatically updates after successful deletion
+    - **Complete Cleanup**: Removes all session files and folders
+
+#### **Enhanced Session Information Display**
+- **Comprehensive Badge System**: Rich metadata display with color-coded badges
+  - **Training Type Detection**: Enhanced multi-level detection for LoRA, DoRA, and Full training
+    - **Smart Heuristics**: Analyzes session names, log paths, and adapter patterns
+    - **Background Enrichment**: Async function fetches actual config data for accurate badges
+    - **Real-Time Updates**: Badges update with actual data from training configs
+  - **Training Method Badges**: CPT/SFT indicators with yellow color coding
+  - **Sequence Length Display**: Shows max_seq_length as gray badges (2048, 3072, 4096)
+  - **Iteration Count**: Session progress indicators in compact badge format
+
+- **Advanced Parameter Display**: Comprehensive training parameter visualization
+  - **Learning Rate Information**: Enhanced LR display with decay and weight decay
+    - **Format**: "LR: 3e-05 | LDR 0.15 | WD 0.015" with pipe separators
+    - **Background Updates**: Async fetching of actual config values for accuracy
+    - **Parameter Extraction**: Smart parsing of `lr_decay_factor` and `weight_decay`
+  - **Compact Layout**: Professional session card design with optimal information density
+  - **No Tooltips Needed**: All information directly visible through badges and info lines
+
+#### **Technical Infrastructure Improvements**
+- **API Enhancements**: Robust backend support for new features
+  - **Session Deletion Endpoint**: Safe session removal with comprehensive error handling
+  - **File Browser Integration**: Leverages existing `/api/filesystem/browse` for folder viewing
+  - **Enhanced Session Enrichment**: Background data fetching for accurate badge information
+- **Theme Compatibility**: All new features fully support light/dark mode switching
+- **Error Handling**: Comprehensive validation and user-friendly error messages throughout
+
+### **Final Session Card Design**
+```
+gemma-3-27b-it-bf16                    [300]
+[LoRA] [CPT] [3072]
+📅 7/9/2025 05:54 AM
+📈 LR: 3e-05 | LDR 0.15 | WD 0.015
+[📄] [🔗] [🧪] [📁] [🗑️]
+```
+
 ## [0.3.7] - 2025-07-09
 
 ### 🎲 Deterministic Text Generation
