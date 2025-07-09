@@ -163,6 +163,67 @@ class SessionDataManager {
             iteration: bestLoss.iteration
         };
     }
+
+    // Get best training loss (lowest value from training loss data)
+    getBestTrainingLoss(sessionData) {
+        if (sessionData.charts?.loss?.data) {
+            const trainingLoss = sessionData.charts.loss.data.find(c => c.name === 'Training Loss');
+            if (trainingLoss?.y && trainingLoss.y.length > 0) {
+                const minLoss = Math.min(...trainingLoss.y);
+                const minIndex = trainingLoss.y.indexOf(minLoss);
+                const iteration = trainingLoss.x ? trainingLoss.x[minIndex] : minIndex;
+                return { loss: minLoss, iteration };
+            }
+        }
+        return { loss: Infinity, iteration: 'N/A' };
+    }
+
+    // Get latest training loss (most recent value from training loss data)
+    getLatestTrainingLoss(sessionData) {
+        if (sessionData.charts?.loss?.data) {
+            const trainingLoss = sessionData.charts.loss.data.find(c => c.name === 'Training Loss');
+            if (trainingLoss?.y && trainingLoss.y.length > 0) {
+                const latestLoss = trainingLoss.y[trainingLoss.y.length - 1];
+                const latestIteration = trainingLoss.x ? trainingLoss.x[trainingLoss.x.length - 1] : trainingLoss.y.length - 1;
+                return { loss: latestLoss, iteration: latestIteration };
+            }
+        }
+        return { loss: Infinity, iteration: 'N/A' };
+    }
+
+    // Get latest validation loss (most recent value from validation loss data)
+    getLatestValidationLoss(sessionData) {
+        if (sessionData.charts?.loss?.data) {
+            const validationLoss = sessionData.charts.loss.data.find(c => c.name === 'Validation Loss');
+            if (validationLoss?.y && validationLoss.y.length > 0) {
+                const latestLoss = validationLoss.y[validationLoss.y.length - 1];
+                const latestIteration = validationLoss.x ? validationLoss.x[validationLoss.x.length - 1] : validationLoss.y.length - 1;
+                return { loss: latestLoss, iteration: latestIteration };
+            }
+        }
+        return { loss: Infinity, iteration: 'N/A' };
+    }
+
+    // Format loss value for display (with appropriate precision)
+    formatLossValue(lossValue) {
+        if (lossValue === Infinity || lossValue === null || lossValue === undefined) {
+            return 'N/A';
+        }
+        
+        // For very small losses (< 0.01), use scientific notation
+        if (lossValue < 0.01 && lossValue > 0) {
+            return lossValue.toExponential(1); // 1 decimal place in scientific notation
+        }
+        
+        // For normal losses, use appropriate decimal places
+        if (lossValue >= 10) {
+            return lossValue.toFixed(1); // 1 decimal place for large losses
+        } else if (lossValue >= 1) {
+            return lossValue.toFixed(2); // 2 decimal places for medium losses
+        } else {
+            return lossValue.toFixed(3); // 3 decimal places for small losses
+        }
+    }
 }
 
 // Global instance
@@ -518,10 +579,20 @@ async function loadSessions() {
                          data-session-id="${sessionId}"
                          onclick="handleSessionChange('${sessionId.replace(/'/g, "\\'")}', !selectedSessions.has('${sessionId.replace(/'/g, "\\'")}'))">
                         
-                        <!-- Header with model name and iteration badge -->
+                        <!-- Header with model name and badges -->
                         <div class="session-header">
                             <div class="session-name" title="${cleanModelName}">${cleanModelName}</div>
-                            <span class="badge bg-secondary iteration-badge">${session.latest_iteration || session.iterations || 'N/A'}</span>
+                            <div class="header-badges">
+                                <!-- Loss badges (will be populated asynchronously) -->
+                                <div class="loss-badges-header" data-session-id="${sessionId}">
+                                    <span class="badge bg-light text-dark loss-badge-loading">
+                                        T: <span class="loading-dots">...</span>
+                                    </span>
+                                    <span class="badge bg-light text-dark loss-badge-loading">
+                                        V: <span class="loading-dots">...</span>
+                                    </span>
+                                </div>
+                            </div>
                         </div>
                         
                         <!-- Training type badges row -->
@@ -585,10 +656,8 @@ async function loadSessions() {
             }
         });
         
-        // Background task: Fetch actual fine_tune_types for more accurate badges
-        setTimeout(() => {
-            updateSessionBadgesWithActualData(sessions);
-        }, 1000);
+        // Populate loss badges
+        populateLossBadges(sessions);
         
         // Tooltips removed - all information is now displayed directly in badges and info lines
         
@@ -1975,160 +2044,7 @@ document.addEventListener('shown.bs.tab', function(event) {
     }
 });
 
-// Function to update session badges with actual config data
-async function updateSessionBadgesWithActualData(sessions) {
-    console.log('Updating session badges with actual config data...');
-    
-    // Process sessions in batches to avoid overwhelming the server
-    const batchSize = 3;
-    for (let i = 0; i < sessions.length; i += batchSize) {
-        const batch = sessions.slice(i, i + batchSize);
-        
-        await Promise.allSettled(batch.map(async session => {
-            try {
-                if (!session.log_file) return;
-                
-                // Fetch the actual config
-                const response = await fetch('/api/logs/raw', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ log_file: session.log_file })
-                });
-                
-                if (!response.ok) return;
-                
-                const sessionDetails = await response.json();
-                let config = null;
-                
-                try {
-                    const rawData = JSON.parse(sessionDetails.logs);
-                    config = rawData.config || {};
-                } catch (e) {
-                    console.log('Could not parse session config for', session.session_name);
-                    return;
-                }
-                
-                // Get the actual fine_tune_type and other parameters
-                const actualFineTuneType = config.fine_tune_type;
-                const actualWeightDecay = config.weight_decay;
-                const actualLrDecayFactor = config.lr_decay_factor;
-                const actualMaxSeqLength = config.max_seq_length;
-                
-                if (!actualFineTuneType && !actualWeightDecay && !actualLrDecayFactor && !actualMaxSeqLength) return;
-                
-                // Update the badge in the UI
-                const sessionId = session.session_id || session.id || '';
-                const escapedSessionId = escapeSelector(sessionId);
-                const sessionCard = document.querySelector(`#session-card-${escapedSessionId}`);
-                
-                if (sessionCard) {
-                    const trainingBadges = sessionCard.querySelector('.training-badges');
-                    if (trainingBadges) {
-                        // Find and update the fine-tune type badge
-                        const badges = trainingBadges.querySelectorAll('.badge');
-                        let fineTuneBadge = null;
-                        
-                        badges.forEach(badge => {
-                            const text = badge.textContent.trim();
-                            if (text === 'Full' || text === 'LoRA' || text === 'DoRA') {
-                                fineTuneBadge = badge;
-                            }
-                        });
-                        
-                        // Update fine-tune type badge if we have that info
-                        if (fineTuneBadge && actualFineTuneType) {
-                            // Update the badge text and color
-                            const displayType = actualFineTuneType === 'lora' ? 'LoRA' : 
-                                               actualFineTuneType === 'dora' ? 'DoRA' : 'Full';
-                            const bgColor = displayType === 'Full' ? 'bg-primary' : 
-                                           displayType === 'LoRA' ? 'bg-success' : 'bg-info';
-                            
-                            fineTuneBadge.textContent = displayType;
-                            fineTuneBadge.className = `badge ${bgColor}`;
-                            
-                            console.log(`Updated ${session.session_name}: ${actualFineTuneType} -> ${displayType}`);
-                        }
-                        
-                        // Update learning rate display with actual parameters
-                        if (actualWeightDecay || actualLrDecayFactor) {
-                            const lrInfoItems = sessionCard.querySelectorAll('.info-item .info-text');
-                            let lrInfoSpan = null;
-                            
-                            // Find the LR info span
-                            lrInfoItems.forEach(span => {
-                                if (span.textContent.includes('LR:')) {
-                                    lrInfoSpan = span;
-                                }
-                            });
-                            
-                            if (lrInfoSpan) {
-                                // Extract current LR value
-                                const currentLrMatch = lrInfoSpan.textContent.match(/LR:\s*([^\s|]+)/);
-                                const currentLr = currentLrMatch ? currentLrMatch[1] : '';
-                                
-                                // Build new display
-                                let newLrDisplay = `LR: ${currentLr}`;
-                                let additionalParams = [];
-                                
-                                if (actualLrDecayFactor) {
-                                    additionalParams.push(`LDR ${actualLrDecayFactor}`);
-                                }
-                                
-                                if (actualWeightDecay) {
-                                    additionalParams.push(`WD ${actualWeightDecay}`);
-                                }
-                                
-                                if (additionalParams.length > 0) {
-                                    newLrDisplay += ` | ${additionalParams.join(' | ')}`;
-                                }
-                                
-                                lrInfoSpan.textContent = newLrDisplay;
-                                console.log(`Updated LR display for ${session.session_name}: ${newLrDisplay}`);
-                            }
-                        }
-                        
-                        // Update sequence length badge if we have actual data
-                        if (actualMaxSeqLength) {
-                            const trainingBadges = sessionCard.querySelector('.training-badges');
-                            if (trainingBadges) {
-                                // Check if sequence length badge already exists
-                                const existingSeqBadges = trainingBadges.querySelectorAll('.badge.bg-secondary');
-                                let hasSeqBadge = false;
-                                
-                                existingSeqBadges.forEach(badge => {
-                                    const text = badge.textContent.trim();
-                                    if (/^\d+$/.test(text)) {
-                                        hasSeqBadge = true;
-                                    }
-                                });
-                                
-                                // Add sequence length badge if it doesn't exist
-                                if (!hasSeqBadge) {
-                                    const seqBadge = document.createElement('span');
-                                    seqBadge.className = 'badge bg-secondary';
-                                    seqBadge.textContent = actualMaxSeqLength;
-                                    trainingBadges.appendChild(document.createTextNode(' '));
-                                    trainingBadges.appendChild(seqBadge);
-                                    
-                                    console.log(`Added sequence length badge for ${session.session_name}: ${actualMaxSeqLength}`);
-                                }
-                            }
-                        }
-                    }
-                }
-            } catch (error) {
-                console.log('Error updating badge for', session.session_name, ':', error);
-            }
-        }));
-        
-        // Small delay between batches to avoid overwhelming the server
-        if (i + batchSize < sessions.length) {
-            await new Promise(resolve => setTimeout(resolve, 200));
-        }
-    }
-    
-    console.log('Finished updating session badges');
-}
+
 
 // Function to show session folder in a modal
 async function showSessionFolder(sessionId) {
@@ -2558,9 +2474,21 @@ style.textContent = `
     margin-right: 8px;
 }
 
+.header-badges {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.loss-badges-header {
+    display: flex;
+    gap: 3px;
+}
+
 .iteration-badge {
-    font-size: 9px !important;
-    padding: 2px 6px !important;
+    font-size: 10px !important;
+    padding: 3px 7px !important;
     border-radius: 8px !important;
     flex-shrink: 0;
 }
@@ -2573,25 +2501,36 @@ style.textContent = `
 }
 
 .training-badges .badge {
-    font-size: 8px !important;
-    padding: 1px 5px !important;
+    font-size: 10px !important;
+    padding: 2px 6px !important;
     border-radius: 6px !important;
     font-weight: 500 !important;
 }
 
-/* Compact info layout */
-.session-compact-info {
+/* Loss badges row */
+.loss-badges {
     display: flex;
-    flex-direction: column;
-    gap: 3px;
-    margin-bottom: 8px;
+    gap: 4px;
+    flex-wrap: wrap;
 }
 
-.info-item {
-    display: flex;
-    align-items: center;
-    gap: 6px;
+.loss-badges .badge {
     font-size: 10px !important;
+    padding: 2px 6px !important;
+    border-radius: 6px !important;
+    font-weight: 500 !important;
+    min-width: 40px;
+    text-align: center;
+}
+
+/* Loss badges in header (top right) */
+.loss-badges-header .badge {
+    font-size: 10px !important;
+    padding: 2px 6px !important;
+    border-radius: 6px !important;
+    font-weight: 500 !important;
+    min-width: 40px;
+    text-align: center;
 }
 
 .info-item i {
@@ -2787,6 +2726,58 @@ style.textContent = `
     z-index: 1000;
 }
 
+/* Loading state for loss badges */
+.loss-badge-loading {
+    animation: pulse-opacity 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-opacity {
+    0%, 100% { opacity: 0.6; }
+    50% { opacity: 1.0; }
+}
+
+.loading-dots {
+    animation: loading-dots 1.5s linear infinite;
+}
+
+@keyframes loading-dots {
+    0% { content: '.'; }
+    33% { content: '..'; }
+    66% { content: '...'; }
+    100% { content: '.'; }
+}
+
+/* Loss badge specific styling */
+.loss-badge {
+    transition: all 0.2s ease-in-out;
+}
+
+.loss-badge:hover {
+    transform: scale(1.05);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+/* Dark mode loss badge adjustments */
+[data-theme="dark"] .loss-badge-loading {
+    background-color: rgba(255, 255, 255, 0.1) !important;
+    color: rgba(255, 255, 255, 0.7) !important;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+/* Compact info layout */
+.session-compact-info {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    margin-bottom: 8px;
+}
+
+.info-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 10px !important;
+}
 
 `;
 document.head.appendChild(style);
@@ -2885,27 +2876,14 @@ function getBestValidationLoss(sessionData) {
 }
 
 function getBestCheckpointInfo(sessionData) {
-    try {
-        const bestLoss = getBestValidationLoss(sessionData);
-        if (bestLoss === Infinity) return { checkpoint: 'N/A', iteration: 'N/A' };
-        
-        // Find the iteration with the best loss
-        if (sessionData.charts?.loss?.data) {
-            const validationLoss = sessionData.charts.loss.data.find(c => c.name === 'Validation Loss');
-            if (validationLoss?.x && validationLoss?.y) {
-                const bestIndex = validationLoss.y.indexOf(bestLoss);
-                const bestIteration = validationLoss.x[bestIndex];
-                return {
-                    checkpoint: `checkpoint-${bestIteration.toString().padStart(6, '0')}`,
-                    iteration: bestIteration
-                };
-            }
-        }
-        return { checkpoint: 'N/A', iteration: 'N/A' };
-    } catch (error) {
-        console.warn('Error getting best checkpoint for session:', sessionData.session_name, error);
+    const bestLoss = this.getBestValidationLoss(sessionData);
+    if (bestLoss.loss === Infinity) {
         return { checkpoint: 'N/A', iteration: 'N/A' };
     }
+    return {
+        checkpoint: String(bestLoss.iteration).padStart(6, '0'), // Just the iteration number with padding
+        iteration: bestLoss.iteration
+    };
 }
 
 function createSummaryTableRow(session, index) {
@@ -3196,3 +3174,70 @@ if (document.body) {
         attributeFilter: ['data-theme']
     });
 } 
+
+// Simplified function to fetch loss data for a session
+async function fetchSessionLossData(session) {
+    try {
+        if (!session.log_file) return { trainingLoss: 'N/A', validationLoss: 'N/A' };
+
+        const response = await fetch(`/api/dashboard/historical`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ log_file: session.log_file })
+        });
+
+        if (!response.ok) return { trainingLoss: 'N/A', validationLoss: 'N/A' };
+
+        const sessionData = await response.json();
+        
+        // Extract latest loss values directly
+        let trainingLoss = 'N/A', validationLoss = 'N/A';
+        
+        if (sessionData.charts?.loss?.data) {
+            const trainData = sessionData.charts.loss.data.find(c => c.name === 'Training Loss');
+            const valData = sessionData.charts.loss.data.find(c => c.name === 'Validation Loss');
+            
+            if (trainData?.y?.length > 0) {
+                const latest = trainData.y[trainData.y.length - 1];
+                trainingLoss = latest < 0.01 ? latest.toExponential(1) : latest.toFixed(3);
+            }
+            
+            if (valData?.y?.length > 0) {
+                const latest = valData.y[valData.y.length - 1];
+                validationLoss = latest < 0.01 ? latest.toExponential(1) : latest.toFixed(3);
+            }
+        }
+        
+        return { trainingLoss, validationLoss };
+    } catch (error) {
+        return { trainingLoss: 'N/A', validationLoss: 'N/A' };
+    }
+} 
+
+// Simplified function to populate loss badges
+async function populateLossBadges(sessions) {
+    for (const session of sessions) {
+        const sessionId = session.session_id || session.id || '';
+        const container = document.querySelector(`.loss-badges-header[data-session-id="${sessionId}"]`);
+        
+        if (container) {
+            // Fetch and update this session's badges
+            fetchSessionLossData(session).then(lossData => {
+                container.innerHTML = `
+                    <span class="badge bg-warning text-dark loss-badge" title="Latest Training Loss">
+                        T: ${lossData.trainingLoss}
+                    </span>
+                    <span class="badge bg-info text-white loss-badge" title="Latest Validation Loss">
+                        V: ${lossData.validationLoss}
+                    </span>
+                `;
+            }).catch(() => {
+                container.innerHTML = `
+                    <span class="badge bg-secondary text-white loss-badge">T: N/A</span>
+                    <span class="badge bg-secondary text-white loss-badge">V: N/A</span>
+                `;
+            });
+        }
+    }
+}
+
