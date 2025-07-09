@@ -1,6 +1,172 @@
 // COMPARE TAB - USING PLOTLY (SAME AS MONITORING TAB)
 let selectedSessions = new Map();
 
+// NEW: Centralized Session Data Manager
+class SessionDataManager {
+    constructor() {
+        this.sessionsCache = new Map(); // Cache for full session data
+        this.configCache = new Map();   // Cache for parsed config data
+    }
+
+    // Load and cache session data
+    async loadSessionData(sessionId) {
+        if (this.sessionsCache.has(sessionId)) {
+            return this.sessionsCache.get(sessionId);
+        }
+
+        try {
+            // Get basic session info
+            const sessionsResponse = await fetch('/api/training/sessions');
+            const sessionsData = await sessionsResponse.json();
+            const session = sessionsData.training_sessions.find(s => s.session_id === sessionId);
+            
+            if (!session) throw new Error(`Session ${sessionId} not found`);
+
+            // Get detailed session data (charts, logs, config)
+            const response = await fetch(`/api/dashboard/historical`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ log_file: session.log_file })
+            });
+            const sessionData = await response.json();
+
+            // Get parsed config data
+            const configData = await this.loadSessionConfig(session);
+
+            // Combine all data
+            const fullSessionData = {
+                ...sessionData,
+                ...session,
+                sessionId: sessionId,
+                config: configData,
+                raw_session: session
+            };
+
+            this.sessionsCache.set(sessionId, fullSessionData);
+            return fullSessionData;
+
+        } catch (error) {
+            console.error(`Error loading session ${sessionId}:`, error);
+            return null;
+        }
+    }
+
+    // Load and parse session configuration
+    async loadSessionConfig(session) {
+        if (this.configCache.has(session.session_id)) {
+            return this.configCache.get(session.session_id);
+        }
+
+        try {
+            const response = await fetch('/api/logs/raw', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ log_file: session.log_file })
+            });
+
+            if (response.ok) {
+                const sessionDetails = await response.json();
+                const rawData = JSON.parse(sessionDetails.logs);
+                const config = rawData.config || {};
+                
+                this.configCache.set(session.session_id, config);
+                return config;
+            }
+        } catch (error) {
+            console.log('Could not parse session config for', session.session_name, ':', error);
+        }
+
+        return {};
+    }
+
+    // Extract training parameters from session data
+    extractTrainingParameters(sessionData) {
+        const config = sessionData.config || {};
+        const session = sessionData.raw_session || sessionData;
+
+        return {
+            max_seq_length: config.max_seq_length || config.max_sequence_length || 'N/A',
+            max_iterations: config.max_iterations || config.iters || session.latest_iteration || 'N/A',
+            learning_rate: config.learning_rate || config.lr || 'N/A',
+            lr_decay_factor: config.lr_decay_factor || 'N/A',
+            weight_decay: config.weight_decay || 'N/A',
+            batch_size: config.batch_size || 'N/A',
+            warmup_steps: config.warmup_steps || 'N/A',
+            fine_tune_type: config.fine_tune_type || 'Full'
+        };
+    }
+
+    // Extract LoRA/DoRA parameters
+    extractLoRAParameters(sessionData) {
+        const config = sessionData.config || {};
+        const params = this.extractTrainingParameters(sessionData);
+        
+        const isLoRATraining = params.fine_tune_type && (
+            params.fine_tune_type.toLowerCase().includes('lora') || 
+            params.fine_tune_type.toLowerCase().includes('dora')
+        );
+
+        if (isLoRATraining) {
+            return {
+                rank: config.lora_rank || config.rank || 'N/A',
+                scale: config.lora_scale || config.scale || 'N/A',
+                dropout: config.lora_dropout || config.dropout || 'N/A',
+                layers: this.formatLayersCount(config.num_layers || config.layers),
+                target_modules: this.formatTargetModules(config.lora_modules || config.target_modules)
+            };
+        }
+
+        return {
+            rank: '-',
+            scale: '-',
+            dropout: '-',
+            layers: '-',
+            target_modules: '-'
+        };
+    }
+
+    formatTargetModules(modules) {
+        if (!modules) return 'N/A';
+        if (typeof modules === 'string') return modules;
+        if (Array.isArray(modules)) return modules.join(', ');
+        return 'Custom';
+    }
+
+    formatLayersCount(layers) {
+        if (layers === undefined || layers === null) return 'N/A';
+        if (layers === -1) return 'All';
+        return layers.toString();
+    }
+
+    // Get best validation loss and checkpoint info
+    getBestValidationLoss(sessionData) {
+        if (sessionData.charts?.loss?.data) {
+            const validationLoss = sessionData.charts.loss.data.find(c => c.name === 'Validation Loss');
+            if (validationLoss?.y && validationLoss.y.length > 0) {
+                const minLoss = Math.min(...validationLoss.y);
+                const minIndex = validationLoss.y.indexOf(minLoss);
+                const iteration = validationLoss.x ? validationLoss.x[minIndex] : minIndex;
+                return { loss: minLoss, iteration };
+            }
+        }
+        return { loss: Infinity, iteration: 'N/A' };
+    }
+
+    getBestCheckpointInfo(sessionData) {
+        const bestLoss = this.getBestValidationLoss(sessionData);
+        if (bestLoss.loss === Infinity) {
+            return { checkpoint: 'N/A', iteration: 'N/A' };
+        }
+        return {
+            checkpoint: String(bestLoss.iteration).padStart(6, '0'), // Just the iteration number with padding
+            iteration: bestLoss.iteration
+        };
+    }
+}
+
+// Global instance
+const sessionDataManager = new SessionDataManager();
+
 // Add this function to escape special characters in CSS selectors
 function escapeSelector(selector) {
     // Escape special characters in CSS selectors
@@ -413,6 +579,7 @@ async function loadSessions() {
             if (event.target && event.target.id === 'compare-tab') {
                 setTimeout(() => {
                     restoreSelectedSessions();
+                    initializeSessionSearch(); // Initialize search functionality
                 }, 100); // Short delay to ensure DOM is ready
             }
         });
@@ -421,6 +588,7 @@ async function loadSessions() {
         if (document.querySelector('#compare-tab.active')) {
             setTimeout(() => {
                 restoreSelectedSessions();
+                initializeSessionSearch(); // Initialize search functionality
             }, 100);
         }
         
@@ -472,26 +640,14 @@ async function handleSessionChange(sessionId, isSelected) {
 
     if (isSelected) {
         try {
-            const sessionsResponse = await fetch('/api/training/sessions');
-            const sessionsData = await sessionsResponse.json();
-            const sessions = sessionsData.training_sessions || [];
-            const session = sessions.find(s => s.session_id === sessionId);
-            if (!session || !session.log_file) throw new Error('Session log file not found');
-
-            const response = await fetch(`/api/dashboard/historical`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ log_file: session.log_file })
-            });
-            const sessionData = await response.json();
+            // Use the new SessionDataManager to load all session data
+            const sessionData = await sessionDataManager.loadSessionData(sessionId);
+            if (!sessionData) {
+                throw new Error('Failed to load session data');
+            }
             
-            selectedSessions.set(sessionId, {
-                ...sessionData,
-                session_name: session.session_name,
-                session_id: sessionId
-            });
-            
-            console.log(`Added session ${sessionId} to selectedSessions map`);
+            selectedSessions.set(sessionId, sessionData);
+            console.log(`Added session ${sessionId} to selectedSessions map with full data`);
         } catch (error) {
             console.error(`Error loading session ${sessionId}:`, error);
             // Remove the checkbox reference that doesn't exist
@@ -566,16 +722,11 @@ function updateSessionColorsAndUI() {
 }
 
 function updateSelectionSummary() {
-    const summary = document.getElementById('selected-sessions-summary');
-    const count = document.getElementById('selected-sessions-count');
-    
-    if (!summary || !count) return;
-    
+    // Only manage the summary table now (Selected Sessions panel has been removed)
     if (selectedSessions.size > 0) {
-        summary.style.display = 'block';
-        count.textContent = `${selectedSessions.size} session${selectedSessions.size === 1 ? '' : 's'} selected`;
+        generateSummaryTable();
     } else {
-        summary.style.display = 'none';
+        hideSummaryTable();
     }
 }
 
@@ -2140,6 +2291,69 @@ function formatFileSize(bytes) {
 
 console.log('Compare.js Plotly version loaded');
 
+// Search functionality for filtering sessions
+function initializeSessionSearch() {
+    const searchInput = document.getElementById('session-search-input');
+    const clearSearchBtn = document.getElementById('clear-search-btn');
+    
+    if (!searchInput || !clearSearchBtn) return;
+    
+    // Search input handler
+    searchInput.addEventListener('input', filterSessions);
+    
+    // Clear search button handler
+    clearSearchBtn.addEventListener('click', () => {
+        searchInput.value = '';
+        filterSessions();
+        searchInput.focus();
+    });
+    
+    // Enter key handler
+    searchInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            searchInput.value = '';
+            filterSessions();
+        }
+    });
+}
+
+function filterSessions() {
+    const searchInput = document.getElementById('session-search-input');
+    const sessionsList = document.getElementById('compare-sessions-list');
+    
+    if (!searchInput || !sessionsList) return;
+    
+    const searchTerm = searchInput.value.toLowerCase().trim();
+    const sessionCards = sessionsList.querySelectorAll('.session-card');
+    
+    let visibleCount = 0;
+    
+    sessionCards.forEach(card => {
+        const cardText = card.textContent.toLowerCase();
+        const isVisible = searchTerm === '' || cardText.includes(searchTerm);
+        
+        card.style.display = isVisible ? 'block' : 'none';
+        if (isVisible) visibleCount++;
+    });
+    
+    // Show/hide "no results" message
+    let noResultsMsg = sessionsList.querySelector('.no-search-results');
+    if (visibleCount === 0 && searchTerm !== '') {
+        if (!noResultsMsg) {
+            noResultsMsg = document.createElement('div');
+            noResultsMsg.className = 'no-search-results text-center text-muted py-3';
+            noResultsMsg.innerHTML = `
+                <i class="fas fa-search fa-2x mb-2"></i>
+                <p>No sessions found matching "${searchTerm}"</p>
+                <small>Try different keywords or clear the search</small>
+            `;
+            sessionsList.appendChild(noResultsMsg);
+        }
+    } else if (noResultsMsg) {
+        noResultsMsg.remove();
+    }
+}
+
 // Syntax highlight function for JSON
 function syntaxHighlightJson(json) {
     if (!json) return '';
@@ -2367,13 +2581,75 @@ style.textContent = `
     cursor: pointer;
 }
 
-/* Dark Mode Enhancements */
-[data-theme="dark"] .session-card:hover {
-    background-color: rgba(0, 123, 255, 0.15) !important;
-    transform: translateY(-2px) !important;
-    box-shadow: 0 4px 12px rgba(0, 123, 255, 0.3) !important;
-    border-left-color: #007AFF !important;
-}
+        /* Dark Mode Enhancements */
+        [data-theme="dark"] .session-card:hover {
+            background-color: rgba(0, 123, 255, 0.15) !important;
+            transform: translateY(-2px) !important;
+            box-shadow: 0 4px 12px rgba(0, 123, 255, 0.3) !important;
+            border-left-color: #007AFF !important;
+        }
+        
+        /* Summary Table Styles */
+        #sessions-summary-table {
+            font-size: 0.875rem;
+        }
+        
+        #sessions-summary-table th {
+            font-weight: 600;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            border-bottom: 2px solid var(--border-color);
+            padding: 0.75rem 0.5rem;
+        }
+        
+        #sessions-summary-table td {
+            padding: 0.75rem 0.5rem;
+            vertical-align: middle;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        #sessions-summary-table .btn-xs {
+            padding: 0.25rem 0.375rem;
+            font-size: 0.75rem;
+            margin: 0 0.125rem;
+        }
+        
+        #sessions-summary-table .badge {
+            font-size: 0.75rem;
+            padding: 0.25rem 0.5rem;
+        }
+        
+        #sessions-summary-table .btn-group {
+            display: flex;
+            flex-wrap: nowrap;
+            gap: 2px;
+        }
+        
+        /* Dark mode table styling - specific to summary table only */
+        [data-theme="dark"] #sessions-summary-table {
+            color: var(--text-color);
+        }
+        
+        [data-theme="dark"] #sessions-summary-table thead.table-light {
+            background-color: var(--surface-color) !important;
+            border-color: var(--border-color) !important;
+        }
+        
+        [data-theme="dark"] #sessions-summary-table thead.table-light th {
+            color: var(--text-color) !important;
+            background-color: var(--surface-color) !important;
+        }
+        
+        [data-theme="dark"] #sessions-summary-table tbody td {
+            color: var(--text-color) !important;
+            background-color: var(--bg-color) !important;
+            border-color: var(--border-color) !important;
+        }
+        
+        [data-theme="dark"] #sessions-summary-table tbody tr:hover td {
+            background-color: var(--surface-color) !important;
+        }
 
 [data-theme="dark"] .selected-session-card {
     background-color: rgba(13, 110, 253, 0.25) !important;
@@ -2381,24 +2657,7 @@ style.textContent = `
 }
 
 /* Selection Summary Styling */
-#selected-sessions-summary {
-    background: var(--surface-color);
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
-    padding: 12px;
-}
 
-#selected-sessions-summary h6 {
-    margin-bottom: 8px;
-    font-size: 14px;
-    color: var(--text-color);
-}
-
-#selected-sessions-count {
-    font-size: 12px;
-    color: var(--text-muted);
-    margin-bottom: 10px;
-}
 
 /* Chart containers using Plotly */
 #loss-comparison-chart,
@@ -2468,6 +2727,365 @@ function handleThemeChange() {
         console.log('Theme changed, regenerating comparison charts...');
         generateComparison();
     }
+}
+
+// Summary table functions
+function generateSummaryTable() {
+    const tableCard = document.getElementById('summary-table-card');
+    const tbody = document.getElementById('sessions-summary-tbody');
+    
+    if (!tableCard || !tbody || selectedSessions.size === 0) {
+        hideSummaryTable();
+        return;
+    }
+    
+    // Show the table
+    tableCard.style.display = 'block';
+    
+    // Convert selected sessions to array and sort by validation loss
+    const sessionsArray = Array.from(selectedSessions.entries()).map(([sessionId, sessionData]) => {
+        return { sessionId, ...sessionData };
+    });
+    
+    // Sort by best validation loss (lowest first)
+    sessionsArray.sort((a, b) => {
+        const aLoss = getBestValidationLoss(a);
+        const bLoss = getBestValidationLoss(b);
+        return aLoss - bLoss;
+    });
+    
+    // Generate table rows
+    tbody.innerHTML = '';
+    
+    sessionsArray.forEach((session, index) => {
+        try {
+            const row = createSummaryTableRow(session, index);
+            tbody.appendChild(row);
+        } catch (error) {
+            console.error('Error creating table row for session:', session.sessionId, error);
+            // Create a fallback row with basic info
+            const fallbackRow = createFallbackTableRow(session, index);
+            tbody.appendChild(fallbackRow);
+        }
+    });
+}
+
+function hideSummaryTable() {
+    const tableCard = document.getElementById('summary-table-card');
+    if (tableCard) {
+        tableCard.style.display = 'none';
+    }
+}
+
+function getBestValidationLoss(sessionData) {
+    try {
+        if (sessionData.charts?.loss?.data) {
+            const validationLoss = sessionData.charts.loss.data.find(c => c.name === 'Validation Loss');
+            if (validationLoss?.y && validationLoss.y.length > 0) {
+                return Math.min(...validationLoss.y);
+            }
+        }
+        return Infinity; // Return high value if no loss data available
+    } catch (error) {
+        console.warn('Error getting validation loss for session:', sessionData.session_name, error);
+        return Infinity;
+    }
+}
+
+function getBestCheckpointInfo(sessionData) {
+    try {
+        const bestLoss = getBestValidationLoss(sessionData);
+        if (bestLoss === Infinity) return { checkpoint: 'N/A', iteration: 'N/A' };
+        
+        // Find the iteration with the best loss
+        if (sessionData.charts?.loss?.data) {
+            const validationLoss = sessionData.charts.loss.data.find(c => c.name === 'Validation Loss');
+            if (validationLoss?.x && validationLoss?.y) {
+                const bestIndex = validationLoss.y.indexOf(bestLoss);
+                const bestIteration = validationLoss.x[bestIndex];
+                return {
+                    checkpoint: `checkpoint-${bestIteration.toString().padStart(6, '0')}`,
+                    iteration: bestIteration
+                };
+            }
+        }
+        return { checkpoint: 'N/A', iteration: 'N/A' };
+    } catch (error) {
+        console.warn('Error getting best checkpoint for session:', sessionData.session_name, error);
+        return { checkpoint: 'N/A', iteration: 'N/A' };
+    }
+}
+
+function createSummaryTableRow(session, index) {
+    const row = document.createElement('tr');
+    
+    // Use the SessionDataManager methods to extract all data consistently
+    const params = sessionDataManager.extractTrainingParameters(session);
+    const loraParams = sessionDataManager.extractLoRAParameters(session);
+    const bestLoss = sessionDataManager.getBestValidationLoss(session);
+    const bestCheckpoint = sessionDataManager.getBestCheckpointInfo(session);
+    
+    // Extract model name from session name or session_id
+    const modelName = extractModelName(session.session_name || session.session_id);
+    
+    // Format date and time separately
+    const dateTime = formatSessionDateTime(session);
+    
+    // Detect training type and method using existing logic
+    const trainingType = detectTrainingType(session);
+    const trainingMethod = detectTrainingMethod(session);
+    
+    console.log('Table row data for', session.session_name, ':', {
+        params,
+        loraParams,
+        bestLoss,
+        bestCheckpoint,
+        config: session.config
+    });
+    
+    row.innerHTML = `
+        <td>
+            <div class="fw-bold">${modelName}</div>
+            <small class="text-muted">${dateTime}</small>
+        </td>
+        <td>
+            <span class="badge bg-${getTrainingTypeBadgeColor(trainingType)}">${trainingType}</span>
+        </td>
+        <td>
+            <span class="badge bg-warning text-dark">${trainingMethod}</span>
+        </td>
+        <td>
+            <span class="badge bg-secondary">${params.max_seq_length}</span>
+        </td>
+        <td>${params.max_iterations}</td>
+        <td>
+            <div class="fw-bold">${bestCheckpoint.checkpoint}</div>
+        </td>
+        <td>
+            <span class="fw-bold ${bestLoss.loss === Infinity ? 'text-muted' : 'text-success'}">
+                ${bestLoss.loss === Infinity ? 'N/A' : bestLoss.loss.toFixed(4)}
+            </span>
+        </td>
+        <td>${params.learning_rate}</td>
+        <td>${params.lr_decay_factor}</td>
+        <td>${params.weight_decay}</td>
+        <td>${params.batch_size}</td>
+        <td>${params.warmup_steps}</td>
+        <td>${loraParams.rank}</td>
+        <td>${loraParams.scale}</td>
+        <td>${loraParams.dropout}</td>
+        <td>${loraParams.layers}</td>
+        <td>
+            <small>${loraParams.target_modules}</small>
+        </td>
+        <td>
+            <div class="btn-group" role="group">
+                <button class="btn btn-xs btn-outline-secondary" 
+                        onclick="showSessionParameters('${session.sessionId.replace(/'/g, '\\\'')}'); event.stopPropagation();"
+                        title="View Parameters">
+                    <i class="fas fa-file-code"></i>
+                </button>
+                <button class="btn btn-xs btn-outline-secondary" 
+                        onclick="fuseSessionAdapter('${session.sessionId.replace(/'/g, '\\\'')}'); event.stopPropagation();"
+                        title="Fuse Adapter">
+                    <i class="fas fa-layer-group"></i>
+                </button>
+                <button class="btn btn-xs btn-outline-secondary" 
+                        onclick="testSessionInPlayground('${session.sessionId.replace(/'/g, '\\\'')}'); event.stopPropagation();"
+                        title="Test in Playground">
+                    <i class="fas fa-flask"></i>
+                </button>
+                <button class="btn btn-xs btn-outline-secondary" 
+                        onclick="showSessionFolder('${session.sessionId.replace(/'/g, '\\\'')}'); event.stopPropagation();"
+                        title="View Folder">
+                    <i class="fas fa-folder-open"></i>
+                </button>
+                <button class="btn btn-xs btn-outline-danger" 
+                        onclick="deleteSession('${session.sessionId.replace(/'/g, '\\\'')}'); event.stopPropagation();"
+                        title="Delete Session">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+        </td>
+    `;
+    
+    return row;
+}
+
+function getTrainingTypeBadgeColor(trainingType) {
+    switch (trainingType.toLowerCase()) {
+        case 'lora': return 'success';
+        case 'dora': return 'info';
+        case 'full': return 'primary';
+        default: return 'secondary';
+    }
+}
+
+function detectTrainingType(session) {
+    // Use existing detection logic from session cards
+    if (session.session_name?.toLowerCase().includes('lora') || 
+        session.log_file?.toLowerCase().includes('lora') ||
+        session.session_id?.toLowerCase().includes('lora')) {
+        return 'LoRA';
+    }
+    if (session.session_name?.toLowerCase().includes('dora') || 
+        session.log_file?.toLowerCase().includes('dora') ||
+        session.session_id?.toLowerCase().includes('dora')) {
+        return 'DoRA';
+    }
+    return 'Full';
+}
+
+function detectTrainingMethod(session) {
+    // Detect CPT vs SFT based on session patterns
+    if (session.session_name?.toLowerCase().includes('sft') || 
+        session.session_name?.toLowerCase().includes('instruct') ||
+        session.log_file?.toLowerCase().includes('sft')) {
+        return 'SFT';
+    }
+    return 'CPT'; // Default to CPT
+}
+
+function extractModelName(sessionName) {
+    if (!sessionName) return 'Unknown';
+    
+    // Remove common prefixes
+    let modelName = sessionName.replace(/^(mlx-community\/|microsoft\/|meta-llama\/|google\/|huggingface\/)/i, '');
+    
+    // Extract model name from session naming pattern
+    // Pattern: model_name_training_params_date_time
+    const parts = modelName.split('_');
+    
+    // Try to identify the model part (usually first few segments before training params)
+    if (parts.length >= 3) {
+        // Look for common training indicators to split
+        const trainingIndicators = ['lr', 'bs', 'iter', 'seq', 'lora', 'dora', '2025'];
+        let modelParts = [];
+        
+        for (let i = 0; i < parts.length; i++) {
+            const part = parts[i];
+            const hasTrainingIndicator = trainingIndicators.some(indicator => 
+                part.toLowerCase().includes(indicator.toLowerCase())
+            );
+            
+            if (hasTrainingIndicator) {
+                break;
+            }
+            modelParts.push(part);
+        }
+        
+        if (modelParts.length > 0) {
+            return modelParts.join('_');
+        }
+    }
+    
+    // Fallback: just clean up the session name
+    return modelName.split('_').slice(0, 3).join('_');
+}
+
+function formatSessionDateTime(session) {
+    // Try to extract date/time from session name first
+    const sessionName = session.session_name || session.session_id || '';
+    
+    // Look for date pattern in session name (YYYY-MM-DD_HH-MM)
+    const dateMatch = sessionName.match(/(\d{4}-\d{2}-\d{2})[_-](\d{2})[_-](\d{2})/);
+    if (dateMatch) {
+        const [, date, hour, minute] = dateMatch;
+        return `${date} ${hour}:${minute}`;
+    }
+    
+    // Fallback to start_time if available
+    if (session.start_time) {
+        const startDate = new Date(session.start_time);
+        return startDate.toLocaleString('en-US', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+    }
+    
+    return 'N/A';
+}
+
+// DEPRECATED: These functions have been moved to SessionDataManager class
+// function extractParametersFromConfig(config) - use sessionDataManager.extractTrainingParameters(sessionData)
+// function extractLoRAParameters(config, trainingType) - use sessionDataManager.extractLoRAParameters(sessionData)
+
+function createFallbackTableRow(session, index) {
+    const row = document.createElement('tr');
+    
+    // Basic fallback parameters
+    const params = getTrainingParameters(session, session.extraConfig);
+    const modelName = extractModelName(session.session_name || session.session_id);
+    const dateTime = formatSessionDateTime(session);
+    const trainingType = detectTrainingType(session);
+    const trainingMethod = detectTrainingMethod(session);
+    
+    row.innerHTML = `
+        <td>
+            <div class="fw-bold">${modelName}</div>
+            <small class="text-muted">${dateTime}</small>
+        </td>
+        <td>
+            <span class="badge bg-${getTrainingTypeBadgeColor(trainingType)}">${trainingType}</span>
+        </td>
+        <td>
+            <span class="badge bg-warning text-dark">${trainingMethod}</span>
+        </td>
+        <td>
+            <span class="badge bg-secondary">${params.max_seq_length || 'N/A'}</span>
+        </td>
+        <td>${params.max_iterations || 'N/A'}</td>
+        <td>
+            <div class="text-muted">N/A</div>
+        </td>
+        <td>
+            <span class="text-muted">N/A</span>
+        </td>
+        <td>${params.learning_rate || 'N/A'}</td>
+        <td>${params.lr_decay_factor || 'N/A'}</td>
+        <td>${params.weight_decay || 'N/A'}</td>
+        <td>${params.batch_size || 'N/A'}</td>
+        <td>${params.warmup_steps || 'N/A'}</td>
+        <td>-</td>
+        <td>-</td>
+        <td>-</td>
+        <td>-</td>
+        <td>-</td>
+        <td>
+            <div class="btn-group" role="group">
+                <button class="btn btn-xs btn-outline-secondary" 
+                        onclick="showSessionParameters('${session.sessionId.replace(/'/g, '\\\'')}'); event.stopPropagation();"
+                        title="View Parameters">
+                    <i class="fas fa-file-code"></i>
+                </button>
+                <button class="btn btn-xs btn-outline-secondary" 
+                        onclick="fuseSessionAdapter('${session.sessionId.replace(/'/g, '\\\'')}'); event.stopPropagation();"
+                        title="Fuse Adapter">
+                    <i class="fas fa-layer-group"></i>
+                </button>
+                <button class="btn btn-xs btn-outline-secondary" 
+                        onclick="testSessionInPlayground('${session.sessionId.replace(/'/g, '\\\'')}'); event.stopPropagation();"
+                        title="Test in Playground">
+                    <i class="fas fa-flask"></i>
+                </button>
+                <button class="btn btn-xs btn-outline-secondary" 
+                        onclick="showSessionFolder('${session.sessionId.replace(/'/g, '\\\'')}'); event.stopPropagation();"
+                        title="View Folder">
+                    <i class="fas fa-folder-open"></i>
+                </button>
+                <button class="btn btn-xs btn-outline-danger" 
+                        onclick="deleteSession('${session.sessionId.replace(/'/g, '\\\'')}'); event.stopPropagation();"
+                        title="Delete Session">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+        </td>
+    `;
+    
+    return row;
 }
 
 // Watch for theme changes on the body element

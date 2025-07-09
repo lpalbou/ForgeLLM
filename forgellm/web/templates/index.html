@@ -744,10 +744,6 @@
             background: rgba(0, 0, 0, 0.3);
         }
 
-        .mt-4 {
-            max-width: 85%;
-        }
-        
         /* Chat input auto-resize */
         #chat-input {
             min-height: 38px;
@@ -884,6 +880,39 @@
             background-color: #dfb276;
         }
 
+        /* Table styling to only apply to sessions-summary-table */
+        #sessions-summary-table {
+            background-color: var(--surface-color);
+            color: var(--text-color);
+        }
+        
+        #sessions-summary-table thead th {
+            background-color: var(--bg-color) !important;
+            color: var(--text-color) !important;
+            border-color: var(--border-color) !important;
+            font-size: 0.85rem;
+            padding: 0.5rem 0.35rem;
+        }
+        
+        #sessions-summary-table tbody td {
+            background-color: var(--surface-color) !important;
+            color: var(--text-color) !important;
+            border-color: var(--border-color) !important;
+            font-size: 0.85rem;
+            padding: 0.5rem 0.35rem;
+            vertical-align: middle;
+        }
+        
+        #sessions-summary-table tbody tr:hover td {
+            background-color: var(--bg-color) !important;
+        }
+        
+        #sessions-summary-table .btn-xs {
+            padding: 0.15rem 0.3rem;
+            font-size: 0.7rem;
+            margin: 0 0.1rem;
+        }
+
     </style>
 </head>
 <body>
@@ -990,7 +1019,7 @@
                                         <div class="col-md-3">
                                             <div class="mb-3">
                                                 <label for="batch-size" class="form-label">Batch Size</label>
-                                                <input type="number" class="form-control" id="batch-size" value="6" required min="1">
+                                                <input type="number" class="form-control" id="batch-size" value="5" required min="1">
                                             </div>
                                         </div>
                                         <div class="col-md-3">
@@ -1066,14 +1095,14 @@
                                         <div class="col-md-3">
                                             <div class="mb-3">
                                                 <label for="lora-rank" class="form-label">LoRA Rank</label>
-                                                <input type="number" class="form-control" id="lora-rank" value="8" min="1" max="512" step="1">
+                                                <input type="number" class="form-control" id="lora-rank" value="32" min="1" max="512" step="1">
                                                 <small class="form-text text-muted">Higher rank = more parameters, better quality (8-64 typical)</small>
                                             </div>
                                         </div>
                                         <div class="col-md-3">
                                             <div class="mb-3">
                                                 <label for="lora-scale" class="form-label">LoRA Scale</label>
-                                                <input type="number" class="form-control" id="lora-scale" value="20.0" min="0.1" max="100" step="0.1">
+                                                <input type="number" class="form-control" id="lora-scale" value="16" min="0.1" max="100" step="0.1">
                                                 <small class="form-text text-muted">Scaling factor for adapter weights (10-30 typical)</small>
                                             </div>
                                         </div>
@@ -1115,8 +1144,8 @@
                                                 <select class="form-select" id="save-every" required>
                                                     <option value="5">5 steps</option>
                                                     <option value="10">10 steps</option>
-                                                    <option value="25">25 steps</option>
-                                                    <option value="50" selected>50 steps</option>
+                                                    <option value="25" selected>25 steps</option>
+                                                    <option value="50">50 steps</option>
                                                     <option value="100">100 steps</option>
                                                 </select>
                                             </div>
@@ -1449,6 +1478,19 @@
                                     <strong>Important:</strong> <i>only compare sessions trained on the same dataset</i></small>.
                                 </div>
                                 
+                                <!-- Search Bar -->
+                                <div class="mb-3">
+                                    <div class="input-group input-group-sm">
+                                        <span class="input-group-text">
+                                            <i class="fas fa-search"></i>
+                                        </span>
+                                        <input type="text" class="form-control" id="session-search-input" placeholder="Search sessions by model, type, or parameters...">
+                                        <button class="btn btn-outline-secondary" type="button" id="clear-search-btn" title="Clear search">
+                                            <i class="fas fa-times"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                                
                                 <!-- Clear All Button (always visible at top) -->
                                 <div class="mb-3">
                                     <button class="btn btn-sm btn-secondary w-100" id="clear-selection-btn">
@@ -1463,12 +1505,7 @@
                                         <p>Loading training sessions...</p>
                                     </div>
                                 </div>
-                                
-                                <!-- Selected Sessions Summary -->
-                                <div class="mt-3" id="selected-sessions-summary" style="display: none;">
-                                    <h6><i class="fas fa-chart-line me-2"></i>Selected Sessions</h6>
-                                    <div id="selected-sessions-count" class="small text-muted">0 sessions selected</div>
-                                </div>
+
                             </div>
                         </div>
                         
@@ -1582,6 +1619,46 @@
                                     </div>
                                 </div>
                             </div>
+                        </div>
+                        
+                    </div>
+                </div>
+                
+                <!-- Summary Table (shown when sessions are selected, full width) -->
+                <div class="card mt-4" id="summary-table-card" style="display: none;">
+                    <div class="card-header">
+                        <i class="fas fa-table me-2"></i>Training Sessions Summary
+                        <small class="text-muted float-end">Sorted by validation loss (best first)</small>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-hover" id="sessions-summary-table">
+                                                                        <thead class="table-light">
+                                            <tr>
+                                                <th>Training Session</th>
+                                                <th>Type</th>
+                                                <th>Method</th>
+                                                <th>Seq Len</th>
+                                                <th>Iterations</th>
+                                                <th>Best Checkpoint</th>
+                                                <th>Best Loss</th>
+                                                <th>Learning Rate</th>
+                                                <th>LR Decay</th>
+                                                <th>Weight Decay</th>
+                                                <th>Batch Size</th>
+                                                <th>Warmup Steps</th>
+                                                <th>LoRA Rank</th>
+                                                <th>LoRA Scale</th>
+                                                <th>LoRA Dropout</th>
+                                                <th>Layers</th>
+                                                <th>Target Modules</th>
+                                                <th>Actions</th>
+                                            </tr>
+                                        </thead>
+                                <tbody id="sessions-summary-tbody">
+                                    <!-- Table rows will be populated here -->
+                                </tbody>
+                            </table>
                         </div>
                     </div>
                 </div>
