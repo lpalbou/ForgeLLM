@@ -1,6 +1,12 @@
 // COMPARE TAB - USING PLOTLY (SAME AS MONITORING TAB)
 let selectedSessions = new Map();
 
+// Add this function to escape special characters in CSS selectors
+function escapeSelector(selector) {
+    // Escape special characters in CSS selectors
+    return selector.replace(/[ !"#$%&'()*+,./:;<=>?@[\\\]^`{|}~]/g, '\\$&');
+}
+
 // Simple function to check if elements exist
 function elementsExist() {
     const required = ['comparison-placeholder', 'comparison-charts-grid', 'compare-sessions-list'];
@@ -10,26 +16,39 @@ function elementsExist() {
 // Function to store selected sessions in localStorage
 function storeSelectedSessions() {
     const sessionsArray = Array.from(selectedSessions.keys());
-    localStorage.setItem('compare-selected-sessions', JSON.stringify(sessionsArray));
+    localStorage.setItem('compareSelectedSessions', JSON.stringify(sessionsArray));
 }
 
 // Function to restore selected sessions from localStorage
 async function restoreSelectedSessions() {
     try {
-        const storedSessions = localStorage.getItem('compare-selected-sessions');
+        const storedSessions = localStorage.getItem('compareSelectedSessions');
         if (storedSessions) {
             const sessionsArray = JSON.parse(storedSessions);
-            if (Array.isArray(sessionsArray) && sessionsArray.length > 0) {
-                // First clear any existing selections to avoid duplicates
-                clearAllSelections();
-                
-                // Then check each stored session ID and select it if available
-                for (const sessionId of sessionsArray) {
-                    const sessionCard = document.querySelector(`#session-card-${sessionId}`);
-                    if (sessionCard) {
-                        await handleSessionChange(sessionId, true);
-                    }
+            console.log('Restoring selected sessions:', sessionsArray);
+            
+            // Clear current selections first
+            selectedSessions.clear();
+            
+            // Then check each stored session ID and select it if available
+            for (const sessionId of sessionsArray) {
+                console.log(`Trying to restore session: ${sessionId}`);
+                const escapedSessionId = escapeSelector(sessionId);
+                const sessionCard = document.querySelector(`#session-card-${escapedSessionId}`);
+                if (sessionCard) {
+                    console.log(`Found session card for ${sessionId}, selecting it`);
+                    await handleSessionChange(sessionId, true);
+                } else {
+                    console.warn(`Session card for ${sessionId} not found during restore`);
                 }
+            }
+            
+            // Update UI after all sessions are restored
+            updateSessionColorsAndUI();
+            
+            // Generate comparison if we have at least 2 sessions
+            if (selectedSessions.size >= 2) {
+                generateComparison();
             }
         }
     } catch (error) {
@@ -132,6 +151,7 @@ async function loadSessions() {
         container.innerHTML = sessions.map(session => {
             // The session ID is the full directory name
             const sessionId = session.session_id || session.id || '';
+            const escapedSessionId = escapeSelector(sessionId);
             
             // Clean up model name by removing "dataset_cpt_" prefix
             const cleanModelName = (session.model_name || 'Unknown').replace(/^dataset_cpt_/, '');
@@ -161,13 +181,13 @@ async function loadSessions() {
             return `
                 <div class="session-item mb-2">
                     <div class="session-card ${selectedClass}" 
-                         id="session-card-${sessionId}" 
+                         id="session-card-${escapedSessionId}" 
                          data-session-id="${sessionId}"
                          data-bs-toggle="tooltip" 
                          data-bs-placement="right" 
                          data-bs-html="false"
                          title="${tooltipContent}"
-                         onclick="handleSessionChange('${sessionId}', !selectedSessions.has('${sessionId}'))">
+                         onclick="handleSessionChange('${sessionId.replace(/'/g, "\\'")}', !selectedSessions.has('${sessionId.replace(/'/g, "\\'")}'))">
                         <div class="session-header">
                             <div class="session-name">${session.session_name || session.name || 'Unnamed Session'}</div>
                             <div class="session-status">
@@ -194,17 +214,17 @@ async function loadSessions() {
                         </div>
                         <div class="session-actions mt-2 pt-2 border-top">
                             <button class="btn btn-sm btn-outline-secondary view-params-btn" 
-                                    onclick="showSessionParameters('${sessionId}'); event.preventDefault(); event.stopPropagation();"
+                                    onclick="showSessionParameters('${sessionId.replace(/'/g, "\\'")}'); event.preventDefault(); event.stopPropagation();"
                                     title="View Parameters">
                                 <i class="fas fa-file-code"></i>
                             </button>
                             <button class="btn btn-sm btn-outline-secondary fuse-adapter-btn" 
-                                    onclick="fuseSessionAdapter('${sessionId}'); event.preventDefault(); event.stopPropagation();"
+                                    onclick="fuseSessionAdapter('${sessionId.replace(/'/g, "\\'")}'); event.preventDefault(); event.stopPropagation();"
                                     title="Fuse this adapter with base model">
                                 <i class="fas fa-layer-group"></i>
                             </button>
                             <button class="btn btn-sm btn-outline-secondary test-session-btn" 
-                                    onclick="testSessionInPlayground('${sessionId}'); event.preventDefault(); event.stopPropagation();"
+                                    onclick="testSessionInPlayground('${sessionId.replace(/'/g, "\\'")}'); event.preventDefault(); event.stopPropagation();"
                                     title="Test in Playground">
                                 <i class="fas fa-vial"></i>
                             </button>
@@ -263,18 +283,35 @@ async function handleSessionChange(sessionId, isSelected) {
     const isDarkMode = document.documentElement.getAttribute('data-theme') === 'dark' || document.body.getAttribute('data-theme') === 'dark';
     const defaultBgColor = isDarkMode ? '#2d2d2d' : '#f8f9fa';
 
+    console.log(`Handling session change for ${sessionId}, isSelected: ${isSelected}`);
+
     // First update the visual state immediately for better UX
-    const sessionCard = document.querySelector(`#session-card-${sessionId}`);
+    const sessionCard = document.querySelector(`#session-card-${escapeSelector(sessionId)}`);
     if (sessionCard) {
         if (isSelected) {
+            // Apply all selected styles directly
             sessionCard.classList.add('selected-session-card');
-            sessionCard.style.backgroundColor = 'rgba(13, 110, 253, 0.25)';
+            sessionCard.style.backgroundColor = isDarkMode ? 'rgba(13, 110, 253, 0.3)' : 'rgba(13, 110, 253, 0.25)';
             sessionCard.style.borderLeftColor = '#0d6efd';
+            sessionCard.style.borderLeftWidth = '4px';
+            sessionCard.style.borderLeftStyle = 'solid';
+            sessionCard.style.boxShadow = isDarkMode ? 
+                '0 0 0 1px rgba(13, 110, 253, 0.4)' : 
+                '0 0 0 1px rgba(13, 110, 253, 0.25)';
+            sessionCard.style.position = 'relative';
+            sessionCard.style.zIndex = '1';
         } else {
+            // Remove all selected styles
             sessionCard.classList.remove('selected-session-card');
             sessionCard.style.backgroundColor = defaultBgColor;
             sessionCard.style.borderLeftColor = 'transparent';
+            sessionCard.style.borderLeftWidth = '4px';
+            sessionCard.style.boxShadow = 'none';
+            sessionCard.style.position = '';
+            sessionCard.style.zIndex = '';
         }
+    } else {
+        console.warn(`Session card for ${sessionId} not found in DOM`);
     }
 
     if (isSelected) {
@@ -297,13 +334,25 @@ async function handleSessionChange(sessionId, isSelected) {
                 session_name: session.session_name,
                 session_id: sessionId
             });
+            
+            console.log(`Added session ${sessionId} to selectedSessions map`);
         } catch (error) {
             console.error(`Error loading session ${sessionId}:`, error);
-            document.getElementById(`session-${sessionId}`).checked = false;
+            // Remove the checkbox reference that doesn't exist
+            // Instead, just update the UI to reflect that selection failed
+            if (sessionCard) {
+                sessionCard.classList.remove('selected-session-card');
+                sessionCard.style.backgroundColor = defaultBgColor;
+                sessionCard.style.borderLeftColor = 'transparent';
+                sessionCard.style.boxShadow = 'none';
+                sessionCard.style.position = '';
+                sessionCard.style.zIndex = '';
+            }
             return;
         }
     } else {
         selectedSessions.delete(sessionId);
+        console.log(`Removed session ${sessionId} from selectedSessions map`);
     }
     
     updateSelectionSummary();
@@ -317,6 +366,12 @@ async function handleSessionChange(sessionId, isSelected) {
 
     // Store the updated selections
     storeSelectedSessions();
+    
+    // Debug: log the current selected sessions
+    console.log('Current selected sessions:');
+    for (const [id, data] of selectedSessions.entries()) {
+        console.log(`- ${id}: ${data.session_name}`);
+    }
 }
 
 function updateSessionColorsAndUI() {
@@ -324,21 +379,32 @@ function updateSessionColorsAndUI() {
     const isDarkMode = document.documentElement.getAttribute('data-theme') === 'dark' || document.body.getAttribute('data-theme') === 'dark';
     const defaultBgColor = isDarkMode ? '#2d2d2d' : '#f8f9fa';
     
+    console.log('Updating session colors and UI');
+    console.log(`Dark mode: ${isDarkMode}, Default bg color: ${defaultBgColor}`);
+    console.log(`Selected sessions count: ${selectedSessions.size}`);
+    
     // Reset all session cards to their default, non-selected state
     document.querySelectorAll('.session-card').forEach(card => {
         card.classList.remove('selected-session-card');
         card.style.backgroundColor = defaultBgColor;
         card.style.borderLeftColor = 'transparent';
+        card.style.boxShadow = 'none';
     });
 
     // Apply selected state to selected session cards
     for (const [sessionId, sessionData] of selectedSessions) {
-        const sessionCard = document.querySelector(`#session-card-${sessionId}`);
+        console.log(`Applying selected state to session: ${sessionId}`);
+        const sessionCard = document.querySelector(`#session-card-${escapeSelector(sessionId)}`);
         if (sessionCard) {
+            console.log(`Found session card for ${sessionId}`);
             sessionCard.classList.add('selected-session-card');
             // Apply inline styles as well for maximum compatibility
-            sessionCard.style.backgroundColor = 'rgba(13, 110, 253, 0.25)';
+            sessionCard.style.backgroundColor = isDarkMode ? 'rgba(13, 110, 253, 0.3)' : 'rgba(13, 110, 253, 0.25)';
             sessionCard.style.borderLeftColor = '#0d6efd';
+            sessionCard.style.borderLeftWidth = '4px';
+            sessionCard.style.boxShadow = '0 0 0 1px rgba(13, 110, 253, 0.25)';
+        } else {
+            console.warn(`Session card for ${sessionId} not found when applying selected state`);
         }
     }
 }
@@ -629,7 +695,7 @@ async function generateComparison() {
                             gapX.push(...trainingLoss.x);
                             gapY.push(...trainingLoss.x.map(() => 0));
                             
-                            gapTraces.push({
+                             gapTraces.push({
                                 x: gapX, y: gapY, type: 'scatter', mode: 'lines',
                                 name: `${sessionData.session_name} (No Val)`,
                                 line: { color: sessionData.color, width: 2, dash: 'dash' } // Use assigned color
@@ -716,11 +782,11 @@ document.addEventListener('DOMContentLoaded', function() {
     } else {
         console.log('Compare tab elements not found, will retry when tab becomes active');
     }
-    
+
     // Add event listener for fuse tab shown to handle adapter selection from localStorage
-    document.addEventListener('shown.bs.tab', function(event) {
+document.addEventListener('shown.bs.tab', function(event) {
         if (event.target.getAttribute('data-bs-target') === '#fuse') {
-            setTimeout(() => {
+        setTimeout(() => {
                 const storedAdapter = localStorage.getItem('forge-fuse-adapter');
                 if (storedAdapter) {
                     console.log('Found stored adapter path:', storedAdapter);
@@ -1214,9 +1280,9 @@ async function showSessionParameters(sessionId) {
         const fineTuneType = config.fine_tune_type || 'Full';
         
         // Display the parameters in the modal
-        const logsContent = document.getElementById('logs-content');
-        if (logsContent) {
-            logsContent.innerHTML = `
+        const parametersModalBody = document.getElementById('parameters-modal-body');
+        if (parametersModalBody) {
+            parametersModalBody.innerHTML = `
                 <div class="alert alert-info mb-3">
                     <h6 class="mb-2"><i class="fas fa-info-circle me-2"></i>Training Parameters</h6>
                     <div class="row">
@@ -1242,14 +1308,42 @@ ${JSON.stringify(rawData, null, 2)}
             `;
             
             // Update the modal title
-            const modalTitle = document.querySelector('#logsModal .modal-title');
+            const modalTitle = document.querySelector('#parameters-modal .modal-title');
             if (modalTitle) {
-                modalTitle.textContent = `Training Logs: ${sessionId}`;
+                modalTitle.textContent = `Session Parameters: ${sessionId}`;
+            }
+            
+            // Setup copy button with the raw data
+            const copyButton = document.getElementById('copy-parameters-btn');
+            if (copyButton) {
+                // Remove any existing event listeners
+                const newCopyButton = copyButton.cloneNode(true);
+                copyButton.parentNode.replaceChild(newCopyButton, copyButton);
+                
+                // Add new event listener
+                newCopyButton.addEventListener('click', () => {
+                    const textToCopy = JSON.stringify(rawData, null, 2);
+                    navigator.clipboard.writeText(textToCopy)
+                        .then(() => {
+                            // Show success tooltip
+                            const tooltip = new bootstrap.Tooltip(newCopyButton, {
+                                title: 'Copied!',
+                                trigger: 'manual',
+                                placement: 'top'
+                            });
+                            tooltip.show();
+                            setTimeout(() => tooltip.hide(), 2000);
+                        })
+                        .catch(err => {
+                            console.error('Failed to copy parameters:', err);
+                            alert('Failed to copy parameters to clipboard');
+                        });
+                });
             }
             
             // Show the modal
-            const logsModal = new bootstrap.Modal(document.getElementById('logsModal'));
-            logsModal.show();
+            const parametersModal = new bootstrap.Modal(document.getElementById('parameters-modal'));
+            parametersModal.show();
         }
         
         // Hide loading indicator
@@ -1293,10 +1387,10 @@ document.addEventListener('shown.bs.tab', function(event) {
                         const success = await selectBestCheckpoint('fuse-adapter-select', adapterInfo);
                         if (success) {
                             console.log('Successfully selected best checkpoint');
-                        } else {
+        } else {
                             console.error('Failed to select best checkpoint');
-                        }
-                    } catch (error) {
+        }
+    } catch (error) {
                         console.error('Error selecting best checkpoint:', error);
                     }
                     
@@ -1429,7 +1523,34 @@ style.textContent = `
 .selected-session-card {
     background-color: rgba(13, 110, 253, 0.25) !important;
     border-left-color: #0d6efd !important;
+    border-left-width: 4px !important;
+    border-left-style: solid !important;
     box-shadow: 0 0 0 1px rgba(13, 110, 253, 0.25) !important;
+    position: relative !important;
+    z-index: 1 !important;
+}
+
+/* Add a blue overlay to make selection more obvious */
+.selected-session-card::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    border: 2px solid rgba(13, 110, 253, 0.5);
+    border-radius: 4px;
+    pointer-events: none;
+    z-index: -1;
+}
+
+/* Dark mode selected state */
+[data-theme="dark"] .selected-session-card {
+    background-color: rgba(13, 110, 253, 0.3) !important;
+    border-left-color: #0d6efd !important;
+    border-left-width: 4px !important;
+    border-left-style: solid !important;
+    box-shadow: 0 0 0 1px rgba(13, 110, 253, 0.4) !important;
 }
 
 /* Session Header */
