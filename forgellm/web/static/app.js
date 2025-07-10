@@ -437,38 +437,58 @@ class TrainingInterface {
     }
     
     startPeriodicUpdates() {
-        // Simple update every 10 seconds
+        // INTELLIGENT: Only update during active training on Monitoring Tab (every 10 seconds)
+        console.log('🔄 Starting intelligent periodic updates (10s interval only during active training on Monitoring Tab)');
         this.updateInterval = setInterval(() => {
-            this.performSingleUpdate();
+            this.performIntelligentUpdate();
         }, 10000);
     }
     
-    async performSingleUpdate() {
+    async performIntelligentUpdate() {
         try {
+            // Get current active tab
+            const monitoringTabButton = document.querySelector('#monitoring-tab');
+            const isMonitoringTabActive = monitoringTabButton && monitoringTabButton.classList.contains('active');
+            
+            // Always check training status (lightweight call)
             const response = await fetch('/api/dashboard/realtime');
             const data = await response.json();
             
             this.isTraining = data.active || false;
             this.updateTrainingButtons(this.isTraining);
             
-            if (data.active && data.current_values) {
-                this.updateAllFields(data.current_values, data.config);
-                this.updateTrainingStatus(data);
-                if (data.charts) {
-                    this.renderCharts(data.charts);
+            // ONLY update dashboard data when:
+            // 1. Training is active AND
+            // 2. Monitoring tab is active
+            if (this.isTraining && isMonitoringTabActive) {
+                console.log('📊 Updating monitoring dashboard (training active + monitoring tab active)');
+                
+                if (data.current_values) {
+                    this.updateAllFields(data.current_values, data.config);
+                    this.updateTrainingStatus(data);
+                    if (data.charts) {
+                        this.renderCharts(data.charts);
+                    }
                 }
             } else {
-                this.updateTrainingStatus({active: false});
+                if (!this.isTraining) {
+                    console.log('⏹️ Training not active - skipping dashboard updates');
+                } else if (!isMonitoringTabActive) {
+                    console.log('📋 Monitoring tab not active - skipping dashboard updates');
+                }
+                
+                // Always update training status regardless
+                this.updateTrainingStatus({active: this.isTraining});
             }
             
-            // Load checkpoints every 60 seconds
+            // Load checkpoints every 60 seconds (lightweight operation, always needed)
             if (Date.now() - (this.lastCheckpointsUpdate || 0) > 60000) {
                 this.loadCheckpoints();
                 this.lastCheckpointsUpdate = Date.now();
             }
             
         } catch (error) {
-            console.error('Error in update:', error);
+            console.error('Error in intelligent update:', error);
         }
     }
     
@@ -636,7 +656,7 @@ class TrainingInterface {
 
         // Use the unified session card generator from the Compare tab
         const sessionsHTML = trainingSessions.map(session => {
-            return generateSessionCard(session, {
+            return window.generateSessionCard(session, {
                 isCompareTab: false,
                 showSelectionFeatures: false,
                 containerId: 'training-session-card'
@@ -646,10 +666,15 @@ class TrainingInterface {
         // Use the same compact layout as Compare tab
         container.innerHTML = sessionsHTML;
         
-        // Populate loss badges for training tab sessions with a small delay to ensure DOM is ready
+        // Populate loss badges using the new optimized batch function
+        console.log('Populating loss badges for Training tab session cards using batch API');
         setTimeout(() => {
-            populateLossBadges(trainingSessions);
-        }, 100);
+            if (typeof window.populateLossBadges === 'function') {
+                window.populateLossBadges(trainingSessions);
+            } else {
+                console.warn('populateLossBadges function not found on window');
+            }
+        }, 100); // Small delay to ensure DOM rendering
     }
     
     updateTrainingSessionsDropdown(trainingSessions) {
@@ -695,8 +720,8 @@ class TrainingInterface {
         
         if (!logFile) {
             // No session selected, show current training
-            console.log('📊 No session selected, performing single update');
-            this.performSingleUpdate();
+            console.log('📊 No session selected, performing intelligent update');
+            this.performIntelligentUpdate();
             return;
         }
         
@@ -831,10 +856,10 @@ class TrainingInterface {
     }
     
     async checkTrainingStatus() {
-        console.log('🚫 OLD checkTrainingStatus() called - redirecting to performSingleUpdate()');
-        // OLD METHOD DISABLED - all updates now go through performSingleUpdate()
+        console.log('🚫 OLD checkTrainingStatus() called - redirecting to performIntelligentUpdate()');
+        // OLD METHOD DISABLED - all updates now go through performIntelligentUpdate()
         // This prevents duplicate API calls and data conflicts
-        this.performSingleUpdate();
+        this.performIntelligentUpdate();
     }
     
     /**

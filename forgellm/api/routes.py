@@ -1089,18 +1089,18 @@ def setup_api(app: Flask) -> Blueprint:
         try:
             import time
             
-            # Simple rate limiting: max 10 requests per 5 seconds
+            # Relaxed rate limiting: max 50 requests per 10 seconds to allow badge population
             current_time = time.time()
             nonlocal _historical_request_count, _historical_request_reset_time
             
-            if current_time - _historical_request_reset_time > 5:
+            if current_time - _historical_request_reset_time > 10:
                 _historical_request_count = 0
                 _historical_request_reset_time = current_time
             
             _historical_request_count += 1
             
-            if _historical_request_count > 10:
-                logger.warning(f"Rate limit exceeded for historical dashboard requests: {_historical_request_count}/10")
+            if _historical_request_count > 50:
+                logger.warning(f"Rate limit exceeded for historical dashboard requests: {_historical_request_count}/50")
                 return jsonify({
                     'success': False, 
                     'error': 'Rate limit exceeded. Please wait before making more requests.'
@@ -1111,41 +1111,17 @@ def setup_api(app: Flask) -> Blueprint:
             if not log_file:
                 return jsonify({'success': False, 'error': 'No log file specified'}), 400
             
-            # CRITICAL: Check if training is active and limit concurrent processing
-            # This prevents memory spikes during training from Compare Tab batch loading
-            import psutil
-            mlx_training_active = False
-            try:
-                for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
-                    try:
-                        if proc.info['cmdline']:
-                            cmdline = ' '.join(proc.info['cmdline'])
-                            if any(pattern in cmdline for pattern in [
-                                'mlx_lm.lora', 'mlx_lm.fuse', 'mlx-lm', 'python -m mlx_lm'
-                            ]):
-                                mlx_training_active = True
-                                break
-                    except (psutil.NoSuchProcess, psutil.AccessDenied):
-                        continue
-            except Exception:
-                pass
-            
             # Load training data
             data = load_training_data(log_file)
             
             if 'error' in data:
                 return jsonify({'success': False, 'error': data['error']}), 500
             
-            # Generate chart data for web display (skip during training to save memory)
-            charts = None if mlx_training_active else generate_web_chart_data(data)
+            # Generate chart data for web display
+            charts = generate_web_chart_data(data)
             
             # Identify best checkpoints
             best_checkpoints = identify_best_checkpoints(data, top_k=3)
-            
-            # Force garbage collection if training is active to free memory immediately
-            if mlx_training_active:
-                import gc
-                gc.collect()
             
             # Create summary with metrics and best checkpoints
             metrics = data.get('metrics', [])
@@ -1229,6 +1205,133 @@ def setup_api(app: Flask) -> Blueprint:
             
         except Exception as e:
             logger.error(f"Error getting historical dashboard: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+
+    @bp.route('/training/sessions/batch-data', methods=['POST'])
+    def get_batch_session_data():
+        """Get badge data for multiple sessions in a single optimized request."""
+        try:
+            data = request.get_json()
+            session_ids = data.get('session_ids', [])
+            
+            if not session_ids:
+                return jsonify({'success': False, 'error': 'No session IDs provided'}), 400
+            
+            # Check if training is active - this is the ONLY place we check
+            import psutil
+            mlx_training_active = False
+            try:
+                for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+                    try:
+                        if proc.info['cmdline']:
+                            cmdline = ' '.join(proc.info['cmdline'])
+                            if any(pattern in cmdline for pattern in [
+                                'mlx_lm.lora', 'mlx_lm.fuse', 'mlx-lm', 'python -m mlx_lm'
+                            ]):
+                                mlx_training_active = True
+                                break
+                    except (psutil.NoSuchProcess, psutil.AccessDenied):
+                        continue
+            except Exception:
+                pass
+            
+            # If training is active, return training-in-progress response
+            if mlx_training_active:
+                return jsonify({
+                    'success': False,
+                    'training_active': True,
+                    'message': 'Badge data loading disabled during training to prevent memory conflicts'
+                })
+            
+            # Find all sessions and collect their data
+            import glob
+            from pathlib import Path
+            
+            possible_dirs = [Path("models/cpt")]
+            batch_results = {}
+            
+            for session_id in session_ids:
+                try:
+                    # Find session log file
+                    log_file = None
+                    for models_dir in possible_dirs:
+                        if models_dir.exists():
+                            log_pattern = str(models_dir / session_id / "CPT_*.json")
+                            log_files = glob.glob(log_pattern)
+                            if log_files:
+                                log_file = log_files[0]
+                                break
+                    
+                    if not log_file:
+                        batch_results[session_id] = {
+                            'success': False,
+                            'error': 'Session not found'
+                        }
+                        continue
+                    
+                    # Load minimal data for badges only
+                    with open(log_file, 'r') as f:
+                        session_data = json.load(f)
+                    
+                    metrics = session_data.get('metrics', [])
+                    config = session_data.get('config', {})
+                    
+                    # Extract latest loss values
+                    latest_train_loss = 'N/A'
+                    latest_val_loss = 'N/A'
+                    
+                    if metrics:
+                        latest = metrics[-1]
+                        train_loss = latest.get('train_loss')
+                        val_loss = latest.get('val_loss')
+                        
+                        if train_loss is not None:
+                            latest_train_loss = f"{train_loss:.3f}" if train_loss >= 0.01 else f"{train_loss:.1e}"
+                        
+                        if val_loss is not None:
+                            latest_val_loss = f"{val_loss:.3f}" if val_loss >= 0.01 else f"{val_loss:.1e}"
+                    
+                    # Extract key training parameters from config
+                    learning_rate = None
+                    lr_decay_factor = None
+                    weight_decay = None
+                    fine_tune_type = None
+                    
+                    if config:
+                        learning_rate = config.get('learning_rate')
+                        lr_decay_factor = config.get('lr_decay_factor')
+                        weight_decay = config.get('weight_decay')
+                        
+                        # Determine fine-tune type
+                        if config.get('lora_layers'):
+                            fine_tune_type = 'dora' if config.get('use_dora', False) else 'lora'
+                        else:
+                            fine_tune_type = 'full'
+                    
+                    batch_results[session_id] = {
+                        'success': True,
+                        'training_loss': latest_train_loss,
+                        'validation_loss': latest_val_loss,
+                        'learning_rate': learning_rate,
+                        'lr_decay_factor': lr_decay_factor,
+                        'weight_decay': weight_decay,
+                        'fine_tune_type': fine_tune_type
+                    }
+                    
+                except Exception as e:
+                    logger.warning(f"Error loading batch data for session {session_id}: {e}")
+                    batch_results[session_id] = {
+                        'success': False,
+                        'error': str(e)
+                    }
+            
+            return jsonify({
+                'success': True,
+                'results': batch_results
+            })
+            
+        except Exception as e:
+            logger.error(f"Error getting batch session data: {e}")
             return jsonify({'success': False, 'error': str(e)}), 500
     
     @bp.route('/training/sessions', methods=['GET'])
