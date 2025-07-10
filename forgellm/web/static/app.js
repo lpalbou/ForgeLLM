@@ -841,6 +841,15 @@ class TrainingInterface {
      * Start training with current configuration
      */
     async startTraining() {
+        // CRITICAL FIX: Prevent duplicate training submissions
+        if (this.isTraining) {
+            this.showAlert('Training is already in progress', 'warning');
+            return;
+        }
+        
+        // Set flag immediately to prevent race conditions
+        this.isTraining = true;
+        
         // Get form values
         const config = {
             model_name: document.getElementById('model-select').value, // Changed from 'model' to 'model_name'
@@ -904,7 +913,7 @@ class TrainingInterface {
             this.hideLoading();
             
             if (data.success) {
-                this.isTraining = true;
+                // Training started successfully - isTraining already set to true above
                 this.updateTrainingButtons(true);
                 this.showAlert('Training started successfully!', 'success');
                 
@@ -926,11 +935,15 @@ class TrainingInterface {
                     monitoringTab.show();
                 }, 1000);
             } else {
+                // Training failed to start - reset flag
+                this.isTraining = false;
                 this.showAlert(data.error || 'Failed to start training', 'danger');
             }
         } catch (error) {
             console.error('Error starting training:', error);
             this.hideLoading();
+            // Training failed to start - reset flag  
+            this.isTraining = false;
             this.showAlert('Error starting training', 'danger');
         }
     }

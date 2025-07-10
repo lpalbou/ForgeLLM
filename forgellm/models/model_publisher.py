@@ -741,7 +741,7 @@ No checkpoint analysis available - this may indicate insufficient validation dat
         # Try to get version from forgellm package
         try:
             import forgellm
-            return getattr(forgellm, '__version__', '0.3.8')
+            return getattr(forgellm, '__version__', '0.4.0')
         except ImportError:
             return '0.3.7'
     

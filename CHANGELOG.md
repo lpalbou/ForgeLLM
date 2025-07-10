@@ -5,122 +5,152 @@ All notable changes to ForgetLLM will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2025-01-10
+
+### 🐛 Critical Memory Bug Fix
+
+#### **Training Memory Overflow Resolution**
+- **Issue**: Training sessions would fail with GPU memory errors (`[METAL] Command buffer execution failed: Insufficient Memory`) after the first iteration, despite working perfectly with direct MLX-LM command line calls
+- **Root Cause**: Compare Tab was making 50+ simultaneous API requests when switching tabs during training, creating memory spikes that interfered with MLX training
+- **Timeline**: Issue appeared between July 6-10, 2025 when Compare Tab functionality was introduced
+
+#### **Technical Details**
+- **Problem Pattern**: Training would complete first iteration successfully, then fail during second iteration with OOM error
+- **Memory Impact**: 50+ sessions × 2 API calls each = 100+ concurrent requests consuming 750MB-3.5GB during critical training moments
+- **Trigger Mechanism**: Compare Tab session restoration from localStorage during training would call `handleSessionChange()` for each previously selected session
+
+#### **Fix Implementation**
+- **Multi-Layer Protection**: Added training detection at 4 different levels to prevent any Compare Tab API calls during active training
+  1. **SessionDataManager**: Blocks individual session data loading with training status check
+  2. **Tab Activation**: Shows warning message without making API calls when training detected
+  3. **Session Restoration**: Skips loading sessions that were previously selected
+  4. **Badge Population**: Checks training status before fetching session data for UI updates
+
+- **Duplicate Training Prevention**: Added `isTraining` flag to prevent race conditions that could launch multiple training processes simultaneously
+
+- **Rate Limiting**: Added 10 requests/5 seconds limit as backup protection against API request floods
+
+#### **Results**
+- Training now works reliably without memory conflicts
+- Compare Tab gracefully disabled during training with clear user messaging
+- No more duplicate training process launches
+- Eliminated 100+ concurrent API request spikes during training
+
+### 🔧 Technical Infrastructure
+- **Error Handling**: Added error messages when session loading blocked during training
+- **User Experience**: Clear warning messages explain why Compare Tab features are temporarily unavailable
+- **Backward Compatibility**: All changes maintain existing functionality when training is not active
+
+---
+
 ## [0.3.8] - 2025-01-09
 
-### 🚀 Compare Tab Major Enhancements
+### 🔄 Compare Tab Updates
 
-#### **Universal Session Card System**
-- **Cross-Tab Compatibility**: Revolutionary unified session card design working across Compare and Training tabs
+#### **Session Card System**
+- **Cross-Tab Compatibility**: Unified session card design working across Compare and Training tabs
   - **Unique ID System**: Proper tab separation with `compare-session-card-` and `training-session-card-` prefixes
   - **Tab-Specific Population**: Session cards only populate when entering respective tabs, preventing conflicts
-  - **Universal Badge Function**: Single `populateLossBadges()` function works intelligently across both tabs
-  - **Tab-Aware Selectors**: Smart container detection prioritizes active tab for accurate badge updates
-  - **Zero ID Conflicts**: Complete elimination of duplicate session card IDs between tabs
+  - **Badge Function**: Single `populateLossBadges()` function works across both tabs
+  - **Tab-Aware Selectors**: Container detection for accurate badge updates
+  - **ID Conflicts**: Elimination of duplicate session card IDs between tabs
 
-#### **Real-Time Loss Badge Population**
-- **Accurate Loss Values**: Complete replacement of placeholder badges with real training/validation loss data
+#### **Loss Badge Population**
+- **Accurate Loss Values**: Replacement of placeholder badges with real training/validation loss data
   - **Training Tab**: 100% success rate (60/60 badges) showing actual loss values like "T: 1.375", "V: 1.398"
   - **Compare Tab**: 97% success rate (58/60 badges) with automatic population on tab activation
-  - **Universal Function**: Single function handles both tabs with intelligent container detection
-  - **Background API Calls**: Async fetching from `/api/dashboard/historical` for accurate loss data
-  - **Enhanced LR Display**: Complete learning rate format "LR: 3.30e-5 | LDR 0.15 | WD 0.015" with decay and weight decay
+  - **Function**: Single function handles both tabs with container detection
+  - **API Calls**: Async fetching from `/api/dashboard/historical` for accurate loss data
+  - **LR Display**: Learning rate format "LR: 3.30e-5 | LDR 0.15 | WD 0.015" with decay and weight decay
 
-#### **Precise Base Model Selection**
-- **Enhanced Training Form Population**: Revolutionary 4-strategy matching algorithm for exact base model selection
+#### **Base Model Selection**
+- **Training Form Population**: 4-strategy matching algorithm for base model selection
   - **Strategy 1**: Exact value match (`option.value === baseModel`) - highest priority
   - **Strategy 2**: Exact clean text match (removes icons and formatting) 
   - **Strategy 3**: Normalized format matching (handles different separators)
   - **Strategy 4**: Careful partial matching with high threshold (≥0.8 score) for safety
   - **Match Scoring**: `calculateModelMatchScore()` function prevents wrong model selection
-  - **Comprehensive Logging**: Detailed console output for debugging model selection process
+  - **Logging**: Console output for debugging model selection process
   - **Fixed Issue**: Session with `"base_model": "Qwen/Qwen3-32B-MLX-bf16"` now correctly selects exact base model instead of published variants
 
-#### **Interactive Curve Highlighting**
-- **Dynamic Chart Highlighting**: Added real-time curve highlighting when hovering over session cards
+#### **Curve Highlighting**
+- **Chart Highlighting**: Added curve highlighting when hovering over session cards
   - **Visual Connection**: Easy identification of which curve corresponds to which training session
   - **Multi-Chart Support**: Highlighting works simultaneously across all 4 comparison charts
     - **Loss Analysis**: Validation loss curves with hover highlighting
     - **Perplexity Analysis**: Perplexity evolution with visual emphasis
     - **Loss Stability**: Coefficient of variation curves with highlighting support
     - **Generalization Gap**: Train/validation gap analysis with hover effects
-  - **Enhanced Visual Feedback**: 
-    - **Hovered Curve**: Thicker line (4px width) with full opacity for clear emphasis
+  - **Visual Feedback**: 
+    - **Hovered Curve**: Thicker line (4px width) with full opacity
     - **Non-Hovered Curves**: Dimmed with reduced opacity (0.4) and thinner lines (1.5px)
     - **Color Preservation**: Same color scheme maintained, only visual emphasis changes
-  - **Smooth Interaction**: Instant chart updates on hover with no performance impact
-  - **Selected Sessions Only**: Hover effects only apply to selected session cards for intuitive UX
-  - **Professional Polish**: Seamless integration with existing chart rendering system
+  - **Interaction**: Chart updates on hover
+  - **Selected Sessions Only**: Hover effects only apply to selected session cards
 
-#### **Summary Table Enhancements**
-- **Optimized Column Layout**: Reordered summary table columns for better data flow
-  - **New Order**: Training Session → Type → Method → Seq Len → **Iterations → Best Checkpoint → Best Loss** → Learning Rate → etc.
-  - **Logical Progression**: Performance metrics (iterations, checkpoint, loss) now grouped together
-  - **Improved Readability**: Key performance indicators positioned prominently for quick assessment
-- **Streamlined Interface**: Removed redundant "Selected Sessions" panel from left sidebar
-  - **Cleaner Design**: Left panel now focuses purely on session selection and search
-  - **Enhanced Usability**: More space for session cards and improved visual hierarchy
-  - **Summary Table Focus**: Full-width summary table serves as primary overview for selected sessions
+#### **Summary Table Updates**
+- **Column Layout**: Reordered summary table columns for better data flow
+  - **New Order**: Training Session → Type → Method → Seq Len → **Iterations → Best Checkpoint → Best Loss** → Learning Rate
+  - **Performance Metrics**: Iterations, checkpoint, and loss now grouped together
+- **Interface Cleanup**: Removed redundant "Selected Sessions" panel from left sidebar
+  - **Focus**: Left panel focuses on session selection and search
+  - **Summary Table**: Full-width summary table serves as primary overview for selected sessions
 
-#### **Single Session Analysis Support**
-- **Expanded Functionality**: Compare tab now supports viewing single training sessions (previously required 2+ sessions)
-  - **Immediate Chart Generation**: Charts appear as soon as one session is selected
-  - **Dynamic Chart Titles**: Titles automatically adjust between "Analysis" and "Comparison" modes
-  - **Enhanced Placeholder**: Updated instructions to reflect single-session capability
-  - **Improved User Experience**: No more waiting to select multiple sessions to see training metrics
+#### **Single Session Support**
+- **Functionality**: Compare tab now supports viewing single training sessions (previously required 2+ sessions)
+  - **Chart Generation**: Charts appear as soon as one session is selected
+  - **Dynamic Titles**: Titles automatically adjust between "Analysis" and "Comparison" modes
+  - **Updated Instructions**: Instructions reflect single-session capability
 
-#### **Enhanced Visual Feedback & Interactivity**
-- **Clickable Session Cards**: Clear visual feedback when hovering over session cards
+#### **Visual Feedback & Interactivity**
+- **Session Cards**: Visual feedback when hovering over session cards
   - **Hover Animation**: Cards lift 2px with smooth transition effect
-  - **Enhanced Shadow**: Blue-tinted shadow indicates clickable state
+  - **Shadow**: Blue-tinted shadow indicates clickable state
   - **Border Highlight**: Left border changes to primary blue on hover
-  - **Theme-Aware**: Different shadow opacity for light/dark modes
-- **Professional Card Design**: Improved visual hierarchy and user interaction cues
+  - **Theme Support**: Different shadow opacity for light/dark modes
 
-#### **Session Management Interface Improvements**
-- **Always-Visible Clear All Button**: Repositioned Clear All button for better accessibility
+#### **Session Management Updates**
+- **Clear All Button**: Repositioned Clear All button for better accessibility
   - **Top Placement**: Moved from bottom of panel to top, right after dataset warning
   - **Always Accessible**: No longer hidden until sessions are selected
-  - **Full-Width Design**: Enhanced visual prominence with `w-100` styling
-  - **Improved UX**: Users can quickly clear selections without scrolling or selecting sessions first
+  - **Full-Width Design**: Visual prominence with `w-100` styling
 
-#### **Session Card Feature Expansion**
-- **Comprehensive Session Actions**: Added powerful new action buttons to each session card
-  - **📁 Folder Browser Button**: Opens session training folder in modal browser
-    - **Read-Only File Explorer**: Navigate through session directories and files
-    - **Session Path Detection**: Automatically extracts directory from log file path
+#### **Session Card Actions**
+- **Session Actions**: Added action buttons to each session card
+  - **📁 Folder Browser**: Opens session training folder in modal browser
+    - **File Explorer**: Navigate through session directories and files
+    - **Path Detection**: Extracts directory from log file path
     - **Modal Integration**: Uses existing file browser with view-only mode
-  - **🗑️ Delete Session Button**: Red delete button with confirmation for session removal
+  - **🗑️ Delete Session**: Red delete button with confirmation for session removal
     - **Confirmation Dialog**: Two-step confirmation process to prevent accidental deletion
     - **Backend API**: New `/api/training/sessions/delete` endpoint for safe session removal
     - **Auto-Refresh**: Session list automatically updates after successful deletion
-    - **Complete Cleanup**: Removes all session files and folders
 
-#### **Enhanced Session Information Display**
-- **Comprehensive Badge System**: Rich metadata display with color-coded badges
-  - **Training Type Detection**: Enhanced multi-level detection for LoRA, DoRA, and Full training
-    - **Smart Heuristics**: Analyzes session names, log paths, and adapter patterns
-    - **Background Enrichment**: Async function fetches actual config data for accurate badges
-    - **Real-Time Updates**: Badges update with actual data from training configs
+#### **Session Information Display**
+- **Badge System**: Metadata display with color-coded badges
+  - **Training Type Detection**: Multi-level detection for LoRA, DoRA, and Full training
+    - **Heuristics**: Analyzes session names, log paths, and adapter patterns
+    - **Background Enrichment**: Async function fetches actual config data for badges
+    - **Updates**: Badges update with actual data from training configs
   - **Training Method Badges**: CPT/SFT indicators with yellow color coding
   - **Sequence Length Display**: Shows max_seq_length as gray badges (2048, 3072, 4096)
-  - **Iteration Count**: Session progress indicators in compact badge format
+  - **Iteration Count**: Session progress indicators in badge format
 
-- **Advanced Parameter Display**: Comprehensive training parameter visualization
-  - **Learning Rate Information**: Enhanced LR display with decay and weight decay
+- **Parameter Display**: Training parameter visualization
+  - **Learning Rate Information**: LR display with decay and weight decay
     - **Format**: "LR: 3e-05 | LDR 0.15 | WD 0.015" with pipe separators
     - **Background Updates**: Async fetching of actual config values for accuracy
-    - **Parameter Extraction**: Smart parsing of `lr_decay_factor` and `weight_decay`
-  - **Compact Layout**: Professional session card design with optimal information density
-  - **No Tooltips Needed**: All information directly visible through badges and info lines
+    - **Parameter Extraction**: Parsing of `lr_decay_factor` and `weight_decay`
+  - **Layout**: Session card design with information density
+  - **Direct Display**: All information directly visible through badges and info lines
 
-#### **Technical Infrastructure Improvements**
-- **API Enhancements**: Robust backend support for new features
-  - **Session Deletion Endpoint**: Safe session removal with comprehensive error handling
+#### **Technical Infrastructure**
+- **API Updates**: Backend support for new features
+  - **Session Deletion Endpoint**: Safe session removal with error handling
   - **File Browser Integration**: Leverages existing `/api/filesystem/browse` for folder viewing
-  - **Enhanced Session Enrichment**: Background data fetching for accurate badge information
-- **Theme Compatibility**: All new features fully support light/dark mode switching
-- **Error Handling**: Comprehensive validation and user-friendly error messages throughout
-- **Playwright Testing**: Comprehensive automated testing ensuring 98.9% success rate across all features
+  - **Session Enrichment**: Background data fetching for accurate badge information
+- **Theme Compatibility**: All new features support light/dark mode switching
+- **Error Handling**: Validation and user-friendly error messages throughout
 
 ### **Final Session Card Design**
 ```

@@ -1079,15 +1079,56 @@ def setup_api(app: Flask) -> Blueprint:
             logger.error(f"Error getting raw logs: {e}")
             return jsonify({'success': False, 'error': str(e)}), 500
     
+    # Simple rate limiter for historical dashboard requests
+    _historical_request_count = 0
+    _historical_request_reset_time = 0
+    
     @bp.route('/dashboard/historical', methods=['POST'])
     def get_historical_dashboard():
-        """Get historical dashboard data."""
+        """Get historical dashboard data with memory optimization and rate limiting."""
         try:
+            import time
+            
+            # Simple rate limiting: max 10 requests per 5 seconds
+            current_time = time.time()
+            nonlocal _historical_request_count, _historical_request_reset_time
+            
+            if current_time - _historical_request_reset_time > 5:
+                _historical_request_count = 0
+                _historical_request_reset_time = current_time
+            
+            _historical_request_count += 1
+            
+            if _historical_request_count > 10:
+                logger.warning(f"Rate limit exceeded for historical dashboard requests: {_historical_request_count}/10")
+                return jsonify({
+                    'success': False, 
+                    'error': 'Rate limit exceeded. Please wait before making more requests.'
+                }), 429
             # Get log file path from request
             log_file = request.json.get('log_file')
             
             if not log_file:
                 return jsonify({'success': False, 'error': 'No log file specified'}), 400
+            
+            # CRITICAL: Check if training is active and limit concurrent processing
+            # This prevents memory spikes during training from Compare Tab batch loading
+            import psutil
+            mlx_training_active = False
+            try:
+                for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+                    try:
+                        if proc.info['cmdline']:
+                            cmdline = ' '.join(proc.info['cmdline'])
+                            if any(pattern in cmdline for pattern in [
+                                'mlx_lm.lora', 'mlx_lm.fuse', 'mlx-lm', 'python -m mlx_lm'
+                            ]):
+                                mlx_training_active = True
+                                break
+                    except (psutil.NoSuchProcess, psutil.AccessDenied):
+                        continue
+            except Exception:
+                pass
             
             # Load training data
             data = load_training_data(log_file)
@@ -1095,11 +1136,16 @@ def setup_api(app: Flask) -> Blueprint:
             if 'error' in data:
                 return jsonify({'success': False, 'error': data['error']}), 500
             
-            # Generate chart data for web display
-            charts = generate_web_chart_data(data)
+            # Generate chart data for web display (skip during training to save memory)
+            charts = None if mlx_training_active else generate_web_chart_data(data)
             
             # Identify best checkpoints
             best_checkpoints = identify_best_checkpoints(data, top_k=3)
+            
+            # Force garbage collection if training is active to free memory immediately
+            if mlx_training_active:
+                import gc
+                gc.collect()
             
             # Create summary with metrics and best checkpoints
             metrics = data.get('metrics', [])
@@ -1656,7 +1702,7 @@ def setup_api(app: Flask) -> Blueprint:
         return jsonify({
             'success': True,
             'status': 'ok',
-            'version': '0.3.8'
+            'version': '0.4.0'
         })
     
     @bp.route('/model/status', methods=['GET'])

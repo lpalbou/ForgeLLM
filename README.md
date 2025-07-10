@@ -36,7 +36,7 @@ Testing:
 pip install forgellm
 
 # Install specific version
-pip install forgellm==0.3.7
+pip install forgellm==0.4.0
 
 # Upgrade existing installation
 pip install --upgrade forgellm

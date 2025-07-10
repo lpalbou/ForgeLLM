@@ -9,13 +9,46 @@ class SessionDataManager {
         this.configCache = new Map();   // Cache for parsed config data
     }
 
-    // Load and cache session data
+    // Load and cache session data with memory-aware optimization
     async loadSessionData(sessionId) {
         if (this.sessionsCache.has(sessionId)) {
             return this.sessionsCache.get(sessionId);
         }
 
+        // CRITICAL: Block ALL session data loading during active training to prevent OOM errors
         try {
+            const realtimeResponse = await fetch('/api/dashboard/realtime');
+            const realtimeData = await realtimeResponse.json();
+            if (realtimeData.active) {
+                console.log('🚫 Training is active - blocking individual session data loading to prevent memory issues');
+                throw new Error('Session data loading is disabled during training to prevent memory conflicts');
+            }
+        } catch (e) {
+            if (e.message.includes('disabled during training')) {
+                throw e; // Re-throw our intentional training block
+            }
+            console.warn('Could not check training status for session loading, proceeding with caution');
+        }
+
+        try {
+            // CRITICAL: Block session data loading during training to prevent OOM errors
+            let isTrainingActive = false;
+            try {
+                const realtimeResponse = await fetch('/api/dashboard/realtime');
+                const realtimeData = await realtimeResponse.json();
+                isTrainingActive = realtimeData.active;
+                
+                if (isTrainingActive) {
+                    console.log(`🚫 Blocked loading session ${sessionId} - training is active`);
+                    throw new Error('Session loading blocked during training to prevent memory conflicts');
+                }
+            } catch (e) {
+                if (e.message.includes('blocked during training')) {
+                    throw e; // Re-throw training block error
+                }
+                console.warn('Could not check training status, proceeding with caution');
+            }
+            
             // Get basic session info
             const sessionsResponse = await fetch('/api/training/sessions');
             const sessionsData = await sessionsResponse.json();
@@ -23,7 +56,7 @@ class SessionDataManager {
             
             if (!session) throw new Error(`Session ${sessionId} not found`);
 
-            // Get detailed session data (charts, logs, config)
+            // Get detailed session data (charts will be skipped during training by API)
             const response = await fetch(`/api/dashboard/historical`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -31,7 +64,7 @@ class SessionDataManager {
             });
             const sessionData = await response.json();
 
-            // Get parsed config data
+            // Get parsed config data (lightweight operation)
             const configData = await this.loadSessionConfig(session);
 
             // Combine all data
@@ -40,7 +73,8 @@ class SessionDataManager {
                 ...session,
                 sessionId: sessionId,
                 config: configData,
-                raw_session: session
+                raw_session: session,
+                _loadedDuringTraining: isTrainingActive // Flag for debugging
             };
 
             this.sessionsCache.set(sessionId, fullSessionData);
@@ -266,6 +300,20 @@ function storeSelectedSessions() {
 // Function to restore selected sessions from localStorage
 async function restoreSelectedSessions() {
     try {
+        // CRITICAL: Check if training is active BEFORE attempting to restore ANY sessions
+        // This prevents the API call flood that causes memory conflicts during training
+        try {
+            const realtimeResponse = await fetch('/api/dashboard/realtime');
+            const realtimeData = await realtimeResponse.json();
+            if (realtimeData.active) {
+                console.log('🚫 Training is active - blocking session restoration to prevent memory issues');
+                console.log('Session restoration will be available again when training completes');
+                return; // Exit immediately - do not restore any sessions
+            }
+        } catch (e) {
+            console.warn('Could not check training status during session restoration, proceeding with caution');
+        }
+        
         const storedSessions = localStorage.getItem('compareSelectedSessions');
         if (storedSessions) {
             const sessionsArray = JSON.parse(storedSessions);
@@ -281,7 +329,17 @@ async function restoreSelectedSessions() {
                 const sessionCard = document.querySelector(`#compare-session-card-${escapedSessionId}`);
                 if (sessionCard) {
                     console.log(`Found session card for ${sessionId}, selecting it`);
-                    await handleSessionChange(sessionId, true);
+                    try {
+                        await handleSessionChange(sessionId, true);
+                    } catch (error) {
+                        if (error.message.includes('disabled during training')) {
+                            console.log(`🚫 Skipping session ${sessionId} restore - training is active`);
+                            // Don't select the session if training is active
+                            continue;
+                        } else {
+                            console.error(`Error restoring session ${sessionId}:`, error);
+                        }
+                    }
                 } else {
                     console.warn(`Session card for ${sessionId} not found during restore`);
                 }
@@ -533,6 +591,32 @@ window.formatScientificNotation = function formatScientificNotation(value) {
 // Load and display sessions
 async function loadSessions() {
     try {
+        // CRITICAL: Check if training is active BEFORE loading any session data
+        // This prevents ALL session data loading during training to avoid OOM errors
+        let isTrainingActive = false;
+        try {
+            const realtimeResponse = await fetch('/api/dashboard/realtime');
+            const realtimeData = await realtimeResponse.json();
+            isTrainingActive = realtimeData.active;
+            
+            if (isTrainingActive) {
+                console.log('🚫 Training is active - Compare Tab session loading is disabled to prevent memory issues');
+                const container = document.getElementById('compare-sessions-list');
+                if (container) {
+                    container.innerHTML = `
+                        <div class="alert alert-warning text-center">
+                            <h5><i class="fas fa-exclamation-triangle"></i> Training in Progress</h5>
+                            <p class="mb-2">Compare Tab is temporarily disabled while training is active to prevent memory conflicts.</p>
+                            <p class="mb-0"><small>Session comparison will be available again when training completes.</small></p>
+                        </div>
+                    `;
+                }
+                return; // Exit early - do not load any session data
+            }
+        } catch (e) {
+            console.warn('Could not check training status, proceeding with caution');
+        }
+        
         const response = await fetch('/api/training/sessions');
         const data = await response.json();
         console.log('Sessions API response:', data);
@@ -553,11 +637,25 @@ async function loadSessions() {
             return;
         }
 
-        // 1. Pre-load all session data into the cache for consistency
-        await Promise.all(sessions.map(session => 
-            window.sessionDataManager.loadSessionData(session.session_id)
-        ));
-        console.log('All session data has been pre-loaded into the cache.');
+        // 1. Pre-load session data in batches to prevent memory spikes
+        console.log(`Pre-loading ${sessions.length} sessions in batches to prevent memory issues...`);
+        
+        const batchSize = 5; // Default batch size when training is not active
+        
+        const BATCH_SIZE = batchSize;
+        for (let i = 0; i < sessions.length; i += BATCH_SIZE) {
+            const batch = sessions.slice(i, i + BATCH_SIZE);
+            await Promise.all(batch.map(session => 
+                window.sessionDataManager.loadSessionData(session.session_id)
+            ));
+            console.log(`Loaded batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(sessions.length / BATCH_SIZE)}`);
+            
+            // Small delay between batches to allow memory cleanup
+            if (i + BATCH_SIZE < sessions.length) {
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
+        }
+        console.log('All session data has been pre-loaded into the cache using batched loading.');
         
         // Sort sessions by model name and size
         sessions = sortSessions(sessions);
@@ -1904,12 +2002,38 @@ document.addEventListener('shown.bs.tab', function(event) {
     // If we're entering the compare tab
     if (event.target.getAttribute('data-bs-target') === '#compare') {
         console.log('Compare tab activated, checking if sessions need to be loaded');
-        setTimeout(() => {
+        setTimeout(async () => {
             if (elementsExist()) {
+                // Check if training is active first
+                let isTrainingActive = false;
+                try {
+                    const realtimeResponse = await fetch('/api/dashboard/realtime');
+                    const realtimeData = await realtimeResponse.json();
+                    isTrainingActive = realtimeData.active;
+                } catch (e) {
+                    console.warn('Could not check training status during tab activation');
+                }
+                
+                if (isTrainingActive) {
+                    console.log('🚫 Training is active - Compare Tab loading blocked during tab activation');
+                    // Show warning message directly without calling loadSessions to avoid API requests
+                    const container = document.getElementById('compare-sessions-list');
+                    if (container) {
+                        container.innerHTML = `
+                            <div class="alert alert-warning text-center">
+                                <h5><i class="fas fa-exclamation-triangle"></i> Training in Progress</h5>
+                                <p class="mb-2">Compare Tab is temporarily disabled while training is active to prevent memory conflicts.</p>
+                                <p class="mb-0"><small>Session comparison will be available again when training completes.</small></p>
+                            </div>
+                        `;
+                    }
+                    return;
+                }
+                
                 // Only load sessions if the container is empty or has error message
                 const container = document.getElementById('compare-sessions-list');
-                if (!container || container.children.length === 0 || container.innerHTML.includes('Error loading sessions')) {
-                    console.log('Container is empty or has error, loading sessions');
+                if (!container || container.children.length === 0 || container.innerHTML.includes('Error loading sessions') || container.innerHTML.includes('Training in Progress')) {
+                    console.log('Container is empty, has error, or shows training warning - loading sessions');
                     loadSessions();
                 } else {
                     console.log('Sessions already loaded, skipping duplicate load');
@@ -1922,11 +2046,24 @@ document.addEventListener('shown.bs.tab', function(event) {
                     });
                     
                     if (realBadges.length === 0) {
-                        console.log('Badges not populated, triggering badge population');
-                        // Get sessions and populate badges
-                        fetch('/api/training/sessions')
+                        console.log('Badges not populated, checking training status before badge population');
+                        // Check training status before making API calls for badge population
+                        fetch('/api/dashboard/realtime')
                             .then(response => response.json())
+                            .then(realtimeData => {
+                                if (realtimeData.active) {
+                                    console.log('🚫 Training is active - skipping badge population to prevent memory issues');
+                                    return;
+                                }
+                                // Safe to populate badges when training is not active
+                                return fetch('/api/training/sessions');
+                            })
+                            .then(response => {
+                                if (!response) return; // Training was active, skip
+                                return response.json();
+                            })
                             .then(data => {
+                                if (!data) return; // Training was active, skip
                                 const sessions = data.training_sessions || [];
                                 if (typeof window.populateLossBadges === 'function') {
                                     window.populateLossBadges(sessions);
@@ -3706,6 +3843,19 @@ window.fetchSessionLossData = async function fetchSessionLossData(session) {
 // UNIVERSAL function to populate session card badges - works for BOTH Compare tab AND Training tab
 window.populateLossBadges = async function populateLossBadges(sessions) {
     console.log('[Universal] populateLossBadges called for', sessions.length, 'sessions');
+    
+    // CRITICAL: Check if training is active BEFORE making ANY API calls to prevent memory issues
+    try {
+        const realtimeResponse = await fetch('/api/dashboard/realtime');
+        const realtimeData = await realtimeResponse.json();
+        if (realtimeData.active) {
+            console.log('🚫 Training is active - blocking badge population to prevent memory issues');
+            console.log('Badge population will be available again when training completes');
+            return; // Exit immediately - do not populate any badges
+        }
+    } catch (e) {
+        console.warn('Could not check training status during badge population, proceeding with caution');
+    }
     
     for (const session of sessions) {
         const sessionId = session.session_id || session.id || '';
