@@ -22,6 +22,7 @@ class TrainingInterface {
         this.refreshThrottleMs = 2000; // Minimum 2 seconds between refreshes
         this.lastCheckpointsUpdate = 0; // Track checkpoint updates
         this.detectedBaseModel = null; // Store auto-detected base model for fusion
+        this.isMonitoringPollingActive = false; // Flag to prevent duplicate polling
         
         this.init();
     }
@@ -309,31 +310,43 @@ class TrainingInterface {
             this.openFileBrowser('output');
         });
         
-        // Tab switching
-        document.querySelectorAll('[data-bs-toggle="tab"]').forEach(tab => {
-            tab.addEventListener('shown.bs.tab', (e) => {
+        // Tab switching - ONLY attach to monitoring tab to prevent duplicates
+        const monitoringTab = document.querySelector('#monitoring-tab');
+        if (monitoringTab && !monitoringTab.hasAttribute('data-listener-attached')) {
+            monitoringTab.addEventListener('shown.bs.tab', (e) => {
                 if (e.target.id === 'monitoring-tab') {
-                    // Only start polling if training is active
-                    if (this.isTraining) {
-                        console.log('🔄 Switched to monitoring tab - starting polling (training active)');
-                        this.startMonitoringPolling();
-                    } else {
-                        console.log('📋 Switched to monitoring tab - no polling (training inactive)');
-                        // Still do one check to update the display
-                        this.checkTrainingStatusOnce();
-                    }
-                } else {
-                    // Stop polling when switching away from monitoring tab
-                    this.stopMonitoringPolling();
-                    
-                    if (e.target.id === 'quantization-tab') {
-                        // Activate quantization component when tab is shown
-                        if (typeof quantizationComponent !== 'undefined' && quantizationComponent.onActivate) {
-                            quantizationComponent.onActivate();
-                        }
+                    console.log('🔄 Switched to monitoring tab - checking training status');
+                    // Always do one check to update the display and start polling if needed
+                    this.checkTrainingStatusOnce();
+                }
+            });
+            monitoringTab.setAttribute('data-listener-attached', 'true');
+        }
+        
+        // Quantization tab activation - separate listener
+        const quantizationTab = document.querySelector('#quantization-tab');
+        if (quantizationTab && !quantizationTab.hasAttribute('data-listener-attached')) {
+            quantizationTab.addEventListener('shown.bs.tab', (e) => {
+                if (e.target.id === 'quantization-tab') {
+                    // Activate quantization component when tab is shown
+                    if (typeof quantizationComponent !== 'undefined' && quantizationComponent.onActivate) {
+                        quantizationComponent.onActivate();
                     }
                 }
             });
+            quantizationTab.setAttribute('data-listener-attached', 'true');
+        }
+        
+        // Stop polling when switching away from monitoring tab
+        document.querySelectorAll('[data-bs-toggle="tab"]').forEach(tab => {
+            if (tab.id !== 'monitoring-tab' && !tab.hasAttribute('data-stop-listener-attached')) {
+                tab.addEventListener('shown.bs.tab', (e) => {
+                    if (e.target.id !== 'monitoring-tab') {
+                        this.stopMonitoringPolling();
+                    }
+                });
+                tab.setAttribute('data-stop-listener-attached', 'true');
+            }
         });
         
         // Training session selection
@@ -455,13 +468,14 @@ class TrainingInterface {
     }
     
     startMonitoringPolling() {
-        // Start polling only for monitoring tab
-        if (this.updateInterval) {
+        // Prevent duplicate polling
+        if (this.isMonitoringPollingActive || this.updateInterval) {
             console.log('🔄 Monitoring polling already active');
             return;
         }
         
         console.log('🔄 Starting monitoring polling (10s interval)');
+        this.isMonitoringPollingActive = true;
         this.updateInterval = setInterval(() => {
             this.performMonitoringUpdate();
         }, 10000);
@@ -476,6 +490,7 @@ class TrainingInterface {
             clearInterval(this.updateInterval);
             this.updateInterval = null;
         }
+        this.isMonitoringPollingActive = false;
     }
     
     async performMonitoringUpdate() {
@@ -548,9 +563,13 @@ class TrainingInterface {
             const monitoringTabButton = document.querySelector('#monitoring-tab');
             const isMonitoringTabActive = monitoringTabButton && monitoringTabButton.classList.contains('active');
             
-            if (this.isTraining && isMonitoringTabActive) {
+            if (this.isTraining && isMonitoringTabActive && !this.isMonitoringPollingActive) {
                 console.log('🔄 Training active on monitoring tab - starting polling');
                 this.startMonitoringPolling();
+            } else if (!this.isTraining) {
+                console.log('📋 Training inactive - no polling needed');
+            } else if (this.isMonitoringPollingActive) {
+                console.log('🔄 Polling already active');
             }
         } catch (error) {
             console.error('Error checking training status:', error);

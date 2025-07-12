@@ -623,21 +623,7 @@ async function loadSessions() {
             populateLossBadgesBatch(sessions);
         }, 100); // Small delay to ensure DOM rendering is complete
         
-        // 7. Set up tab change event listeners for selection persistence
-        document.addEventListener('shown.bs.tab', function(event) {
-            // If we're leaving the compare tab, store the selections
-            if (event.relatedTarget && event.relatedTarget.id === 'compare-tab') {
-                storeSelectedSessions();
-            }
-            
-            // If we're entering the compare tab, restore the selections
-            if (event.target && event.target.id === 'compare-tab') {
-                setTimeout(() => {
-                    restoreSelectedSessions();
-                    initializeSessionSearch(); // Initialize search functionality
-                }, 100); // Short delay to ensure DOM is ready
-            }
-        });
+        // 7. Tab change event listeners are now handled globally, not here to prevent duplicates
         
         // 8. Restore selections if this tab is already active
         if (document.querySelector('#compare-tab.active')) {
@@ -1926,34 +1912,37 @@ ${JSON.stringify(rawData, null, 2)}
     }
 }
 
-// Global tab change event listener
-document.addEventListener('shown.bs.tab', function(event) {
-    // If we're entering the compare tab
-    if (event.target.getAttribute('data-bs-target') === '#compare') {
-        console.log('Compare tab activated, checking if sessions need to be loaded');
-        setTimeout(async () => {
-            if (elementsExist()) {
-                // Check if training is active first
-                const trainingStatus = window.getTrainingStatus ? window.getTrainingStatus() : { isActive: false };
-                
-                if (trainingStatus.isActive) {
-                    console.log('🚫 Training is active - Compare Tab loading blocked during tab activation');
-                    // Show warning message directly without calling loadSessions to avoid API requests
-                    const container = document.getElementById('compare-sessions-list');
-                    if (container) {
-                        container.innerHTML = `
-                            <div class="alert alert-warning text-center">
-                                <h5><i class="fas fa-exclamation-triangle"></i> Training in Progress</h5>
-                                <p class="mb-2">Compare Tab is temporarily disabled while training is active to prevent memory conflicts.</p>
-                                <p class="mb-0"><small>Session comparison will be available again when training completes.</small></p>
-                            </div>
-                        `;
-                    }
-                    return;
-                }
-                
-                // Only load sessions if the container is empty or has error message
-                const container = document.getElementById('compare-sessions-list');
+// Global tab change event listener (ONLY for compare tab)
+document.addEventListener('DOMContentLoaded', function() {
+    const compareTab = document.querySelector('#compare-tab');
+    if (compareTab) {
+        compareTab.addEventListener('shown.bs.tab', function(event) {
+            // If we're entering the compare tab
+            if (event.target.getAttribute('data-bs-target') === '#compare') {
+                console.log('Compare tab activated, checking if sessions need to be loaded');
+                setTimeout(async () => {
+                    if (elementsExist()) {
+                        // Check if training is active first
+                        const trainingStatus = window.getTrainingStatus ? window.getTrainingStatus() : { isActive: false };
+                        
+                        if (trainingStatus.isActive) {
+                            console.log('🚫 Training is active - Compare Tab loading blocked during tab activation');
+                            // Show warning message directly without calling loadSessions to avoid API requests
+                            const container = document.getElementById('compare-sessions-list');
+                            if (container) {
+                                container.innerHTML = `
+                                    <div class="alert alert-warning text-center">
+                                        <h5><i class="fas fa-exclamation-triangle"></i> Training in Progress</h5>
+                                        <p class="mb-2">Compare Tab is temporarily disabled while training is active to prevent memory conflicts.</p>
+                                        <p class="mb-0"><small>Session comparison will be available again when training completes.</small></p>
+                                    </div>
+                                `;
+                            }
+                            return;
+                        }
+                        
+                        // Only load sessions if the container is empty or has error message
+                        const container = document.getElementById('compare-sessions-list');
                 if (!container || container.children.length === 0 || container.innerHTML.includes('Error loading sessions') || container.innerHTML.includes('Training in Progress')) {
                     console.log('Container is empty, has error, or shows training warning - loading sessions');
                     loadSessions();
@@ -1993,9 +1982,14 @@ document.addEventListener('shown.bs.tab', function(event) {
                     }
                 }
             }
-        }, 100);
+                        }, 100);
+            }
+        });
     }
-    
+});
+
+// Legacy global tab change event listener for fuse and testing tabs
+document.addEventListener('shown.bs.tab', function(event) {
     // If we're entering the fuse tab
     if (event.target.getAttribute('data-bs-target') === '#fuse') {
         const storedAdapterJson = localStorage.getItem('forge-fuse-adapter');

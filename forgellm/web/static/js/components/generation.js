@@ -322,14 +322,15 @@ function initTestingTab() {
 
 // Add a listener for tab activation to initialize the Testing tab
 document.addEventListener('DOMContentLoaded', () => {
-    // Listen for tab activation events
-    document.querySelectorAll('button[data-bs-toggle="tab"]').forEach(tab => {
-        tab.addEventListener('shown.bs.tab', (event) => {
+    // Listen ONLY for the testing tab activation (not all tabs)
+    const testingTab = document.querySelector('#testing-tab');
+    if (testingTab) {
+        testingTab.addEventListener('shown.bs.tab', (event) => {
             if (event.target.id === 'testing-tab') {
                 initTestingTab();
             }
         });
-    });
+    }
     
     // Also check on initial load in case we're starting on the Testing tab
     if (document.querySelector('#testing-tab').classList.contains('active')) {
