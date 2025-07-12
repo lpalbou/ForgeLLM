@@ -455,8 +455,7 @@ class TrainingInterface {
     async loadInitialData() {
         await this.loadModels();
         await this.loadCheckpoints();
-        // Only check training status once on startup - no polling yet
-        await this.checkTrainingStatusOnce();
+        // Training status will be checked when monitoring tab is visited
         this.updateTrainingEstimates();
         this.updateLearningRateChart();
         await this.loadFuseModels();
@@ -517,11 +516,8 @@ class TrainingInterface {
             // Expose training status globally for other components
             window.isTrainingActive = this.isTraining;
             
-            // If training stopped, stop polling
-            if (!this.isTraining) {
-                console.log('⏹️ Training stopped - stopping monitoring polling');
-                this.stopMonitoringPolling();
-            }
+            // Keep polling while on monitoring tab (regardless of training status)
+            // Polling will be stopped when switching away from monitoring tab
             
             // Update dashboard data
             if (data.current_values) {
@@ -548,6 +544,17 @@ class TrainingInterface {
     // NEW: Single status check for startup and training tab
     async checkTrainingStatusOnce() {
         try {
+            // If we're on monitoring tab, just start polling (which will make the API call)
+            const monitoringTabButton = document.querySelector('#monitoring-tab');
+            const isMonitoringTabActive = monitoringTabButton && monitoringTabButton.classList.contains('active');
+            
+            if (isMonitoringTabActive && !this.isMonitoringPollingActive) {
+                console.log('🔄 On monitoring tab - starting polling (no duplicate API call)');
+                this.startMonitoringPolling();
+                return; // Exit early to avoid duplicate API call
+            }
+            
+            // Only make API call if NOT on monitoring tab
             console.log('🔍 Checking training status once');
             const response = await fetch('/api/dashboard/realtime');
             const data = await response.json();
@@ -559,15 +566,8 @@ class TrainingInterface {
             // Expose training status globally for other components
             window.isTrainingActive = this.isTraining;
             
-            // If training is active and we're on monitoring tab, start polling
-            const monitoringTabButton = document.querySelector('#monitoring-tab');
-            const isMonitoringTabActive = monitoringTabButton && monitoringTabButton.classList.contains('active');
-            
-            if (this.isTraining && isMonitoringTabActive && !this.isMonitoringPollingActive) {
-                console.log('🔄 Training active on monitoring tab - starting polling');
-                this.startMonitoringPolling();
-            } else if (!this.isTraining) {
-                console.log('📋 Training inactive - no polling needed');
+            if (!isMonitoringTabActive) {
+                console.log('📋 Not on monitoring tab - no polling needed');
             } else if (this.isMonitoringPollingActive) {
                 console.log('🔄 Polling already active');
             }
@@ -804,8 +804,8 @@ class TrainingInterface {
         
         if (!logFile) {
             // No session selected, show current training
-            console.log('📊 No session selected, checking training status');
-            this.checkTrainingStatus();
+            console.log('📊 No session selected, no need to check training status again');
+            // Status already checked when switching to monitoring tab
             return;
         }
         
