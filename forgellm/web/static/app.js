@@ -313,8 +313,15 @@ class TrainingInterface {
         document.querySelectorAll('[data-bs-toggle="tab"]').forEach(tab => {
             tab.addEventListener('shown.bs.tab', (e) => {
                 if (e.target.id === 'monitoring-tab') {
-                    // Start polling when switching to monitoring tab
-                    this.startMonitoringPolling();
+                    // Only start polling if training is active
+                    if (this.isTraining) {
+                        console.log('🔄 Switched to monitoring tab - starting polling (training active)');
+                        this.startMonitoringPolling();
+                    } else {
+                        console.log('📋 Switched to monitoring tab - no polling (training inactive)');
+                        // Still do one check to update the display
+                        this.checkTrainingStatusOnce();
+                    }
                 } else {
                     // Stop polling when switching away from monitoring tab
                     this.stopMonitoringPolling();
@@ -435,17 +442,16 @@ class TrainingInterface {
     async loadInitialData() {
         await this.loadModels();
         await this.loadCheckpoints();
-        await this.checkTrainingStatus(); // Lightweight status check on startup
+        // Only check training status once on startup - no polling yet
+        await this.checkTrainingStatusOnce();
         this.updateTrainingEstimates();
         this.updateLearningRateChart();
         await this.loadFuseModels();
     }
     
     startPeriodicUpdates() {
-        // DISABLED: Polling should only happen when monitoring tab is active
-        // This prevents unnecessary API calls when not on monitoring tab
-        console.log('🔄 Periodic updates will start only when monitoring tab is active');
-        // No setInterval here - polling will be controlled by tab switching
+        // DISABLED: No automatic polling - only manual tab-based polling
+        console.log('🔄 Periodic updates disabled - polling controlled by tab switching');
     }
     
     startMonitoringPolling() {
@@ -457,11 +463,11 @@ class TrainingInterface {
         
         console.log('🔄 Starting monitoring polling (10s interval)');
         this.updateInterval = setInterval(() => {
-            this.performIntelligentUpdate();
+            this.performMonitoringUpdate();
         }, 10000);
         
         // Immediate update when starting
-        this.performIntelligentUpdate();
+        this.performMonitoringUpdate();
     }
     
     stopMonitoringPolling() {
@@ -472,19 +478,19 @@ class TrainingInterface {
         }
     }
     
-    async performIntelligentUpdate() {
+    async performMonitoringUpdate() {
         try {
-            // Get current active tab
+            // Only make API call if monitoring tab is active AND training is running
             const monitoringTabButton = document.querySelector('#monitoring-tab');
             const isMonitoringTabActive = monitoringTabButton && monitoringTabButton.classList.contains('active');
             
-            // Only make API call if monitoring tab is active (this method should only be called when needed)
             if (!isMonitoringTabActive) {
-                console.log('📋 Monitoring tab not active - skipping API call');
+                console.log('📋 Monitoring tab not active - stopping polling');
+                this.stopMonitoringPolling();
                 return;
             }
             
-            console.log('📊 Updating monitoring dashboard (monitoring tab active)');
+            console.log('📊 Updating monitoring dashboard');
             
             // Make the API call
             const response = await fetch('/api/dashboard/realtime');
@@ -492,6 +498,15 @@ class TrainingInterface {
             
             this.isTraining = data.active || false;
             this.updateTrainingButtons(this.isTraining);
+            
+            // Expose training status globally for other components
+            window.isTrainingActive = this.isTraining;
+            
+            // If training stopped, stop polling
+            if (!this.isTraining) {
+                console.log('⏹️ Training stopped - stopping monitoring polling');
+                this.stopMonitoringPolling();
+            }
             
             // Update dashboard data
             if (data.current_values) {
@@ -501,18 +516,44 @@ class TrainingInterface {
                     this.renderCharts(data.charts);
                 }
             } else {
-                // Always update training status
                 this.updateTrainingStatus({active: this.isTraining});
             }
             
-            // Load checkpoints every 60 seconds (lightweight operation, always needed)
+            // Load checkpoints every 60 seconds (only when monitoring)
             if (Date.now() - (this.lastCheckpointsUpdate || 0) > 60000) {
                 this.loadCheckpoints();
                 this.lastCheckpointsUpdate = Date.now();
             }
             
         } catch (error) {
-            console.error('Error in intelligent update:', error);
+            console.error('Error in monitoring update:', error);
+        }
+    }
+    
+    // NEW: Single status check for startup and training tab
+    async checkTrainingStatusOnce() {
+        try {
+            console.log('🔍 Checking training status once');
+            const response = await fetch('/api/dashboard/realtime');
+            const data = await response.json();
+            
+            this.isTraining = data.active || false;
+            this.updateTrainingButtons(this.isTraining);
+            this.updateTrainingStatus({active: this.isTraining});
+            
+            // Expose training status globally for other components
+            window.isTrainingActive = this.isTraining;
+            
+            // If training is active and we're on monitoring tab, start polling
+            const monitoringTabButton = document.querySelector('#monitoring-tab');
+            const isMonitoringTabActive = monitoringTabButton && monitoringTabButton.classList.contains('active');
+            
+            if (this.isTraining && isMonitoringTabActive) {
+                console.log('🔄 Training active on monitoring tab - starting polling');
+                this.startMonitoringPolling();
+            }
+        } catch (error) {
+            console.error('Error checking training status:', error);
         }
     }
     
@@ -880,17 +921,8 @@ class TrainingInterface {
     }
     
     async checkTrainingStatus() {
-        try {
-            console.log('🔍 Checking training status (lightweight)');
-            const response = await fetch('/api/dashboard/realtime');
-            const data = await response.json();
-            
-            this.isTraining = data.active || false;
-            this.updateTrainingButtons(this.isTraining);
-            this.updateTrainingStatus({active: this.isTraining});
-        } catch (error) {
-            console.error('Error checking training status:', error);
-        }
+        // Redirect to the new single-check method
+        return this.checkTrainingStatusOnce();
     }
     
     /**
@@ -985,10 +1017,12 @@ class TrainingInterface {
                 // Reset the checkpoints flag to ensure we don't keep old data
                 this.checkpointsResetDone = false;
                 
-                // Switch to monitoring tab after a short delay
+                // Switch to monitoring tab and start polling
                 setTimeout(() => {
                     const monitoringTab = new bootstrap.Tab(document.getElementById('monitoring-tab'));
                     monitoringTab.show();
+                    // Start polling since training just started
+                    this.startMonitoringPolling();
                 }, 1000);
             } else {
                 // Training failed to start - reset flag
@@ -1243,53 +1277,9 @@ class TrainingInterface {
     }
     
     async refreshDashboard() {
-        // Throttle dashboard refreshes to prevent excessive calls
-        const now = Date.now();
-        if (now - this.lastRefreshTime < this.refreshThrottleMs) {
-            console.log(`Dashboard refresh throttled (last refresh ${now - this.lastRefreshTime}ms ago)`);
-            return;
-        }
-        
-        this.lastRefreshTime = now;
-        
-        try {
-            console.log('🔄 Refreshing dashboard...');
-            const response = await fetch('/api/dashboard/realtime');
-            const data = await response.json();
-            
-            console.log('📊 Dashboard data received:', data);
-            
-            if (data.active) {
-                // FIRST: Force update config values directly - no interference
-                this.forceUpdateConfigValues(data.config);
-                
-                // Update training metrics with current values and config
-                if (data.current_values) {
-                    // Ensure config is properly passed without being overridden by current_values
-                    const metricsData = {
-                        ...data.current_values,
-                        config: data.config
-                    };
-                    // Remove any config fields from current_values that might override the config object
-                    delete metricsData.learning_rate;
-                    delete metricsData.warmup_steps;
-                    delete metricsData.lr_decay;
-                    delete metricsData.weight_decay;
-                    
-                    // This call is no longer needed - updateAllFields is called in performIntelligentUpdate
-                }
-                
-                // Update training status
-                this.updateTrainingStatus(data);
-                
-                // Render charts if available
-                if (data.charts) {
-                    this.renderCharts(data.charts);
-                }
-            }
-        } catch (error) {
-            console.error('Error refreshing dashboard:', error);
-        }
+        // DISABLED: All dashboard updates now go through performMonitoringUpdate
+        console.log('🚫 refreshDashboard() disabled - use performMonitoringUpdate() instead');
+        return;
     }
     
     renderCharts(charts) {
@@ -4805,8 +4795,20 @@ console.log('code block');
     }
 }
 
+// Global helper function for other components to check training status
+// This avoids duplicate API calls
+window.getTrainingStatus = function() {
+    return {
+        isActive: window.isTrainingActive || false,
+        lastChecked: Date.now()
+    };
+};
+
 // Initialize when page loads
 document.addEventListener('DOMContentLoaded', function() {
+    // Initialize global training status
+    window.isTrainingActive = false;
+    
     window.trainingInterface = new TrainingInterface();
     window.trainingInterface.init();
     
