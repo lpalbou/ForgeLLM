@@ -313,12 +313,17 @@ class TrainingInterface {
         document.querySelectorAll('[data-bs-toggle="tab"]').forEach(tab => {
             tab.addEventListener('shown.bs.tab', (e) => {
                 if (e.target.id === 'monitoring-tab') {
-                    // Force a single update when switching to monitoring tab
-                    this.performSingleUpdate();
-                } else if (e.target.id === 'quantization-tab') {
-                    // Activate quantization component when tab is shown
-                    if (typeof quantizationComponent !== 'undefined' && quantizationComponent.onActivate) {
-                        quantizationComponent.onActivate();
+                    // Start polling when switching to monitoring tab
+                    this.startMonitoringPolling();
+                } else {
+                    // Stop polling when switching away from monitoring tab
+                    this.stopMonitoringPolling();
+                    
+                    if (e.target.id === 'quantization-tab') {
+                        // Activate quantization component when tab is shown
+                        if (typeof quantizationComponent !== 'undefined' && quantizationComponent.onActivate) {
+                            quantizationComponent.onActivate();
+                        }
                     }
                 }
             });
@@ -430,18 +435,41 @@ class TrainingInterface {
     async loadInitialData() {
         await this.loadModels();
         await this.loadCheckpoints();
-        await this.checkTrainingStatus();
+        await this.checkTrainingStatus(); // Lightweight status check on startup
         this.updateTrainingEstimates();
         this.updateLearningRateChart();
         await this.loadFuseModels();
     }
     
     startPeriodicUpdates() {
-        // INTELLIGENT: Only update during active training on Monitoring Tab (every 10 seconds)
-        console.log('🔄 Starting intelligent periodic updates (10s interval only during active training on Monitoring Tab)');
+        // DISABLED: Polling should only happen when monitoring tab is active
+        // This prevents unnecessary API calls when not on monitoring tab
+        console.log('🔄 Periodic updates will start only when monitoring tab is active');
+        // No setInterval here - polling will be controlled by tab switching
+    }
+    
+    startMonitoringPolling() {
+        // Start polling only for monitoring tab
+        if (this.updateInterval) {
+            console.log('🔄 Monitoring polling already active');
+            return;
+        }
+        
+        console.log('🔄 Starting monitoring polling (10s interval)');
         this.updateInterval = setInterval(() => {
             this.performIntelligentUpdate();
         }, 10000);
+        
+        // Immediate update when starting
+        this.performIntelligentUpdate();
+    }
+    
+    stopMonitoringPolling() {
+        if (this.updateInterval) {
+            console.log('⏹️ Stopping monitoring polling');
+            clearInterval(this.updateInterval);
+            this.updateInterval = null;
+        }
     }
     
     async performIntelligentUpdate() {
@@ -450,34 +478,30 @@ class TrainingInterface {
             const monitoringTabButton = document.querySelector('#monitoring-tab');
             const isMonitoringTabActive = monitoringTabButton && monitoringTabButton.classList.contains('active');
             
-            // Always check training status (lightweight call)
+            // Only make API call if monitoring tab is active (this method should only be called when needed)
+            if (!isMonitoringTabActive) {
+                console.log('📋 Monitoring tab not active - skipping API call');
+                return;
+            }
+            
+            console.log('📊 Updating monitoring dashboard (monitoring tab active)');
+            
+            // Make the API call
             const response = await fetch('/api/dashboard/realtime');
             const data = await response.json();
             
             this.isTraining = data.active || false;
             this.updateTrainingButtons(this.isTraining);
             
-            // ONLY update dashboard data when:
-            // 1. Training is active AND
-            // 2. Monitoring tab is active
-            if (this.isTraining && isMonitoringTabActive) {
-                console.log('📊 Updating monitoring dashboard (training active + monitoring tab active)');
-                
-                if (data.current_values) {
-                    this.updateAllFields(data.current_values, data.config);
-                    this.updateTrainingStatus(data);
-                    if (data.charts) {
-                        this.renderCharts(data.charts);
-                    }
+            // Update dashboard data
+            if (data.current_values) {
+                this.updateAllFields(data.current_values, data.config);
+                this.updateTrainingStatus(data);
+                if (data.charts) {
+                    this.renderCharts(data.charts);
                 }
             } else {
-                if (!this.isTraining) {
-                    console.log('⏹️ Training not active - skipping dashboard updates');
-                } else if (!isMonitoringTabActive) {
-                    console.log('📋 Monitoring tab not active - skipping dashboard updates');
-                }
-                
-                // Always update training status regardless
+                // Always update training status
                 this.updateTrainingStatus({active: this.isTraining});
             }
             
@@ -720,8 +744,8 @@ class TrainingInterface {
         
         if (!logFile) {
             // No session selected, show current training
-            console.log('📊 No session selected, performing intelligent update');
-            this.performIntelligentUpdate();
+            console.log('📊 No session selected, checking training status');
+            this.checkTrainingStatus();
             return;
         }
         
@@ -856,10 +880,17 @@ class TrainingInterface {
     }
     
     async checkTrainingStatus() {
-        console.log('🚫 OLD checkTrainingStatus() called - redirecting to performIntelligentUpdate()');
-        // OLD METHOD DISABLED - all updates now go through performIntelligentUpdate()
-        // This prevents duplicate API calls and data conflicts
-        this.performIntelligentUpdate();
+        try {
+            console.log('🔍 Checking training status (lightweight)');
+            const response = await fetch('/api/dashboard/realtime');
+            const data = await response.json();
+            
+            this.isTraining = data.active || false;
+            this.updateTrainingButtons(this.isTraining);
+            this.updateTrainingStatus({active: this.isTraining});
+        } catch (error) {
+            console.error('Error checking training status:', error);
+        }
     }
     
     /**
@@ -1245,7 +1276,7 @@ class TrainingInterface {
                     delete metricsData.lr_decay;
                     delete metricsData.weight_decay;
                     
-                    // This call is no longer needed - updateAllFields is called in performSingleUpdate
+                    // This call is no longer needed - updateAllFields is called in performIntelligentUpdate
                 }
                 
                 // Update training status
