@@ -175,6 +175,26 @@ graph TB
    # Maintains general capabilities
    ```
 
+### Data Processing
+
+The `DocumentProcessor` class handles the extraction and chunking of text from various document formats:
+
+1. **Document Collection**: Recursively finds all valid documents in the input directory
+2. **Text Extraction**: Reads text content from files with supported extensions (.txt, .md, .rst, .py, .json)
+3. **Metadata Addition**: Adds source file information as metadata
+4. **Text Chunking**: Splits documents into manageable chunks while preserving meaning
+
+#### Text Chunking Improvements
+
+The text chunking algorithm has been enhanced to preserve document structure:
+
+- **Paragraph Structure**: Maintains proper paragraph separation with double newlines
+- **Numbered Lists**: Preserves numbered list formatting (both `1.` and `1)` formats)
+- **Format Standardization**: Converts different list formats to consistent dot notation (`1.` format)
+- **Semantic Chunking**: Splits text at logical boundaries rather than arbitrary character limits
+
+This ensures that the training data maintains the original document structure, especially for structured content like lists and code blocks.
+
 ### 3. Model Inference Data Flow
 
 ```mermaid

@@ -5,6 +5,28 @@ All notable changes to ForgetLLM will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.3] - 2025-07-16
+
+### 🔧 Data Processing Improvements
+
+#### **Bullet Point Formatting Fix**
+- **Issue**: Numbered bullet points in training data were being incorrectly formatted, breaking the structure of lists
+  - Original format: `1. The importance of dynamic temporal anchoring`
+  - Incorrect processed format: `1\nThe importance of dynamic temporal anchoring`
+- **Root Cause**: The `chunk_text` method in `DocumentProcessor` was splitting paragraphs by `\n\n` and joining with `\n`, breaking list formatting
+- **Solution**: Enhanced text chunking with special handling for numbered lists
+  - Added regex pattern detection for numbered list items (both `1.` and `1)` formats)
+  - Preserved list items as complete units rather than splitting them
+  - Improved paragraph structure preservation with double newlines
+  - Standardized list formatting to dot notation (`1.` format)
+- **Result**: Properly formatted numbered lists in training data, preserving document structure and readability
+
+### 🔧 Technical Implementation
+- **Pattern Recognition**: Added regex pattern matching to detect and preserve numbered list items
+- **Format Standardization**: Converted different list formats (1., 1)) to consistent dot notation
+- **Paragraph Structure**: Improved paragraph separation with proper newline handling
+- **Comprehensive Testing**: Added test script to verify list formatting preservation
+
 ## [0.4.2] - 2025-01-17
 
 ### 🔄 Fullscreen Mode Fix

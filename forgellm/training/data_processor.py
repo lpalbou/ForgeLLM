@@ -123,6 +123,10 @@ class DocumentProcessor:
         # Be more conservative to avoid truncation warnings
         target_length = max_length // 3  # Use 1/3 of max length for safety (e.g., 682 words for 2048 tokens)
         
+        # Preserve numbered list formatting with regex pattern
+        # This will match patterns like "1. Text" or "1) Text" and keep them together
+        text = re.sub(r'(\d+)[\.\)](\s+)([^\n]+)', r'\1. \3', text)
+        
         # Split by paragraphs first, then sentences
         paragraphs = text.split('\n\n')
         chunks = []
@@ -130,14 +134,20 @@ class DocumentProcessor:
         current_length = 0
         
         for paragraph in paragraphs:
-            # Split long paragraphs into sentences
-            sentences = paragraph.split('. ')
+            # Check if this is a numbered list item and preserve its formatting
+            is_numbered_list = re.match(r'^\d+[\.\)]', paragraph.strip())
+            
+            # Split long paragraphs into sentences, but keep numbered lists intact
+            if is_numbered_list:
+                sentences = [paragraph]
+            else:
+                sentences = paragraph.split('. ')
             
             for sentence in sentences:
                 sentence_length = len(sentence.split())
                 
                 if current_length + sentence_length > target_length and current_chunk:
-                    chunks.append('\n'.join(current_chunk))
+                    chunks.append('\n\n'.join(current_chunk))  # Use double newlines to preserve paragraph structure
                     current_chunk = [sentence]
                     current_length = sentence_length
                 else:
@@ -145,7 +155,7 @@ class DocumentProcessor:
                     current_length += sentence_length
                     
         if current_chunk:
-            chunks.append('\n'.join(current_chunk))
+            chunks.append('\n\n'.join(current_chunk))  # Use double newlines to preserve paragraph structure
             
         # Filter chunks and ensure they're not too long
         valid_chunks = []
