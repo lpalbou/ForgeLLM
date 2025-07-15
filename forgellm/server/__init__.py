@@ -5,4 +5,4 @@ This package contains the model server implementation for serving
 language models via HTTP API.
 """
 
-__version__ = "0.4.0" 
+__version__ = "0.4.1" 

@@ -323,6 +323,25 @@ class TrainingInterface {
             monitoringTab.setAttribute('data-listener-attached', 'true');
         }
         
+        // Training tab switching - initialize search when switching to training tab
+        const trainingTab = document.querySelector('#training-tab');
+        if (trainingTab && !trainingTab.hasAttribute('data-search-listener-attached')) {
+            trainingTab.addEventListener('shown.bs.tab', (e) => {
+                if (e.target.id === 'training-tab') {
+                    console.log('🔄 Switched to training tab - initializing search');
+                    setTimeout(() => {
+                        if (typeof window.initializeUnifiedSearch === 'function') {
+                            window.initializeUnifiedSearch();
+                        }
+                        if (typeof window.applySearchToAllContainers === 'function') {
+                            window.applySearchToAllContainers();
+                        }
+                    }, 100);
+                }
+            });
+            trainingTab.setAttribute('data-search-listener-attached', 'true');
+        }
+        
         // Quantization tab activation - separate listener
         const quantizationTab = document.querySelector('#quantization-tab');
         if (quantizationTab && !quantizationTab.hasAttribute('data-listener-attached')) {
@@ -759,6 +778,20 @@ class TrainingInterface {
                 console.warn('populateLossBadges function not found on window');
             }
         }, 100); // Small delay to ensure DOM rendering
+        
+        // Initialize unified search functionality for training tab
+        setTimeout(() => {
+            if (typeof window.initializeUnifiedSearch === 'function') {
+                window.initializeUnifiedSearch();
+            } else if (typeof initializeUnifiedSearch === 'function') {
+                initializeUnifiedSearch();
+            }
+            
+            // Apply current search term to the training tab
+            if (typeof window.applySearchToAllContainers === 'function') {
+                window.applySearchToAllContainers();
+            }
+        }, 150); // Delay to ensure DOM is ready
     }
     
     updateTrainingSessionsDropdown(trainingSessions) {

@@ -1249,6 +1249,19 @@
                                 <i class="fas fa-graduation-cap me-2"></i>Training Sessions
                             </div>
                             <div class="card-body">
+                                <!-- Search Bar -->
+                                <div class="mb-3">
+                                    <div class="input-group input-group-sm">
+                                        <span class="input-group-text">
+                                            <i class="fas fa-search"></i>
+                                        </span>
+                                        <input type="text" class="form-control" id="training-session-search-input" placeholder="Search sessions by model, type, or parameters...">
+                                        <button class="btn btn-outline-secondary" type="button" id="training-clear-search-btn" title="Clear search">
+                                            <i class="fas fa-times"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                                
                                 <div id="checkpoints-list">
                                     <div class="text-center text-muted">
                                         <i class="fas fa-folder-open fa-2x mb-3"></i>
@@ -1640,7 +1653,6 @@
                                                 <th>Type</th>
                                                 <th>Method</th>
                                                 <th>Seq Len</th>
-                                                <th>Iterations</th>
                                                 <th>Best Checkpoint</th>
                                                 <th>Best Loss</th>
                                                 <th>Learning Rate</th>

@@ -260,8 +260,8 @@ window.sessionDataManager = new SessionDataManager();
 
 // Add this function to escape special characters in CSS selectors
 function escapeSelector(selector) {
-    // Escape special characters in CSS selectors
-    return selector.replace(/[ !"#$%&'()*+,./:;<=>?@[\\\]^`{|}~]/g, '\\$&');
+    // Simple approach: replace only spaces and periods which are most common issues
+    return selector.replace(/[ .]/g, '_');
 }
 
 // Simple function to check if elements exist
@@ -629,7 +629,7 @@ async function loadSessions() {
         if (document.querySelector('#compare-tab.active')) {
             setTimeout(() => {
                 restoreSelectedSessions();
-                initializeSessionSearch(); // Initialize search functionality
+                initializeUnifiedSearch(); // Initialize unified search functionality
             }, 100);
         }
         
@@ -641,6 +641,8 @@ async function loadSessions() {
         }
     }
 }
+
+
 
 // Handle session selection change
 async function handleSessionChange(sessionId, isSelected) {
@@ -712,7 +714,10 @@ async function handleSessionChange(sessionId, isSelected) {
     updateSessionColorsAndUI(); // Centralized function to update colors and UI
 
     if (selectedSessions.size >= 1) {
-        generateComparison();
+        // CLEAN SIMPLE FIX: Wait for badge population before generating table
+        setTimeout(() => {
+            generateComparison();
+        }, 100);
     } else {
         hideComparison();
     }
@@ -2292,68 +2297,176 @@ function formatFileSize(bytes) {
 
 console.log('Compare.js Plotly version loaded');
 
-// Search functionality for filtering sessions
-function initializeSessionSearch() {
-    const searchInput = document.getElementById('session-search-input');
-    const clearSearchBtn = document.getElementById('clear-search-btn');
+// Global search term storage
+let globalSearchTerm = '';
+
+// Unified search functionality that works across all tabs
+function initializeUnifiedSearch() {
+    // Initialize search for Compare tab
+    const compareSearchInput = document.getElementById('session-search-input');
+    const compareClearBtn = document.getElementById('clear-search-btn');
     
-    if (!searchInput || !clearSearchBtn) return;
+    // Initialize search for Training tab
+    const trainingSearchInput = document.getElementById('training-session-search-input');
+    const trainingClearBtn = document.getElementById('training-clear-search-btn');
     
-    // Search input handler
-    searchInput.addEventListener('input', filterSessions);
+    // Set up event listeners for Compare tab
+    if (compareSearchInput && compareClearBtn) {
+        compareSearchInput.addEventListener('input', () => {
+            globalSearchTerm = compareSearchInput.value;
+            filterSessionsInContainer('compare-sessions-list');
+            syncSearchInputs();
+        });
+        
+        compareClearBtn.addEventListener('click', () => {
+            globalSearchTerm = '';
+            compareSearchInput.value = '';
+            filterSessionsInContainer('compare-sessions-list');
+            syncSearchInputs();
+            compareSearchInput.focus();
+        });
+        
+        compareSearchInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                globalSearchTerm = '';
+                compareSearchInput.value = '';
+                filterSessionsInContainer('compare-sessions-list');
+                syncSearchInputs();
+            }
+        });
+    }
     
-    // Clear search button handler
-    clearSearchBtn.addEventListener('click', () => {
-        searchInput.value = '';
-        filterSessions();
-        searchInput.focus();
-    });
+    // Set up event listeners for Training tab
+    if (trainingSearchInput && trainingClearBtn) {
+        trainingSearchInput.addEventListener('input', () => {
+            globalSearchTerm = trainingSearchInput.value;
+            filterSessionsInContainer('checkpoints-list');
+            syncSearchInputs();
+        });
+        
+        trainingClearBtn.addEventListener('click', () => {
+            globalSearchTerm = '';
+            trainingSearchInput.value = '';
+            filterSessionsInContainer('checkpoints-list');
+            syncSearchInputs();
+            trainingSearchInput.focus();
+        });
+        
+        trainingSearchInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                globalSearchTerm = '';
+                trainingSearchInput.value = '';
+                filterSessionsInContainer('checkpoints-list');
+                syncSearchInputs();
+            }
+        });
+    }
     
-    // Enter key handler
-    searchInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') {
-            searchInput.value = '';
-            filterSessions();
-        }
-    });
+    // Apply current search term to all containers
+    applySearchToAllContainers();
 }
 
-function filterSessions() {
-    const searchInput = document.getElementById('session-search-input');
-    const sessionsList = document.getElementById('compare-sessions-list');
+// Sync search inputs across tabs
+function syncSearchInputs() {
+    const compareSearchInput = document.getElementById('session-search-input');
+    const trainingSearchInput = document.getElementById('training-session-search-input');
     
-    if (!searchInput || !sessionsList) return;
+    if (compareSearchInput && compareSearchInput.value !== globalSearchTerm) {
+        compareSearchInput.value = globalSearchTerm;
+    }
     
-    const searchTerm = searchInput.value.toLowerCase().trim();
-    const sessionCards = sessionsList.querySelectorAll('.session-card');
+    if (trainingSearchInput && trainingSearchInput.value !== globalSearchTerm) {
+        trainingSearchInput.value = globalSearchTerm;
+    }
+}
+
+// Apply search to all containers
+function applySearchToAllContainers() {
+    filterSessionsInContainer('compare-sessions-list');
+    filterSessionsInContainer('checkpoints-list');
+}
+
+// Unified filter function that works with any container
+function filterSessionsInContainer(containerId) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    
+    const searchTerm = globalSearchTerm.toLowerCase().trim();
+    const sessionCards = container.querySelectorAll('.session-card');
     
     let visibleCount = 0;
     
     sessionCards.forEach(card => {
+        // Get all text content including model name, dates, and parameters
         const cardText = card.textContent.toLowerCase();
-        const isVisible = searchTerm === '' || cardText.includes(searchTerm);
         
-        card.style.display = isVisible ? 'block' : 'none';
-        if (isVisible) visibleCount++;
+        // Also check data attributes for more comprehensive search
+        const sessionId = card.getAttribute('data-session-id') || '';
+        const sessionIdText = sessionId.toLowerCase();
+        
+        // Check if search term matches any content
+        const isVisible = searchTerm === '' || 
+                         cardText.includes(searchTerm) || 
+                         sessionIdText.includes(searchTerm);
+        
+        const sessionItem = card.closest('.session-item');
+        if (sessionItem) {
+            sessionItem.style.display = isVisible ? 'block' : 'none';
+            if (isVisible) visibleCount++;
+        }
     });
     
     // Show/hide "no results" message
-    let noResultsMsg = sessionsList.querySelector('.no-search-results');
+    const existingNoResultsMsg = container.querySelector('.no-search-results');
+    if (existingNoResultsMsg) {
+        existingNoResultsMsg.remove();
+    }
+    
     if (visibleCount === 0 && searchTerm !== '') {
-        if (!noResultsMsg) {
-            noResultsMsg = document.createElement('div');
-            noResultsMsg.className = 'no-search-results text-center text-muted py-3';
-            noResultsMsg.innerHTML = `
-                <i class="fas fa-search fa-2x mb-2"></i>
-                <p>No sessions found matching "${searchTerm}"</p>
-                <small>Try different keywords or clear the search</small>
-            `;
-            sessionsList.appendChild(noResultsMsg);
-        }
-    } else if (noResultsMsg) {
-        noResultsMsg.remove();
+        const noResultsMsg = document.createElement('div');
+        noResultsMsg.className = 'no-search-results text-center text-muted py-3';
+        noResultsMsg.innerHTML = `
+            <i class="fas fa-search fa-2x mb-2"></i>
+            <p>No sessions found matching "${searchTerm}"</p>
+            <small>Try different keywords or clear the search</small>
+        `;
+        container.appendChild(noResultsMsg);
     }
 }
+
+// Legacy function for backward compatibility - now redirects to unified system
+function initializeSessionSearch() {
+    initializeUnifiedSearch();
+}
+
+// Legacy function for backward compatibility - now redirects to unified system
+function filterSessions() {
+    applySearchToAllContainers();
+}
+
+// Simple global session toggle function
+window.toggleSession = function(sessionId) {
+    const isSelected = selectedSessions.has(sessionId);
+    handleSessionChange(sessionId, !isSelected);
+};
+
+// Make search functions globally accessible
+window.initializeUnifiedSearch = initializeUnifiedSearch;
+window.applySearchToAllContainers = applySearchToAllContainers;
+window.filterSessionsInContainer = filterSessionsInContainer;
+
+// Add tab switching event listeners to apply search when switching tabs
+document.addEventListener('DOMContentLoaded', function() {
+    // Listen for tab switches
+    document.querySelectorAll('[data-bs-toggle="tab"]').forEach(tab => {
+        tab.addEventListener('shown.bs.tab', function(e) {
+            // Apply search when switching to any tab that has session lists
+            setTimeout(() => {
+                applySearchToAllContainers();
+            }, 100);
+        });
+    });
+});
 
 // Syntax highlight function for JSON
 function syntaxHighlightJson(json) {
@@ -2962,7 +3075,6 @@ function createSummaryTableRow(session, index) {
         <td>
             <span class="badge bg-secondary">${params.max_seq_length}</span>
         </td>
-        <td>${params.max_iterations}</td>
         <td>
             <div class="fw-bold">${bestCheckpoint.checkpoint}</div>
         </td>
@@ -3036,18 +3148,50 @@ function formatTrainingTypeDisplay(trainingType) {
 }
 
 function detectTrainingType(session) {
-    // Use existing detection logic from session cards
-    if (session.session_name?.toLowerCase().includes('lora') || 
-        session.log_file?.toLowerCase().includes('lora') ||
-        session.session_id?.toLowerCase().includes('lora')) {
-        return 'LoRA';
+    // CLEAN SIMPLE FIX: Extract training type from session card badges (source of truth)
+    const sessionId = session.sessionId || session.session_id || session.id;
+    
+    if (sessionId) {
+        const escapedId = sessionId.replace(/[^a-zA-Z0-9_-]/g, '_');
+        
+        // Try both compare and training session card selectors
+        let sessionCard = document.querySelector(`#compare-session-card-${escapedId}`);
+        if (!sessionCard) {
+            sessionCard = document.querySelector(`#training-session-card-${escapedId}`);
+        }
+        
+        if (sessionCard) {
+            const trainingBadges = sessionCard.querySelector('.training-badges');
+            if (trainingBadges) {
+                const badges = trainingBadges.querySelectorAll('.badge');
+                for (const badge of badges) {
+                    const text = badge.textContent.trim();
+                    if (text === 'LoRA') return 'LoRA';
+                    if (text === 'DoRA') return 'DoRA';
+                    if (text === 'Full') return 'Full';
+                }
+            }
+        }
     }
-    if (session.session_name?.toLowerCase().includes('dora') || 
-        session.log_file?.toLowerCase().includes('dora') ||
-        session.session_id?.toLowerCase().includes('dora')) {
-        return 'DoRA';
+    
+    // Fallback to batch API data if session card not found
+    if (session.batch_data && session.batch_data.fine_tune_type) {
+        const t = session.batch_data.fine_tune_type.toLowerCase();
+        if (t === 'lora') return 'LoRA';
+        if (t === 'dora') return 'DoRA';
+        return 'Full';
     }
-    return 'Full';
+    
+    // Check if this is loaded session data from SessionDataManager
+    if (session.config && session.config.fine_tune_type) {
+        const t = session.config.fine_tune_type.toLowerCase();
+        if (t === 'lora') return 'LoRA';
+        if (t === 'dora') return 'DoRA';
+        return 'Full';
+    }
+    
+    // Final fallback - assume LoRA for most CPT sessions
+    return 'LoRA';
 }
 
 function detectTrainingMethod(session) {
@@ -3151,7 +3295,6 @@ function createFallbackTableRow(session, index) {
         <td>
             <span class="badge bg-secondary">${params.max_seq_length || 'N/A'}</span>
         </td>
-        <td>${params.max_iterations || 'N/A'}</td>
         <td>
             <div class="text-muted">N/A</div>
         </td>
@@ -3305,12 +3448,13 @@ window.generateSessionCard = function generateSessionCard(session, options = {})
         lrDisplay = `${lrDisplay} | ${additionalParams.join(' | ')}`;
     }
 
-    // Determine click handler
+    // Determine click handler - SIMPLE APPROACH
     let clickHandler = '';
     if (customClickHandler) {
         clickHandler = `onclick="${customClickHandler}('${sessionId.replace(/'/g, "\\'")}')"`;
     } else if (isCompareTab) {
-        clickHandler = `onclick="handleSessionChange('${sessionId.replace(/'/g, "\\'")}', !selectedSessions.has('${sessionId.replace(/'/g, "\\'")}'))"`;
+        // Simple solution: use a global function that handles the toggle logic
+        clickHandler = `onclick="window.toggleSession('${sessionId.replace(/'/g, "\\'")}')"`;
     } else {
         // Training tab - populate form with session parameters
         clickHandler = `onclick="populateTrainingFormFromSession('${sessionId.replace(/'/g, "\\'")}')" style="cursor: pointer;"`;
@@ -3731,12 +3875,48 @@ async function populateLossBadgesBatch(sessions) {
                 continue;
             }
             
-            // Find the session card
-            const sessionCard = document.querySelector(`#compare-session-card-${escapeSelector(sessionId)}`);
+            // SIMPLE FIX: Store batch data in session object for table generation
+            session.batch_data = sessionData;
+            
+            // Find the session card - check both Compare and Training tabs
+            // Use the same escaping logic as generateSessionCard
+            const escapedId = sessionId.replace(/[^a-zA-Z0-9_-]/g, '_');
+            
+            // Determine which tab is currently active
+            const trainingTab = document.querySelector('#training-tab');
+            const compareTab = document.querySelector('#compare-tab');
+            const isTrainingTabActive = trainingTab && trainingTab.classList.contains('active');
+            const isCompareTabActive = compareTab && compareTab.classList.contains('active');
+            
+            let sessionCard = null;
+            
+            // Prioritize the active tab
+            if (isTrainingTabActive) {
+                sessionCard = document.querySelector(`#training-session-card-${escapedId}`);
+                if (!sessionCard) {
+                    sessionCard = document.querySelector(`#compare-session-card-${escapedId}`);
+                }
+            } else if (isCompareTabActive) {
+                sessionCard = document.querySelector(`#compare-session-card-${escapedId}`);
+                if (!sessionCard) {
+                    sessionCard = document.querySelector(`#training-session-card-${escapedId}`);
+                }
+            } else {
+                // No active tab detected, try both
+                sessionCard = document.querySelector(`#compare-session-card-${escapedId}`);
+                if (!sessionCard) {
+                    sessionCard = document.querySelector(`#training-session-card-${escapedId}`);
+                }
+            }
+            
             if (!sessionCard) {
-                console.warn(`Session card not found for ${sessionId}`);
+                console.warn(`Session card not found for ${sessionId} in either Compare or Training tab`);
+                console.warn(`Tried selectors: #compare-session-card-${escapedId} and #training-session-card-${escapedId}`);
+                console.warn(`Active tab: Training=${isTrainingTabActive}, Compare=${isCompareTabActive}`);
                 continue;
             }
+            
+            // Session card found and ready for badge updates
             
             // Update loss badges
             const lossBadgesContainer = sessionCard.querySelector('.loss-badges-header');
@@ -3747,39 +3927,70 @@ async function populateLossBadgesBatch(sessions) {
                 `;
             }
             
-            // Update training type badges
-            const trainingBadgesContainer = sessionCard.querySelector('.training-badges');
-            if (trainingBadgesContainer && sessionData.fine_tune_type) {
-                const badges = [];
-                
-                // Add fine-tune type badge
-                const t = sessionData.fine_tune_type.toLowerCase();
-                const [bg, txt] = t === 'lora' ? ['bg-success', 'LoRA'] :
-                                  t === 'dora' ? ['bg-olive', 'DoRA'] :
-                                  ['bg-primary', 'Full'];
-                badges.push(`<span class="badge ${bg}">${txt}</span>`);
-                
-                // Add any other badges from heuristic data
-                const heuristic = getTrainingParameters(session);
-                if (heuristic.trainingTypeShort) {
-                    badges.push(`<span class="badge bg-warning text-dark">${heuristic.trainingTypeShort}</span>`);
-                }
-                if (heuristic.sequenceLength) {
-                    badges.push(`<span class="badge bg-secondary">${heuristic.sequenceLength}</span>`);
-                }
-                
-                trainingBadgesContainer.innerHTML = badges.join(' ');
-            }
+                         // Update training type badges using real config data
+             const trainingBadgesContainer = sessionCard.querySelector('.training-badges');
+             if (trainingBadgesContainer) {
+                 const badges = [];
+                 
+                 // 1. Fine-tune type badge from real config data
+                 if (sessionData.fine_tune_type) {
+                     const t = sessionData.fine_tune_type.toLowerCase();
+                     if (t === 'lora') {
+                         badges.push('<span class="badge bg-success">LoRA</span>');
+                     } else if (t === 'dora') {
+                         badges.push('<span class="badge bg-olive">DoRA</span>');
+                     } else {
+                         badges.push('<span class="badge bg-primary">Full</span>');
+                     }
+                 } else {
+                     // Fallback for sessions without config data
+                     badges.push('<span class="badge bg-primary">Full</span>');
+                 }
+                 
+                 // 2. CPT/SFT badge (most are CPT)
+                 badges.push('<span class="badge bg-warning text-dark">CPT</span>');
+                 
+                 // 3. Sequence length from real config data
+                 if (sessionData.max_seq_length) {
+                     badges.push(`<span class="badge bg-secondary">${sessionData.max_seq_length}</span>`);
+                 } else {
+                     // Fallback: try to extract from session name
+                     const sessionName = session.session_name || session.session_id || '';
+                     const seqMatch = sessionName.match(/seq(\d+)/i);
+                     if (seqMatch) {
+                         badges.push(`<span class="badge bg-secondary">${seqMatch[1]}</span>`);
+                     }
+                 }
+                 
+                 trainingBadgesContainer.innerHTML = badges.join(' ');
+             }
             
-            // Update learning rate info
-            const lrInfoContainer = sessionCard.querySelector('.session-compact-info .info-item:nth-child(2) .info-text');
-            if (lrInfoContainer && sessionData.learning_rate) {
-                let lrDisplay = formatScientificNotation(sessionData.learning_rate);
-                const extras = [];
-                
-                if (sessionData.lr_decay_factor && parseFloat(sessionData.lr_decay_factor) > 0) {
-                    extras.push(`LDR ${sessionData.lr_decay_factor}`);
-                }
+                         // Update learning rate info with real config data
+             const lrInfoContainer = sessionCard.querySelector('.session-compact-info .info-item:nth-child(2) .info-text');
+             if (lrInfoContainer) {
+                 let lrDisplay = 'N/A';
+                 const extras = [];
+                 
+                 // Use real learning rate from config
+                 if (sessionData.learning_rate) {
+                     lrDisplay = formatScientificNotation(sessionData.learning_rate);
+                 } else {
+                     // Fallback: try to extract from session name
+                     const sessionName = session.session_name || '';
+                     const lrMatch = sessionName.match(/lr([0-9]+(?:[._][0-9]+)?(?:[eE][_+-]?[0-9]+)?)/i);
+                     if (lrMatch) {
+                         let extractedLR = lrMatch[1];
+                         if (extractedLR.includes('e_')) extractedLR = extractedLR.replace('e_', 'e-');
+                         if (extractedLR.includes('E_')) extractedLR = extractedLR.replace('E_', 'E-');
+                         extractedLR = extractedLR.replace(/_/g, '.');
+                         lrDisplay = formatScientificNotation(extractedLR);
+                     }
+                 }
+                 
+                 // Add LDR and WD from real config data
+                 if (sessionData.lr_decay_factor && parseFloat(sessionData.lr_decay_factor) > 0) {
+                     extras.push(`LDR ${sessionData.lr_decay_factor}`);
+                 }
                 
                 if (sessionData.weight_decay && parseFloat(sessionData.weight_decay) > 0) {
                     extras.push(`WD ${sessionData.weight_decay}`);

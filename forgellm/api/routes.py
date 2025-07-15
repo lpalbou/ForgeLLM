@@ -1291,22 +1291,65 @@ def setup_api(app: Flask) -> Blueprint:
                         if val_loss is not None:
                             latest_val_loss = f"{val_loss:.3f}" if val_loss >= 0.01 else f"{val_loss:.1e}"
                     
-                    # Extract key training parameters from config
+                    # Extract key training parameters from config files
                     learning_rate = None
                     lr_decay_factor = None
                     weight_decay = None
                     fine_tune_type = None
+                    max_seq_length = None
                     
-                    if config:
-                        learning_rate = config.get('learning_rate')
-                        lr_decay_factor = config.get('lr_decay_factor')
-                        weight_decay = config.get('weight_decay')
-                        
-                        # Determine fine-tune type
-                        if config.get('lora_layers'):
-                            fine_tune_type = 'dora' if config.get('use_dora', False) else 'lora'
-                        else:
-                            fine_tune_type = 'full'
+                    # Get session path from log file
+                    session_path = os.path.dirname(log_file)
+                    
+                    # Try to load from adapter_config.json first (most complete)
+                    adapter_config_path = os.path.join(session_path, 'adapter_config.json')
+                    if os.path.exists(adapter_config_path):
+                        try:
+                            with open(adapter_config_path, 'r') as f:
+                                adapter_config = json.load(f)
+                                
+                            # Extract values from adapter_config.json
+                            learning_rate = adapter_config.get('learning_rate')
+                            max_seq_length = adapter_config.get('max_seq_length')
+                            fine_tune_type = adapter_config.get('fine_tune_type')
+                            
+                            # Extract lr_decay_factor from lr_schedule
+                            lr_schedule = adapter_config.get('lr_schedule', {})
+                            if isinstance(lr_schedule, dict) and 'arguments' in lr_schedule:
+                                args = lr_schedule['arguments']
+                                if len(args) >= 3:
+                                    initial_lr = args[0]
+                                    final_lr = args[2]
+                                    if initial_lr and final_lr:
+                                        lr_decay_factor = round(final_lr / initial_lr, 3)
+                            
+                            # Extract weight_decay from optimizer_config
+                            optimizer_config = adapter_config.get('optimizer_config', {})
+                            adamw_config = optimizer_config.get('adamw', {})
+                            wd = adamw_config.get('weight_decay')
+                            if wd is not None:
+                                weight_decay = round(wd, 3)
+                            
+                        except (json.JSONDecodeError, FileNotFoundError):
+                            pass
+                    
+                    # Fallback to CPT config if adapter_config didn't have everything
+                    if not all([learning_rate, lr_decay_factor, weight_decay, fine_tune_type, max_seq_length]):
+                        if config:
+                            if not learning_rate:
+                                learning_rate = config.get('learning_rate')
+                            if not lr_decay_factor:
+                                ldr = config.get('lr_decay_factor')
+                                if ldr is not None:
+                                    lr_decay_factor = round(ldr, 3)
+                            if not weight_decay:
+                                wd = config.get('weight_decay')
+                                if wd is not None:
+                                    weight_decay = round(wd, 3)
+                            if not fine_tune_type:
+                                fine_tune_type = config.get('fine_tune_type')
+                            if not max_seq_length:
+                                max_seq_length = config.get('max_seq_length')
                     
                     batch_results[session_id] = {
                         'success': True,
@@ -1315,7 +1358,8 @@ def setup_api(app: Flask) -> Blueprint:
                         'learning_rate': learning_rate,
                         'lr_decay_factor': lr_decay_factor,
                         'weight_decay': weight_decay,
-                        'fine_tune_type': fine_tune_type
+                        'fine_tune_type': fine_tune_type,
+                        'max_seq_length': max_seq_length
                     }
                     
                 except Exception as e:
@@ -1805,7 +1849,7 @@ def setup_api(app: Flask) -> Blueprint:
         return jsonify({
             'success': True,
             'status': 'ok',
-            'version': '0.4.0'
+            'version': '0.4.1'
         })
     
     @bp.route('/model/status', methods=['GET'])

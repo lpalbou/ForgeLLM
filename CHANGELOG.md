@@ -5,6 +5,36 @@ All notable changes to ForgetLLM will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.1] - 2025-01-16
+
+### 🐛 Compare Tab Table Fixes
+
+#### **Training Type Detection Fix**
+- **Issue**: Compare Tab table TYPE column was defaulting to "Full" instead of showing correct LoRA/DoRA/Full values
+- **Root Cause**: Table generation was using fallback logic instead of reading actual training type from session cards
+- **Solution**: Modified `detectTrainingType()` to extract training type directly from session card badges (source of truth)
+- **Result**: Table now correctly displays LoRA/DoRA/Full types matching the session cards
+
+#### **Table Structure Cleanup**
+- **Removed**: Iterations column from Compare Tab table as it was not informative
+- **Improved**: Table is now more focused and easier to read
+- **Maintained**: All essential columns (Training Session, Type, Method, Seq Len, Best Checkpoint, Best Loss, etc.)
+
+#### **Technical Implementation**
+- **Clean Solution**: Uses session cards as single source of truth for training type detection
+- **Multi-layered Fallback**: Session card badges → batch API data → config data → intelligent default
+- **No Breaking Changes**: All existing functionality preserved
+- **Verified**: Comprehensive Playwright testing confirms fixes work correctly
+
+### 🔧 Technical Details
+- **Files Modified**: 
+  - `forgellm/web/templates/index.html` - Removed iterations column from table header
+  - `forgellm/web/static/js/components/compare.js` - Enhanced training type detection and table generation
+- **Approach**: Simple, maintainable solution that reuses existing UI data
+- **Testing**: Automated verification ensures table shows correct types and column structure
+
+---
+
 ## [0.4.0] - 2025-01-10
 
 ### 🐛 Critical Memory Bug Fix
