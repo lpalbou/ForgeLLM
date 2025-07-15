@@ -5,6 +5,38 @@ All notable changes to ForgetLLM will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.2] - 2025-01-17
+
+### 🔄 Fullscreen Mode Fix
+
+#### **Generation Output Fullscreen Toggle**
+- **Issue**: Fullscreen button in Generation Output panel wasn't working correctly when toggling back to normal mode
+- **Root Cause**: The chat panel wasn't being returned to its original container when exiting fullscreen mode
+- **Solution**: Implemented robust container tracking and restoration system
+  - Stores original container reference before entering fullscreen
+  - Uses multiple fallback mechanisms to find the correct container when exiting
+  - Properly resets styles when returning to normal mode
+
+#### **Enhanced Fullscreen Experience**
+- **Improved Button**: More visible primary button with "Fullscreen" and "Exit Fullscreen" text
+- **Smooth Transitions**: Added CSS transitions for smoother visual changes
+- **Style Preservation**: Proper style reset when exiting fullscreen mode
+- **Error Handling**: Comprehensive error handling for edge cases
+- **Visual Feedback**: Clear button state changes when toggling modes
+
+#### **Technical Implementation**
+- **Original Container Tracking**: Stores DOM reference to original container before entering fullscreen
+- **Multi-Level Fallbacks**: Uses stored reference, selector, or tab container as fallbacks
+- **Style Management**: Properly manages height, max-height, and other styles during transitions
+- **Button Text Updates**: Dynamic button text changes between modes
+- **Comprehensive Logging**: Detailed console logs for debugging
+
+### 🔧 Technical Improvements
+- **Enhanced Error Handling**: Better error messages and fallbacks throughout the system
+- **Improved DOM Management**: More reliable element selection and manipulation
+- **CSS Enhancements**: Better styling for fullscreen mode with proper transitions
+- **Code Organization**: Cleaner separation of concerns in fullscreen toggle functionality
+
 ## [0.4.1] - 2025-01-16
 
 ### 🐛 Compare Tab Table Fixes

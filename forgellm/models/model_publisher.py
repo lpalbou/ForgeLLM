@@ -737,13 +737,12 @@ No checkpoint analysis available - this may indicate insufficient validation dat
         return performance
     
     def _get_forgellm_version(self) -> str:
-        """Get ForgeLLM version"""
-        # Try to get version from forgellm package
+        """Get the ForgeLLM version"""
         try:
-            import forgellm
-            return getattr(forgellm, '__version__', '0.4.1')
+            from .. import __version__
+            return __version__
         except ImportError:
-            return '0.3.7'
+            return "0.4.2"  # Fallback version
     
     def _extract_model_architecture(self, base_model: str) -> str:
         """Extract model architecture from model name"""

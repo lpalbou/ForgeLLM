@@ -22,6 +22,7 @@ from ..training.trainer import ContinuedPretrainer
 from ..training.process_manager import TrainingProcessManager
 from ..training.dashboard import create_comprehensive_dashboard, identify_best_checkpoints, load_training_data, generate_web_chart_data
 from ..utils.text_stats import count_tokens_accurate
+from .. import __version__
 
 logger = logging.getLogger(__name__)
 
@@ -1847,9 +1848,8 @@ def setup_api(app: Flask) -> Blueprint:
     def health_check():
         """Health check endpoint."""
         return jsonify({
-            'success': True,
-            'status': 'ok',
-            'version': '0.4.1'
+            "status": "ok",
+            "version": __version__
         })
     
     @bp.route('/model/status', methods=['GET'])

@@ -56,6 +56,23 @@ class TrainingInterface {
             // Make sure it's hidden initially
             loadingOverlay.classList.add('d-none');
         }
+        
+        // Direct fullscreen button initialization
+        const fullscreenBtn = document.getElementById('fullscreen-btn');
+        if (fullscreenBtn) {
+            console.log('🔍 Initializing fullscreen button with direct handler');
+            // Remove any existing click handlers
+            fullscreenBtn.removeEventListener('click', () => this.toggleFullscreen());
+            // Add new click handler
+            fullscreenBtn.addEventListener('click', (e) => {
+                console.log('👆 Fullscreen button clicked directly');
+                e.preventDefault();
+                e.stopPropagation();
+                this.toggleFullscreen();
+            });
+        } else {
+            console.error('❌ Fullscreen button not found during init');
+        }
     }
     
     initSocket() {
@@ -284,16 +301,25 @@ class TrainingInterface {
         // Fullscreen toggle functionality
         const fullscreenBtn = document.getElementById('fullscreen-btn');
         if (fullscreenBtn) {
-            fullscreenBtn.addEventListener('click', () => {
+            console.log('🔍 Setting up fullscreen button click handler');
+            fullscreenBtn.addEventListener('click', (e) => {
+                console.log('👆 Fullscreen button clicked');
+                e.preventDefault();
+                e.stopPropagation();
                 this.toggleFullscreen();
+                return false;
             });
+        } else {
+            console.error('❌ Fullscreen button not found during event setup');
         }
         
         // Escape key to exit fullscreen
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
                 const fullscreenOverlay = document.getElementById('fullscreen-overlay');
-                if (fullscreenOverlay && fullscreenOverlay.style.display === 'flex') {
+                if (fullscreenOverlay && (fullscreenOverlay.style.display === 'flex' || 
+                    window.getComputedStyle(fullscreenOverlay).display === 'flex')) {
+                    console.log('⌨️ Escape key pressed, exiting fullscreen');
                     this.toggleFullscreen();
                 }
             }
@@ -4320,6 +4346,7 @@ console.log('code block');
     }
     
     toggleFullscreen() {
+        console.log('🔍 toggleFullscreen called');
         const fullscreenOverlay = document.getElementById('fullscreen-overlay');
         // Target the specific Generation Output card by finding the card that contains the fullscreen button
         const fullscreenBtn = document.getElementById('fullscreen-btn');
@@ -4327,16 +4354,72 @@ console.log('code block');
         const fullscreenIcon = fullscreenBtn.querySelector('i');
         
         if (!fullscreenOverlay || !chatPanel || !fullscreenBtn) {
-            console.error('Fullscreen elements not found');
+            console.error('❌ Fullscreen elements not found:', {
+                fullscreenOverlay: !!fullscreenOverlay,
+                chatPanel: !!chatPanel,
+                fullscreenBtn: !!fullscreenBtn
+            });
             return;
         }
         
-        const isCurrentlyFullscreen = fullscreenOverlay.style.display === 'flex';
+        console.log('🔍 Current fullscreenOverlay display:', fullscreenOverlay.style.display);
+        console.log('🔍 Current computed style:', window.getComputedStyle(fullscreenOverlay).display);
+        
+        // Check both inline style and computed style to determine if it's currently fullscreen
+        const isCurrentlyFullscreen = fullscreenOverlay.style.display === 'flex' || 
+                                     window.getComputedStyle(fullscreenOverlay).display === 'flex';
+        
+        console.log('🔍 isCurrentlyFullscreen:', isCurrentlyFullscreen);
+        
+        // Store a reference to the original container before entering fullscreen
+        // This is needed for proper restoration when exiting fullscreen
+        if (!isCurrentlyFullscreen) {
+            // Save the original container reference before going fullscreen
+            this._originalContainer = chatPanel.parentElement;
+            this._originalContainerSelector = '#testing .col-lg-8';
+            console.log('💾 Saved original container reference:', this._originalContainer);
+        }
         
         if (isCurrentlyFullscreen) {
-            // Exit fullscreen mode
-            // Move the chat panel back to its original location in the Testing tab
-            const originalContainer = document.querySelector('#testing .col-lg-8');
+            console.log('🔄 Exiting fullscreen mode');
+            
+            // Get the original container where the panel should be returned
+            let originalContainer = null;
+            
+            // First try using the stored reference (most reliable)
+            if (this._originalContainer && document.body.contains(this._originalContainer)) {
+                originalContainer = this._originalContainer;
+                console.log('🔍 Using stored original container reference');
+            } 
+            // Then try using the selector
+            else if (this._originalContainerSelector) {
+                originalContainer = document.querySelector(this._originalContainerSelector);
+                console.log('🔍 Using original container selector:', this._originalContainerSelector);
+            }
+            // Fallback to the default location
+            else {
+                originalContainer = document.querySelector('#testing .col-lg-8');
+                console.log('🔍 Using fallback container selector: #testing .col-lg-8');
+            }
+            
+            if (!originalContainer) {
+                console.error('❌ Original container not found, trying to find testing tab container');
+                // Last resort - look for any container in the testing tab
+                originalContainer = document.querySelector('#testing');
+                
+                if (!originalContainer) {
+                    console.error('❌ Testing tab not found, using body as fallback');
+                    // Absolute last resort - just add it to the body
+                    originalContainer = document.body;
+                }
+            }
+            
+            // Make sure the container is visible
+            if (originalContainer !== document.body) {
+                originalContainer.style.display = '';
+            }
+            
+            // Move the chat panel back to its original location
             originalContainer.appendChild(chatPanel);
             
             // Hide the overlay
@@ -4344,12 +4427,27 @@ console.log('code block');
             
             // Update button icon and tooltip
             fullscreenIcon.className = 'fas fa-expand';
+            fullscreenBtn.textContent = '';
+            fullscreenBtn.appendChild(fullscreenIcon);
+            fullscreenBtn.appendChild(document.createTextNode(' Fullscreen'));
             fullscreenBtn.setAttribute('title', 'Toggle fullscreen view');
             
             // Re-enable body scrolling
             document.body.style.overflow = 'auto';
             
+            // Ensure the chat panel has the correct styling for normal mode
+            chatPanel.style.height = '';
+            chatPanel.style.maxHeight = '';
+            
+            // Ensure chat history has the correct height
+            const chatHistory = document.getElementById('chat-history');
+            if (chatHistory) {
+                chatHistory.style.height = '60vh';
+                chatHistory.style.maxHeight = '';
+            }
+            
         } else {
+            console.log('🔄 Entering fullscreen mode');
             // Enter fullscreen mode
             // Move the chat panel to the fullscreen overlay
             fullscreenOverlay.appendChild(chatPanel);
@@ -4359,10 +4457,24 @@ console.log('code block');
             
             // Update button icon and tooltip
             fullscreenIcon.className = 'fas fa-compress';
+            fullscreenBtn.textContent = '';
+            fullscreenBtn.appendChild(fullscreenIcon);
+            fullscreenBtn.appendChild(document.createTextNode(' Exit Fullscreen'));
             fullscreenBtn.setAttribute('title', 'Exit fullscreen view');
             
             // Disable body scrolling
             document.body.style.overflow = 'hidden';
+            
+            // Ensure the chat panel takes full height in fullscreen mode
+            chatPanel.style.height = '100vh';
+            chatPanel.style.maxHeight = '100vh';
+            
+            // Ensure chat history has the correct height in fullscreen
+            const chatHistory = document.getElementById('chat-history');
+            if (chatHistory) {
+                chatHistory.style.height = 'calc(100vh - 200px)';
+                chatHistory.style.maxHeight = 'calc(100vh - 290px)';
+            }
         }
         
         // Update tooltip if using Bootstrap tooltips
@@ -4374,7 +4486,10 @@ console.log('code block');
             }
         } catch (e) {
             // Tooltip might not be initialized yet
+            console.log('⚠️ Tooltip error:', e);
         }
+        
+        console.log('✅ toggleFullscreen completed');
     }
     
     // Fusion methods

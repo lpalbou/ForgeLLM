@@ -819,10 +819,6 @@
             margin: 0.5rem 0;
             margin-top: 0.5rem !important;
         }
-        
-        #fullscreen-btn {
-            color: white;
-        }
 
         /* Fullscreen mode styles */
         .fullscreen-overlay {
@@ -835,17 +831,24 @@
             z-index: 9999;
             display: none;
             flex-direction: column;
-            transition: background-color 0.3s ease;
+            transition: all 0.3s ease;
+            padding: 0;
+            margin: 0;
+            overflow: hidden;
         }
         
         .fullscreen-overlay .card {
-            height: 100vh;
+            height: 100vh !important;
+            width: 100vw !important;
             border-radius: 0 !important;
             box-shadow: none !important;
             border: none !important;
             flex: 1;
             display: flex;
             flex-direction: column;
+            margin: 0 !important;
+            max-height: 100vh !important;
+            overflow: hidden;
         }
         
         .fullscreen-overlay .card-header {
@@ -866,6 +869,7 @@
             flex: 1;
             overflow-y: auto !important;
             max-height: calc(100vh - 290px) !important;
+            transition: height 0.3s ease, max-height 0.3s ease;
         }
         
         .fullscreen-overlay #chat-input-container {
@@ -912,6 +916,20 @@
             padding: 0.15rem 0.3rem;
             font-size: 0.7rem;
             margin: 0 0.1rem;
+        }
+
+        #fullscreen-btn {
+            color: var(--text-color);
+            background-color: rgba(255, 255, 255, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            padding: 0.25rem 0.5rem;
+            transition: all 0.2s ease;
+            z-index: 1000;
+        }
+        
+        #fullscreen-btn:hover {
+            background-color: rgba(255, 255, 255, 0.3);
+            transform: scale(1.05);
         }
 
     </style>
@@ -2152,8 +2170,8 @@
                                 <div>
                                     <i class="fas fa-terminal me-2"></i>Generation Output
                                 </div>
-                                <button id="fullscreen-btn" class="btn btn-sm btn-outline-secondary" data-bs-toggle="tooltip" title="Toggle fullscreen view">
-                                    <i class="fas fa-expand"></i>
+                                <button id="fullscreen-btn" class="btn btn-sm btn-primary" data-bs-toggle="tooltip" title="Toggle fullscreen view">
+                                    <i class="fas fa-expand"></i> Fullscreen
                                 </button>
                             </div>
                             <div class="card-body p-0">
@@ -2402,7 +2420,7 @@
     </div>
 
     <!-- Fullscreen Overlay -->
-    <div id="fullscreen-overlay" class="fullscreen-overlay">
+    <div id="fullscreen-overlay" class="fullscreen-overlay" style="display: none;">
         <!-- Chat panel will be moved here in fullscreen mode -->
     </div>
 
@@ -2453,6 +2471,137 @@
             
             applyTheme(newTheme);
             localStorage.setItem('theme', newTheme);
+        });
+    </script>
+    
+    <!-- Fullscreen Test Script -->
+    <script>
+        // Wait for DOM to be fully loaded
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('🔍 DOM fully loaded - setting up fullscreen test');
+            
+            // Direct access to fullscreen button
+            const fullscreenBtn = document.getElementById('fullscreen-btn');
+            const fullscreenOverlay = document.getElementById('fullscreen-overlay');
+            
+            if (fullscreenBtn) {
+                console.log('✅ Fullscreen button found');
+                console.log('🔍 Button properties:', {
+                    id: fullscreenBtn.id,
+                    classList: fullscreenBtn.className,
+                    style: fullscreenBtn.getAttribute('style'),
+                    'data-bs-toggle': fullscreenBtn.getAttribute('data-bs-toggle'),
+                    title: fullscreenBtn.getAttribute('title')
+                });
+                
+                // Remove the direct onclick handler and use the proper method
+                // This ensures we use the same code path for all fullscreen toggles
+                fullscreenBtn.onclick = function(e) {
+                    console.log('🖱️ Direct onclick handler triggered - delegating to trainingInterface.toggleFullscreen()');
+                    e.preventDefault();
+                    e.stopPropagation();
+                    
+                    // Use the proper method from the training interface
+                    if (window.trainingInterface && typeof window.trainingInterface.toggleFullscreen === 'function') {
+                        window.trainingInterface.toggleFullscreen();
+                    } else {
+                        console.error('❌ trainingInterface.toggleFullscreen not found, using fallback');
+                        
+                        if (!fullscreenOverlay) {
+                            console.error('❌ Fullscreen overlay not found');
+                            return;
+                        }
+                        
+                        const isCurrentlyFullscreen = fullscreenOverlay.style.display === 'flex' || 
+                                                    window.getComputedStyle(fullscreenOverlay).display === 'flex';
+                        
+                        console.log('🔍 Current fullscreen state:', isCurrentlyFullscreen);
+                        
+                        if (isCurrentlyFullscreen) {
+                            console.log('🔄 Exiting fullscreen mode directly');
+                            
+                            // Return the chat panel to its original location
+                            const chatPanel = fullscreenOverlay.querySelector('.card');
+                            const originalContainer = document.querySelector('#testing .col-lg-8');
+                            
+                            if (chatPanel && originalContainer) {
+                                originalContainer.appendChild(chatPanel);
+                                
+                                // Reset styles
+                                chatPanel.style.height = '';
+                                chatPanel.style.maxHeight = '';
+                                
+                                const chatHistory = document.getElementById('chat-history');
+                                if (chatHistory) {
+                                    chatHistory.style.height = '60vh';
+                                    chatHistory.style.maxHeight = '';
+                                }
+                            }
+                            
+                            fullscreenOverlay.style.display = 'none';
+                            document.body.style.overflow = 'auto';
+                            
+                            // Update button text
+                            const icon = fullscreenBtn.querySelector('i');
+                            if (icon) icon.className = 'fas fa-expand';
+                            fullscreenBtn.textContent = '';
+                            fullscreenBtn.appendChild(icon || document.createElement('i').classList.add('fas', 'fa-expand'));
+                            fullscreenBtn.appendChild(document.createTextNode(' Fullscreen'));
+                            
+                        } else {
+                            console.log('🔄 Entering fullscreen mode directly');
+                            
+                            // Move the chat panel
+                            const chatPanel = fullscreenBtn.closest('.card');
+                            if (chatPanel) {
+                                // Store original parent for later restoration
+                                window._originalContainer = chatPanel.parentElement;
+                                
+                                fullscreenOverlay.appendChild(chatPanel);
+                                
+                                // Set fullscreen styles
+                                chatPanel.style.height = '100vh';
+                                chatPanel.style.maxHeight = '100vh';
+                                
+                                const chatHistory = document.getElementById('chat-history');
+                                if (chatHistory) {
+                                    chatHistory.style.height = 'calc(100vh - 200px)';
+                                    chatHistory.style.maxHeight = 'calc(100vh - 290px)';
+                                }
+                            } else {
+                                console.error('❌ Chat panel not found');
+                                return;
+                            }
+                            
+                            fullscreenOverlay.style.display = 'flex';
+                            document.body.style.overflow = 'hidden';
+                            
+                            // Update button text
+                            const icon = fullscreenBtn.querySelector('i');
+                            if (icon) icon.className = 'fas fa-compress';
+                            fullscreenBtn.textContent = '';
+                            fullscreenBtn.appendChild(icon || document.createElement('i').classList.add('fas', 'fa-compress'));
+                            fullscreenBtn.appendChild(document.createTextNode(' Exit Fullscreen'));
+                        }
+                    }
+                    
+                    return false;
+                };
+            } else {
+                console.error('❌ Fullscreen button not found in DOM');
+            }
+            
+            if (fullscreenOverlay) {
+                console.log('✅ Fullscreen overlay found');
+                console.log('🔍 Overlay properties:', {
+                    id: fullscreenOverlay.id,
+                    classList: fullscreenOverlay.className,
+                    style: fullscreenOverlay.getAttribute('style'),
+                    computedDisplay: window.getComputedStyle(fullscreenOverlay).display
+                });
+            } else {
+                console.error('❌ Fullscreen overlay not found in DOM');
+            }
         });
     </script>
 </body>
