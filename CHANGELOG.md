@@ -27,7 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Paragraph Structure**: Improved paragraph separation with proper newline handling
 - **Comprehensive Testing**: Added test script to verify list formatting preservation
 
-## [0.4.2] - 2025-01-17
+## [0.4.2] - 2025-07-15
 
 ### 🔄 Fullscreen Mode Fix
 
