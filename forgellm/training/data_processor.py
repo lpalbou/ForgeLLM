@@ -45,13 +45,13 @@ class DocumentProcessor:
             if self.resolved_input_path:
                 try:
                     relative_path = file_path.relative_to(self.resolved_input_path)
-                    metadata = f"# File: {relative_path}\n\n"
+                    metadata = f"[@Memory:{relative_path}]\n"
                 except ValueError:
                     # Fallback if relative_to fails
-                    metadata = f"# File: {file_path.name}\n\n"
+                    metadata = f"[@Memory:{file_path.name}]\n"
             else:
                 # Fallback if resolved_input_path is not set
-                metadata = f"# File: {file_path.name}\n\n"
+                metadata = f"[@Memory:{file_path.name}]\n"
                 
             return metadata + content
             
@@ -322,7 +322,8 @@ class PretrainingDataProcessor:
         with open(output_file, 'w', encoding='utf-8') as f:
             for chunk in text_chunks:
                 # Add explicit EOS token at the end of each chunk for better document boundary learning
-                chunk_with_eos = chunk + " </s>"
+                # chunk_with_eos = chunk + " </s>"
                 # Use simple text format for continued pre-training
-                json_obj = {"text": chunk_with_eos}
+                #json_obj = {"text": chunk_with_eos}
+                json_obj = {"text": chunk}
                 f.write(json.dumps(json_obj, ensure_ascii=False) + '\n') 
