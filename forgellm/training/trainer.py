@@ -659,39 +659,82 @@ class ContinuedPretrainer:
     
     def stop_training(self):
         """Stop the training process"""
-        if not self._is_training_active or not self._training_process:
-            logger.warning("No active training to stop")
-            return {
-                "success": False,
-                "message": "No active training to stop"
-            }
+        if not self._is_training_active and not self._training_process:
+            # Even if our tracked process isn't active, check if any MLX processes are running
+            mlx_processes_running = self._check_mlx_processes_running()
+            
+            if not mlx_processes_running:
+                logger.warning("No active training to stop")
+                return {
+                    "success": False,
+                    "message": "No active training to stop"
+                }
         
         try:
             # Signal the monitor thread to stop
             self._should_stop_monitor = True
             
-            # Terminate the process
-            self._training_process.terminate()
+            # First try to terminate our tracked process if it exists
+            if self._training_process:
+                try:
+                    # Terminate the process
+                    self._training_process.terminate()
+                    
+                    # Wait for process to end
+                    try:
+                        self._training_process.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        # Force kill if it doesn't terminate
+                        self._training_process.kill()
+                        self._training_process.wait(timeout=5)
+                    
+                    # Untrack the process
+                    process_tracker.untrack_process(self._training_process)
+                except Exception as e:
+                    logger.error(f"Error terminating tracked process: {e}")
             
-            # Wait for process to end
-            try:
-                self._training_process.wait(timeout=10)
-            except subprocess.TimeoutExpired:
-                # Force kill if it doesn't terminate
-                self._training_process.kill()
-                self._training_process.wait(timeout=5)
+            # Find and terminate any MLX training processes
+            import psutil
+            killed_processes = 0
+            
+            for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+                try:
+                    if proc.info['cmdline']:
+                        cmdline = ' '.join(proc.info['cmdline'])
+                        # Look for actual MLX training commands
+                        if any(pattern in cmdline for pattern in [
+                            'mlx_lm.lora',      # MLX LoRA training
+                            'mlx_lm.fuse',      # MLX model fusion
+                            'mlx-lm',           # MLX-LM package calls
+                            'mlx_lm',           # MLX-LM package calls
+                            'python -m mlx',    # Python MLX module calls
+                        ]):
+                            logger.info(f"Terminating MLX process: PID {proc.info['pid']}, CMD: {cmdline}")
+                            try:
+                                # First try graceful termination
+                                proc_obj = psutil.Process(proc.info['pid'])
+                                proc_obj.terminate()
+                                
+                                # Give it a moment to terminate
+                                try:
+                                    proc_obj.wait(timeout=3)
+                                except psutil.TimeoutExpired:
+                                    # Force kill if it doesn't terminate
+                                    proc_obj.kill()
+                                
+                                killed_processes += 1
+                            except Exception as e:
+                                logger.error(f"Error killing MLX process {proc.info['pid']}: {e}")
+                except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                    continue
             
             # Set training inactive
             self._is_training_active = False
             
-            # Untrack the process
-            if self._training_process:
-                process_tracker.untrack_process(self._training_process)
-            
-            logger.info("Training stopped")
+            logger.info(f"Training stopped. Terminated {killed_processes} MLX processes.")
             return {
                 "success": True,
-                "message": "Training stopped successfully"
+                "message": f"Training stopped successfully. Terminated {killed_processes} MLX processes."
             }
         except Exception as e:
             logger.error(f"Error stopping training: {e}")

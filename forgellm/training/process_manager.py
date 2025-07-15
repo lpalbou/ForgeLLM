@@ -87,11 +87,8 @@ class TrainingProcessManager:
     
     def stop_training(self) -> Dict:
         """Stop current training"""
-        if not self.current_training:
-            return {"success": False, "error": "No training in progress"}
-        
         try:
-            # Stop the trainer
+            # Stop the trainer - this will now find and kill any MLX processes
             result = self.trainer.stop_training()
             
             # Stop monitoring

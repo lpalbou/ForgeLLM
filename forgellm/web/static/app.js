@@ -1129,13 +1129,17 @@ class TrainingInterface {
             if (data.success) {
                 this.isTraining = false;
                 this.updateTrainingButtons(false);
-                this.showAlert('Training stopped', 'info');
+                this.showAlert(data.message || 'Training stopped successfully', 'info');
+                
+                // Force a status update to refresh the UI
+                await this.checkTrainingStatusOnce();
             } else {
                 this.showAlert(data.error || 'Failed to stop training', 'danger');
+                console.error('Failed to stop training:', data.error);
             }
         } catch (error) {
             console.error('Error stopping training:', error);
-            this.showAlert('Error stopping training', 'danger');
+            this.showAlert('Error stopping training: ' + (error.message || 'Unknown error'), 'danger');
         } finally {
             this.hideLoading();
         }

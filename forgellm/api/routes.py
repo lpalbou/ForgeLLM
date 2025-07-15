@@ -346,9 +346,11 @@ def setup_api(app: Flask) -> Blueprint:
             # Stop training using the training manager
             result = training_manager.stop_training()
             
-            if result.get('success', True):
-                return jsonify({'success': True})
+            if result.get('success', False):
+                logger.info("Training stopped successfully via API")
+                return jsonify({'success': True, 'message': result.get('message', 'Training stopped successfully')})
             else:
+                logger.warning(f"Failed to stop training: {result.get('error', 'Unknown error')}")
                 return jsonify({'success': False, 'error': result.get('error', 'Failed to stop training')}), 500
         except Exception as e:
             logger.error(f"Error stopping training: {e}")
