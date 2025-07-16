@@ -645,11 +645,13 @@ class QuantizationComponent {
             const modal = document.getElementById('file-browser-modal');
             const modalTitle = modal.querySelector('#file-browser-title');
             const modelName = modelPath.split('/').pop();
-            modalTitle.textContent = `Quantized Model: ${modelName}`;
+            modalTitle.innerHTML = `<i class="fas fa-folder-open me-2 text-primary"></i>Quantized: ${modelName}`;
             
-            // Hide the select button since we're just viewing
+            // Hide the select button and update help text since we're just viewing
             const selectBtn = modal.querySelector('#browser-select-btn');
+            const helpSelect = modal.querySelector('#browser-help-select');
             selectBtn.style.display = 'none';
+            helpSelect.innerHTML = '<small class="text-muted"><i class="fas fa-info-circle me-1"></i>Click on folders to navigate</small>';
             
             // Load the directory contents using the existing function
             await this.loadDirectoryContents(modelPath);
@@ -662,8 +664,10 @@ class QuantizationComponent {
             modal.addEventListener('hidden.bs.modal', () => {
                 const selectBtn = modal.querySelector('#browser-select-btn');
                 const modalTitle = modal.querySelector('#file-browser-title');
+                const helpSelect = modal.querySelector('#browser-help-select');
                 selectBtn.style.display = 'block';
-                modalTitle.textContent = 'Select Directory';
+                modalTitle.innerHTML = '<i class="fas fa-folder-open me-2 text-primary"></i>Select Directory';
+                helpSelect.innerHTML = '<small class="text-muted"><i class="fas fa-info-circle me-1"></i>Click on folders to navigate • Double-click to select and close</small>';
             }, { once: true });
             
         } catch (error) {

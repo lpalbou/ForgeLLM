@@ -74,39 +74,60 @@
 <div class="modal fade" id="file-browser-modal" tabindex="-1" aria-labelledby="file-browser-title" aria-hidden="true">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="file-browser-title">Select Directory</h5>
+            <div class="modal-header border-bottom-0 pb-2">
+                <h5 class="modal-title d-flex align-items-center" id="file-browser-title">
+                    <i class="fas fa-folder-open me-2 text-primary"></i>
+                    Select Directory
+                </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <div class="modal-body">
-                <div class="d-flex align-items-center mb-3">
-                    <button type="button" class="btn btn-outline-secondary me-2" id="browser-up-btn" disabled>
-                        <i class="fas fa-arrow-up"></i> Up
+            <div class="modal-body px-4 py-3">
+                <!-- Navigation Bar -->
+                <div class="d-flex align-items-center mb-3 gap-2">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" id="browser-up-btn" disabled
+                            data-bs-toggle="tooltip" title="Go up one directory">
+                        <i class="fas fa-arrow-up"></i>
                     </button>
                     <div class="flex-grow-1">
-                        <input type="text" class="form-control" id="browser-current-path" readonly>
+                        <input type="text" class="form-control form-control-sm font-monospace" 
+                               id="browser-current-path" readonly 
+                               style="background-color: var(--bs-gray-100); border: 1px solid var(--bs-gray-300);">
                     </div>
+                    <button type="button" class="btn btn-sm btn-outline-primary" id="browser-open-finder-btn"
+                            data-bs-toggle="tooltip" 
+                            title="Open in system file manager (works only when server and client are on same machine)">
+                        <i class="fas fa-external-link-alt"></i>
+                    </button>
                 </div>
-                <div id="browser-loading" class="text-center d-none">
-                    <div class="spinner-border text-primary" role="status">
+                
+                <!-- Loading State -->
+                <div id="browser-loading" class="text-center py-4 d-none">
+                    <div class="spinner-border spinner-border-sm text-primary mb-2" role="status">
                         <span class="visually-hidden">Loading...</span>
                     </div>
-                    <p class="mt-2">Loading directory contents...</p>
+                    <p class="text-muted mb-0 small">Loading...</p>
                 </div>
-                <div id="browser-content" class="border rounded" style="height: 400px; overflow-y: auto;">
-                    <!-- Directory contents will be loaded here -->
+                
+                <!-- Content Area -->
+                <div id="browser-content" class="border rounded" style="height: 350px; overflow-y: auto; background-color: var(--bs-body-bg);">
+                    <div class="text-center py-5 text-muted">
+                        <i class="fas fa-folder-open fa-2x mb-2 opacity-50"></i>
+                        <p class="mb-0 small">Navigate to a directory</p>
+                    </div>
                 </div>
-                <div class="mt-3">
+                
+                <!-- Help Text -->
+                <div class="mt-3" id="browser-help-select">
                     <small class="text-muted">
-                        <i class="fas fa-info-circle"></i>
-                        Select a directory by clicking on it, then click "Select Directory" to choose it.
+                        <i class="fas fa-info-circle me-1"></i>
+                        Click on folders to navigate • Double-click to select and close
                     </small>
                 </div>
             </div>
-            <div class="modal-footer">
+            <div class="modal-footer border-top-0 pt-2">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                 <button type="button" class="btn btn-primary" id="browser-select-btn" disabled>
-                    <i class="fas fa-check"></i> Select Directory
+                    <i class="fas fa-check me-1"></i> Select Directory
                 </button>
             </div>
         </div>

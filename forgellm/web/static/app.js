@@ -3851,11 +3851,13 @@ ${content.trim()}
             const modal = document.getElementById('file-browser-modal');
             const modalTitle = modal.querySelector('#file-browser-title');
             const modelName = modelPath.split('/').pop();
-            modalTitle.textContent = `Model Folder: ${modelName}`;
+            modalTitle.innerHTML = `<i class="fas fa-folder-open me-2 text-primary"></i>Model: ${modelName}`;
             
-            // Hide the select button since we're just viewing
+            // Hide the select button and update help text since we're just viewing
             const selectBtn = modal.querySelector('#browser-select-btn');
+            const helpSelect = modal.querySelector('#browser-help-select');
             selectBtn.style.display = 'none';
+            helpSelect.innerHTML = '<small class="text-muted"><i class="fas fa-info-circle me-1"></i>Click on folders to navigate</small>';
             
             // Load the directory contents
             await this.loadDirectoryContents(modelPath);
@@ -3868,8 +3870,10 @@ ${content.trim()}
             modal.addEventListener('hidden.bs.modal', () => {
                 const selectBtn = modal.querySelector('#browser-select-btn');
                 const modalTitle = modal.querySelector('#file-browser-title');
+                const helpSelect = modal.querySelector('#browser-help-select');
                 selectBtn.style.display = 'block';
-                modalTitle.textContent = 'Select Directory';
+                modalTitle.innerHTML = '<i class="fas fa-folder-open me-2 text-primary"></i>Select Directory';
+                helpSelect.innerHTML = '<small class="text-muted"><i class="fas fa-info-circle me-1"></i>Click on folders to navigate • Double-click to select and close</small>';
             }, { once: true });
             
         } catch (error) {
@@ -3896,11 +3900,13 @@ ${content.trim()}
             const modal = document.getElementById('file-browser-modal');
             const modalTitle = modal.querySelector('#file-browser-title');
             const adapterName = folderPath.split('/').pop();
-            modalTitle.textContent = `Adapter Folder: ${adapterName}`;
+            modalTitle.innerHTML = `<i class="fas fa-folder-open me-2 text-primary"></i>Adapter: ${adapterName}`;
             
-            // Hide the select button since we're just viewing
+            // Hide the select button and update help text since we're just viewing
             const selectBtn = modal.querySelector('#browser-select-btn');
+            const helpSelect = modal.querySelector('#browser-help-select');
             selectBtn.style.display = 'none';
+            helpSelect.innerHTML = '<small class="text-muted"><i class="fas fa-info-circle me-1"></i>Click on folders to navigate</small>';
             
             // Load the directory contents
             await this.loadDirectoryContents(folderPath);
@@ -3913,8 +3919,10 @@ ${content.trim()}
             modal.addEventListener('hidden.bs.modal', () => {
                 const selectBtn = modal.querySelector('#browser-select-btn');
                 const modalTitle = modal.querySelector('#file-browser-title');
+                const helpSelect = modal.querySelector('#browser-help-select');
                 selectBtn.style.display = 'block';
-                modalTitle.textContent = 'Select Directory';
+                modalTitle.innerHTML = '<i class="fas fa-folder-open me-2 text-primary"></i>Select Directory';
+                helpSelect.innerHTML = '<small class="text-muted"><i class="fas fa-info-circle me-1"></i>Click on folders to navigate • Double-click to select and close</small>';
             }, { once: true });
             
         } catch (error) {
@@ -4166,12 +4174,15 @@ ${content.trim()}
         // Remove existing listeners to prevent duplicates
         const upBtn = document.getElementById('browser-up-btn');
         const selectBtn = document.getElementById('browser-select-btn');
+        const finderBtn = document.getElementById('browser-open-finder-btn');
         
         // Clone to remove all event listeners
         const newUpBtn = upBtn.cloneNode(true);
         const newSelectBtn = selectBtn.cloneNode(true);
+        const newFinderBtn = finderBtn.cloneNode(true);
         upBtn.parentNode.replaceChild(newUpBtn, upBtn);
         selectBtn.parentNode.replaceChild(newSelectBtn, selectBtn);
+        finderBtn.parentNode.replaceChild(newFinderBtn, finderBtn);
         
         // Add new event listeners
         document.getElementById('browser-up-btn').addEventListener('click', () => {
@@ -4192,6 +4203,14 @@ ${content.trim()}
                 
                 // Close modal properly
                 this.closeFileBrowserModal();
+            }
+        });
+        
+        // Add Finder button event listener
+        document.getElementById('browser-open-finder-btn').addEventListener('click', () => {
+            const currentPath = document.getElementById('browser-current-path').value;
+            if (currentPath) {
+                this.openDirectoryInFinder(currentPath);
             }
         });
         
@@ -4236,27 +4255,39 @@ ${content.trim()}
             // Enable/disable up button
             upBtn.disabled = !data.parent_path;
             
-            // Clear content
+            // Clear content and create list group
             contentEl.innerHTML = '';
             
             // Add directory items
             if (data.items && data.items.length > 0) {
-                data.items.forEach(item => {
-                    if (item.is_directory) {
-                        const itemEl = this.createDirectoryItem(item);
-                        contentEl.appendChild(itemEl);
-                    }
+                const listGroup = document.createElement('div');
+                listGroup.className = 'list-group list-group-flush';
+                
+                // Add directories first
+                const directories = data.items.filter(item => item.is_directory);
+                const files = data.items.filter(item => !item.is_directory);
+                
+                directories.forEach(item => {
+                    const itemEl = this.createDirectoryItem(item);
+                    listGroup.appendChild(itemEl);
                 });
                 
+                // Add separator if both directories and files exist
+                if (directories.length > 0 && files.length > 0) {
+                    const separator = document.createElement('div');
+                    separator.className = 'border-top my-2 opacity-25';
+                    listGroup.appendChild(separator);
+                }
+                
                 // Add files (for reference, but not selectable)
-                data.items.forEach(item => {
-                    if (!item.is_directory) {
-                        const itemEl = this.createFileItem(item);
-                        contentEl.appendChild(itemEl);
-                    }
+                files.forEach(item => {
+                    const itemEl = this.createFileItem(item);
+                    listGroup.appendChild(itemEl);
                 });
+                
+                contentEl.appendChild(listGroup);
             } else {
-                contentEl.innerHTML = '<div class="text-center text-muted p-3">No directories found</div>';
+                contentEl.innerHTML = '<div class="text-center text-muted py-5"><i class="fas fa-folder-open opacity-50 mb-2"></i><br><small>No items found</small></div>';
             }
         } catch (error) {
             console.error('Error loading directory:', error);
@@ -4268,16 +4299,77 @@ ${content.trim()}
         }
     }
     
+    async openDirectoryInFinder(directoryPath) {
+        try {
+            const response = await fetch('/api/open_folder', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ path: directoryPath })
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                // Show success feedback
+                const finderBtn = document.getElementById('browser-open-finder-btn');
+                const originalHtml = finderBtn.innerHTML;
+                finderBtn.innerHTML = '<i class="fas fa-check text-success"></i>';
+                finderBtn.classList.add('btn-outline-success');
+                finderBtn.classList.remove('btn-outline-primary');
+                
+                // Reset button after 2 seconds
+                setTimeout(() => {
+                    finderBtn.innerHTML = originalHtml;
+                    finderBtn.classList.remove('btn-outline-success');
+                    finderBtn.classList.add('btn-outline-primary');
+                }, 2000);
+            } else {
+                throw new Error(data.error || 'Failed to open directory');
+            }
+        } catch (error) {
+            console.error('Error opening directory in finder:', error);
+            
+            // Show error feedback
+            const finderBtn = document.getElementById('browser-open-finder-btn');
+            const originalHtml = finderBtn.innerHTML;
+            finderBtn.innerHTML = '<i class="fas fa-exclamation-triangle text-danger"></i>';
+            finderBtn.classList.add('btn-outline-danger');
+            finderBtn.classList.remove('btn-outline-primary');
+            
+            // Reset button after 3 seconds
+            setTimeout(() => {
+                finderBtn.innerHTML = originalHtml;
+                finderBtn.classList.remove('btn-outline-danger');
+                finderBtn.classList.add('btn-outline-primary');
+            }, 3000);
+            
+            // Also show alert for more details
+            alert(`Failed to open directory: ${error.message}\n\nThis feature only works when the server and client are on the same machine.`);
+        }
+    }
+    
     createDirectoryItem(item) {
         const div = document.createElement('div');
-        div.className = 'list-group-item list-group-item-action d-flex align-items-center';
+        div.className = 'list-group-item list-group-item-action d-flex align-items-center py-2 border-0';
         div.style.cursor = 'pointer';
+        div.style.borderRadius = '6px';
+        div.style.margin = '1px 0';
+        
+        const itemCount = item.item_count || 0;
+        const hasItems = itemCount > 0;
         
         div.innerHTML = `
-            <i class="fas fa-folder text-primary me-3"></i>
-            <div class="flex-grow-1">
-                <div class="fw-bold">${item.name}</div>
-                <small class="text-muted">${item.description}</small>
+            <div class="me-3 d-flex align-items-center justify-content-center" style="width: 20px;">
+                <i class="fas fa-folder text-primary"></i>
+            </div>
+            <div class="flex-grow-1 min-w-0">
+                <div class="fw-medium text-truncate">${item.name}</div>
+                ${hasItems ? `<small class="text-muted">${itemCount} items</small>` : '<small class="text-muted opacity-75">Empty</small>'}
+            </div>
+            <div class="text-muted">
+                <i class="fas fa-chevron-right small"></i>
             </div>
         `;
         
@@ -4306,18 +4398,51 @@ ${content.trim()}
     
     createFileItem(item) {
         const div = document.createElement('div');
-        div.className = 'list-group-item d-flex align-items-center';
+        div.className = 'list-group-item d-flex align-items-center py-2 border-0';
         div.style.opacity = '0.6';
+        div.style.borderRadius = '6px';
+        div.style.margin = '1px 0';
+        
+        // Get file icon based on extension
+        const extension = item.name.split('.').pop().toLowerCase();
+        let fileIcon = 'fas fa-file';
+        let iconColor = 'text-muted';
+        
+        if (['txt', 'md', 'json', 'jsonl'].includes(extension)) {
+            fileIcon = 'fas fa-file-alt';
+            iconColor = 'text-info';
+        } else if (['py', 'js', 'html', 'css'].includes(extension)) {
+            fileIcon = 'fas fa-file-code';
+            iconColor = 'text-warning';
+        } else if (['safetensors', 'bin', 'ckpt'].includes(extension)) {
+            fileIcon = 'fas fa-cube';
+            iconColor = 'text-success';
+        } else if (['png', 'jpg', 'jpeg', 'gif'].includes(extension)) {
+            fileIcon = 'fas fa-file-image';
+            iconColor = 'text-danger';
+        }
+        
+        const fileSize = item.size ? this.formatFileSize(item.size) : '';
         
         div.innerHTML = `
-            <i class="fas fa-file text-secondary me-3"></i>
-            <div class="flex-grow-1">
-                <div>${item.name}</div>
-                <small class="text-muted">${item.description}</small>
+            <div class="me-3 d-flex align-items-center justify-content-center" style="width: 20px;">
+                <i class="${fileIcon} ${iconColor}"></i>
+            </div>
+            <div class="flex-grow-1 min-w-0">
+                <div class="text-truncate">${item.name}</div>
+                ${fileSize ? `<small class="text-muted">${fileSize}</small>` : ''}
             </div>
         `;
         
         return div;
+    }
+    
+    formatFileSize(bytes) {
+        if (bytes === 0) return '0 B';
+        const k = 1024;
+        const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
     }
 
     async isCurrentModelBase() {
