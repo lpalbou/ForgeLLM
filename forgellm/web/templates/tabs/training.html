@@ -1,0 +1,343 @@
+<!-- Training Tab -->
+<div class="tab-pane fade show active" id="training" role="tabpanel">
+    <div class="row">
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-header">
+                    <i class="fas fa-cog me-2"></i>Training Configuration
+                </div>
+                <div class="card-body">
+                    <form id="training-form">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="model-select" class="form-label">Model</label>
+                                    <select class="form-select" id="model-select" required
+                                            data-bs-toggle="tooltip" data-bs-placement="top" 
+                                            title="Base model to fine-tune. Choose based on your target domain and computational resources.">
+                                        <option value="">Loading models...</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="mb-3">
+                                    <label for="input-dir" class="form-label">Training Dataset</label>
+                                    <div class="input-group">
+                                        <input type="text" class="form-control" id="input-dir" value="dataset" required readonly
+                                               data-bs-toggle="tooltip" data-bs-placement="top" 
+                                               title="Directory containing your training data. Should contain text files or JSONL format.">
+                                        <button type="button" class="btn btn-outline-primary" id="browse-input-dir">
+                                            <i class="fas fa-folder-open"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="mb-3">
+                                    <label for="output-dir" class="form-label">Output Directory</label>
+                                    <div class="input-group">
+                                        <input type="text" class="form-control" id="output-dir" value="models" required readonly
+                                               data-bs-toggle="tooltip" data-bs-placement="top" 
+                                               title="Directory where the fine-tuned model and checkpoints will be saved.">
+                                        <button type="button" class="btn btn-outline-primary" id="browse-output-dir">
+                                            <i class="fas fa-folder-open"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-3">
+                                <div class="mb-3">
+                                    <label for="batch-size" class="form-label">Batch Size</label>
+                                    <input type="number" class="form-control" id="batch-size" value="5" required min="1"
+                                           data-bs-toggle="tooltip" data-bs-placement="top" 
+                                           title="Number of samples processed together. Higher = faster training but more memory. Start with 1-8 for large models.">
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="mb-3">
+                                    <label for="learning-rate" class="form-label">Learning Rate</label>
+                                    <input type="text" class="form-control" id="learning-rate" value="3e-6" required
+                                           data-bs-toggle="tooltip" data-bs-placement="top" 
+                                           title="Controls how much to change weights during training. Lower = safer but slower. Try 1e-5 to 1e-4 for most tasks.">
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="mb-3">
+                                    <label for="max-iterations" class="form-label">Max Iterations</label>
+                                    <input type="number" class="form-control" id="max-iterations" value="300" required min="1"
+                                           data-bs-toggle="tooltip" data-bs-placement="top" 
+                                           title="Maximum training steps. More iterations = longer training. Monitor validation loss to avoid overfitting.">
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="mb-3">
+                                    <label for="warmup-steps" class="form-label">Warmup Steps</label>
+                                    <input type="number" class="form-control" id="warmup-steps" value="30" required min="0"
+                                           data-bs-toggle="tooltip" data-bs-placement="top" 
+                                           title="Steps to gradually increase learning rate from 0. Helps training stability. Use 10% of max iterations.">
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="mb-3">
+                                    <label for="max-seq-length" class="form-label">Max Sequence Length</label>
+                                    <input type="number" class="form-control" id="max-seq-length" value="2048" min="512" max="8192" step="512" required
+                                           data-bs-toggle="tooltip" data-bs-placement="top" 
+                                           title="Maximum input length in tokens. Higher = more context but more memory. Match your dataset's typical length.">
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="mb-3">
+                                    <label for="weight-decay" class="form-label">Weight Decay</label>
+                                    <input type="number" class="form-control" id="weight-decay" value="0.01" step="0.001" min="0" max="0.1" required
+                                           data-bs-toggle="tooltip" data-bs-placement="top" 
+                                           title="L2 regularization to prevent overfitting. Higher = more regularization. 0.01-0.1 typical for small datasets.">
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="mb-3">
+                                    <label for="lr-decay-factor" class="form-label">LR Decay Factor</label>
+                                    <input type="number" class="form-control" id="lr-decay-factor" value="0.1" step="0.01" min="0.01" max="1.0" required
+                                           data-bs-toggle="tooltip" data-bs-placement="top" 
+                                           title="How much to reduce learning rate when loss plateaus. Lower = more aggressive decay. 0.1-0.5 typical.">
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="mb-3">
+                                    <label for="fine-tune-type" class="form-label">Fine-tuning Type</label>
+                                    <select class="form-select" id="fine-tune-type" required
+                                            data-bs-toggle="tooltip" data-bs-placement="top" 
+                                            title="Full: trains all parameters (best quality, more memory). LoRA/DoRA: parameter-efficient (faster, less memory).">
+                                        <option value="full" selected>Full (all parameters)</option>
+                                        <option value="lora">LoRA</option>
+                                        <option value="dora">DoRA</option>
+                                    </select>
+                                    <small class="form-text text-muted">Full trains all parameters, LoRA/DoRA use parameter-efficient methods</small>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="mb-3">
+                                    <label for="num-layers" class="form-label">Layers to Fine-tune</label>
+                                    <input type="number" class="form-control" id="num-layers" value="-1" min="-1" max="100" step="1" required
+                                           data-bs-toggle="tooltip" data-bs-placement="top" 
+                                           title="Number of layers to fine-tune. -1 = all layers. For LoRA/DoRA: fewer layers = faster training.">
+                                    <small class="form-text text-muted">Use -1 for all layers or specify number (for LoRA/DoRA)</small>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- LoRA/DoRA Parameters (only shown when LoRA/DoRA is selected) -->
+                        <div class="row" id="lora-params-section" style="display: none;">
+                            <div class="col-12">
+                                <div class="alert alert-info">
+                                    <i class="fas fa-info-circle me-2"></i>
+                                    <strong>LoRA/DoRA Parameters:</strong> These settings control the adapter training behavior
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="mb-3">
+                                    <label for="lora-rank" class="form-label">LoRA Rank</label>
+                                    <input type="number" class="form-control" id="lora-rank" value="32" min="1" max="512" step="1"
+                                           data-bs-toggle="tooltip" data-bs-placement="top" 
+                                           title="Rank of adapter matrices. Higher = more capacity but slower training. 8-64 typical, 32 good default.">
+                                    <small class="form-text text-muted">Higher rank = more parameters, better quality (8-64 typical)</small>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="mb-3">
+                                    <label for="lora-scale" class="form-label">LoRA Scale</label>
+                                    <input type="number" class="form-control" id="lora-scale" value="16" min="0.1" max="100" step="0.1"
+                                           data-bs-toggle="tooltip" data-bs-placement="top" 
+                                           title="Scaling factor for adapter output. Higher = stronger adaptation. Start with rank value, adjust based on results.">
+                                    <small class="form-text text-muted">Scaling factor for adapter weights (10-30 typical)</small>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="mb-3">
+                                    <label for="lora-dropout" class="form-label">LoRA Dropout</label>
+                                    <input type="number" class="form-control" id="lora-dropout" value="0.0" min="0.0" max="0.9" step="0.01"
+                                           data-bs-toggle="tooltip" data-bs-placement="top" 
+                                           title="Dropout rate for LoRA layers. Helps prevent overfitting. 0.0-0.1 typical, 0.0 for small datasets.">
+                                    <small class="form-text text-muted">Dropout rate for regularization (0.0-0.1 typical)</small>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="mb-3">
+                                    <label for="lora-modules" class="form-label">Target Modules</label>
+                                    <select class="form-select" id="lora-modules"
+                                            data-bs-toggle="tooltip" data-bs-placement="top" 
+                                            title="Which model layers to apply LoRA to. Default targets query/value projections. All linear = more adaptation.">
+                                        <option value="default" selected>Default (q_proj, v_proj)</option>
+                                        <option value="all_linear">All Linear Layers</option>
+                                        <option value="attention_only">Attention Only</option>
+                                        <option value="custom">Custom</option>
+                                    </select>
+                                    <small class="form-text text-muted">Which layers to apply LoRA to</small>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="mb-3">
+                                    <label for="lr-schedule" class="form-label">LR Schedule</label>
+                                    <select class="form-select" id="lr-schedule" required
+                                            data-bs-toggle="tooltip" data-bs-placement="top" 
+                                            title="How learning rate changes during training. Cosine: smooth decay. Linear: steady decrease. Constant: no change.">
+                                        <option value="cosine_decay">Cosine Decay</option>
+                                        <option value="linear_decay">Linear Decay</option>
+                                        <option value="constant">Constant</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="mb-3">
+                                    <label for="save-every" class="form-label">Save Every X Steps</label>
+                                    <select class="form-select" id="save-every" required
+                                            data-bs-toggle="tooltip" data-bs-placement="top" 
+                                            title="How often to save model checkpoints. More frequent = more disk space but better recovery options.">
+                                        <option value="5">5 steps</option>
+                                        <option value="10">10 steps</option>
+                                        <option value="25" selected>25 steps</option>
+                                        <option value="50">50 steps</option>
+                                        <option value="100">100 steps</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="mb-3">
+                                    <label for="eval-every" class="form-label">Eval Every X Steps</label>
+                                    <select class="form-select" id="eval-every" required
+                                            data-bs-toggle="tooltip" data-bs-placement="top" 
+                                            title="How often to evaluate on validation set. More frequent = better monitoring but slower training.">
+                                        <option value="5">5</option>
+                                        <option value="10">10</option>
+                                        <option value="25" selected>25</option>
+                                        <option value="50">50</option>
+                                        <option value="100">100</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="mb-3">
+                                    <label for="val-fast-pct" class="form-label">Quick Val</label>
+                                    <input type="number" class="form-control" id="val-fast-pct" value="1.0" step="0.01" min="0.05" max="1" required
+                                           data-bs-toggle="tooltip" data-bs-placement="top" 
+                                           title="Fraction of validation set used for quick evaluation. 1.0 = use all validation data for accurate metrics.">
+                                    <small class="form-text text-muted">Percentage of validation set used for quick checks</small>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="mb-3">
+                                    <label for="validation-split" class="form-label">Validation Split</label>
+                                    <input type="number" class="form-control" id="validation-split" value="0.1" step="0.01" min="0.05" max="0.3" required
+                                           data-bs-toggle="tooltip" data-bs-placement="top" 
+                                           title="Fraction of dataset reserved for validation. 0.1-0.2 typical. Higher for small datasets to detect overfitting.">
+                                    <small class="form-text text-muted">Fraction of data used for validation</small>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="mb-3">
+                                    <div class="form-check mt-4">
+                                        <input class="form-check-input" type="checkbox" id="enable-early-stopping"
+                                               data-bs-toggle="tooltip" data-bs-placement="top" 
+                                               title="Automatically stop training when validation loss stops improving. Helps prevent overfitting.">
+                                        <label class="form-check-label" for="enable-early-stopping">
+                                            Enable Early Stopping
+                                        </label>
+                                        <small class="form-text text-muted">When enabled, training stops if validation loss stops improving (disabled by default)</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Training Estimates -->
+                        <div class="row">
+                            <div class="col-12">
+                                <div class="alert alert-info" id="training-estimates">
+                                    <i class="fas fa-calculator me-2"></i>
+                                    <strong>Training Estimates:</strong>
+                                    <span id="epoch-estimate">Configure parameters to see estimates</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Learning Rate Schedule Preview -->
+                        <div class="row mt-3">
+                            <div class="col-12">
+                                <div class="card mb-4">
+                                    <div class="card-header">
+                                        <i class="fas fa-chart-line me-2"></i>Learning Rate Schedule Preview
+                                    </div>
+                                    <div class="card-body">
+                                        <div id="lr-schedule-chart" style="height: 300px;"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                            <button type="button" class="btn btn-danger me-md-2" id="stop-training-form-btn" disabled>
+                                <i class="fas fa-stop me-2"></i>Stop Training
+                            </button>
+                            <button type="submit" class="btn btn-primary" id="start-training-btn">
+                                <i class="fas fa-play me-2"></i>Start Training
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-4">
+            <div class="card">
+                <div class="card-header">
+                    <i class="fas fa-info-circle me-2"></i>Training Status
+                </div>
+                <div class="card-body">
+                    <div id="training-status">
+                        <div class="text-center text-muted">
+                            <i class="fas fa-clock fa-2x mb-3"></i>
+                            <p>No training in progress</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card mt-3">
+                <div class="card-header">
+                    <i class="fas fa-graduation-cap me-2"></i>Training Sessions
+                </div>
+                <div class="card-body">
+                    <!-- Search Bar -->
+                    <div class="mb-3">
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text">
+                                <i class="fas fa-search"></i>
+                            </span>
+                            <input type="text" class="form-control" id="training-session-search-input" placeholder="Search sessions by model, type, or parameters...">
+                            <button class="btn btn-outline-secondary" type="button" id="training-clear-search-btn" title="Clear search">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div id="checkpoints-list">
+                        <div class="text-center text-muted">
+                            <i class="fas fa-folder-open fa-2x mb-3"></i>
+                            <p>Loading checkpoints...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div> 

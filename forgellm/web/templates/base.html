@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}MLX Training Interface{% endblock %}</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <!-- Custom Styles -->
+    <link href="{{ url_for('static', filename='css/styles.css') }}?v={{ cache_buster }}" rel="stylesheet">
+    <!-- Chart.js (For consistent charting like monitoring tab) -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.min.js"></script>
+    <!-- Plotly (Legacy support) -->
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <!-- Socket.IO -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    
+    {% block head %}{% endblock %}
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-dark">
+        <div class="container">
+            <a class="navbar-brand" href="#">
+                <i class="fas fa-brain me-2"></i>MLX Training Interface
+            </a>
+            <div class="navbar-nav ms-auto">
+                <button id="theme-toggle" class="btn btn-outline-light btn-sm me-3" type="button" title="Toggle dark mode">
+                    <i class="fas fa-moon" id="theme-icon"></i>
+                </button>
+                <span class="navbar-text" id="connection-status">
+                    <span class="status-indicator status-stopped"></span>
+                    Connecting...
+                </span>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="container mt-4">
+        <!-- Tabs -->
+        <ul class="nav nav-tabs mb-4" id="mainTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="training-tab" data-bs-toggle="tab" data-bs-target="#training" type="button" role="tab">
+                    <i class="fas fa-play me-2"></i>Train
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="monitoring-tab" data-bs-toggle="tab" data-bs-target="#monitoring" type="button" role="tab">
+                    <i class="fas fa-chart-line me-2"></i>Monitor
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="compare-tab" data-bs-toggle="tab" data-bs-target="#compare" type="button" role="tab">
+                    <i class="fas fa-balance-scale me-2"></i>Compare
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="fuse-tab" data-bs-toggle="tab" data-bs-target="#fuse" type="button" role="tab">
+                    <i class="fas fa-layer-group me-2"></i>Fuse
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="quantization-tab" data-bs-toggle="tab" data-bs-target="#quantization" type="button" role="tab">
+                    <i class="fas fa-compress-alt me-2"></i>Quantize
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="testing-tab" data-bs-toggle="tab" data-bs-target="#testing" type="button" role="tab">
+                    <i class="fas fa-flask me-2"></i>Test
+                </button>
+            </li>
+        </ul>
+
+        <!-- Tab Content -->
+        <div class="tab-content" id="mainTabContent">
+            {% block content %}{% endblock %}
+        </div>
+    </div>
+
+    <!-- Shared Modals -->
+    {% include 'components/modals.html' %}
+
+    <!-- Shared Overlays -->
+    {% include 'components/overlays.html' %}
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- Marked.js for Markdown rendering -->
+    <script src="{{ url_for('static', filename='js/utils/marked.min.js') }}"></script>
+    
+    <!-- Component Scripts (load before app.js to ensure functions are available) -->
+    <script src="{{ url_for('static', filename='js/services/api.js') }}?v={{ cache_buster }}"></script>
+    <script src="{{ url_for('static', filename='js/components/quantization.js') }}?v={{ cache_buster }}"></script>
+    <script src="{{ url_for('static', filename='js/components/compare.js') }}?v={{ cache_buster }}"></script>
+    
+    <!-- Custom JavaScript (loads after components) -->
+    <script src="{{ url_for('static', filename='app.js') }}?v={{ cache_buster }}"></script>
+    
+    <!-- Theme Toggle Script -->
+    <script>
+        // Theme management
+        const themeToggle = document.getElementById('theme-toggle');
+        const themeIcon = document.getElementById('theme-icon');
+        const body = document.body;
+        
+        // Check for saved theme preference or default to light mode
+        const currentTheme = localStorage.getItem('theme') || 'light';
+        
+        // Apply the current theme
+        function applyTheme(theme) {
+            if (theme === 'dark') {
+                body.setAttribute('data-theme', 'dark');
+                themeIcon.className = 'fas fa-sun';
+                themeToggle.title = 'Switch to light mode';
+            } else {
+                body.removeAttribute('data-theme');
+                themeIcon.className = 'fas fa-moon';
+                themeToggle.title = 'Switch to dark mode';
+            }
+        }
+        
+        // Initialize theme
+        applyTheme(currentTheme);
+        
+        // Theme toggle event listener
+        themeToggle.addEventListener('click', () => {
+            const currentTheme = body.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            
+            applyTheme(newTheme);
+            localStorage.setItem('theme', newTheme);
+        });
+    </script>
+    
+    {% block scripts %}{% endblock %}
+</body>
+</html> 

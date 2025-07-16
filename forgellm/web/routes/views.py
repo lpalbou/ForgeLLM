@@ -17,10 +17,20 @@ bp = Blueprint('views', __name__)
 
 @bp.route('/')
 def index():
-    """Render the main index page"""
+    """Render the main index page using modular template structure"""
     # Add cache buster to force JavaScript reload after changes
-    # Force cache bust to reload updated JavaScript
     cache_buster = int(time.time())
+    
+    # Use the new modular template structure
+    return render_template('index.html', cache_buster=cache_buster)
+
+@bp.route('/legacy')
+def legacy_index():
+    """Render the legacy single-file index page for comparison"""
+    # Add cache buster to force JavaScript reload after changes
+    cache_buster = int(time.time())
+    
+    # Use the original monolithic template
     return render_template('index.html', cache_buster=cache_buster)
 
 @bp.route('/static/<path:path>')

@@ -1,0 +1,172 @@
+<!-- Compare Tab -->
+<div class="tab-pane fade" id="compare" role="tabpanel">
+    <div class="row">
+        <!-- Left panel: Session Selection -->
+        <div class="col-lg-3">
+            <div class="card">
+                <div class="card-header">
+                    <i class="fas fa-list me-2"></i>Training Sessions
+                    <button class="btn btn-sm btn-outline-primary float-end" id="refresh-sessions-btn" title="Refresh sessions list">
+                        <i class="fas fa-sync-alt"></i>
+                    </button>
+                </div>
+                <div class="card-body">
+                    <!-- Dataset Warning -->
+                    <div class="alert alert-warning" role="alert">
+                        <small><i class="fas fa-exclamation-triangle me-2"></i>
+                        <strong>Important:</strong> <i>only compare sessions trained on the same dataset</i></small>.
+                    </div>
+                    
+                    <!-- Search Bar -->
+                    <div class="mb-3">
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text">
+                                <i class="fas fa-search"></i>
+                            </span>
+                            <input type="text" class="form-control" id="session-search-input" placeholder="Search sessions by model, type, or parameters...">
+                            <button class="btn btn-outline-secondary" type="button" id="clear-search-btn" title="Clear search">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Clear All Button -->
+                    <div class="mb-3">
+                        <button class="btn btn-sm btn-secondary w-100" id="clear-selection-btn">
+                            <i class="fas fa-times me-2"></i>Clear All
+                        </button>
+                    </div>
+                    
+                    <!-- Session List -->
+                    <div id="compare-sessions-list">
+                        <div class="text-center text-muted">
+                            <i class="fas fa-spinner fa-spin fa-2x mb-3"></i>
+                            <p>Loading training sessions...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Comparison Statistics -->
+            <div class="card mt-3" id="comparison-stats-card" style="display: none;">
+                <div class="card-header">
+                    <i class="fas fa-calculator me-2"></i>Comparison Statistics
+                </div>
+                <div class="card-body">
+                    <div id="comparison-stats-content">
+                        <!-- Statistics will be populated here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Right panel: Comparison Charts -->
+        <div class="col-lg-9">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <div>
+                        <i class="fas fa-chart-area me-2"></i>Training Analysis Dashboard
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div id="comparison-charts-container">
+                        <!-- Default state -->
+                        <div class="text-center text-muted py-5" id="comparison-placeholder">
+                            <i class="fas fa-chart-line fa-4x mb-4" style="opacity: 0.3;"></i>
+                            <h4>Training Session Analysis</h4>
+                            <p class="lead">Select one or more training sessions from the left panel to view their performance metrics and compare results.</p>
+                        </div>
+                        
+                        <!-- Charts Grid (2x2) -->
+                        <div id="comparison-charts-grid" style="display: none;">
+                            <div class="row">
+                                <!-- Loss Comparison -->
+                                <div class="col-lg-6 mb-4">
+                                    <div class="card h-100">
+                                        <div class="card-header">
+                                            <i class="fas fa-chart-line me-2"></i>Loss Analysis
+                                            <small class="text-muted float-end">Training vs Validation</small>
+                                        </div>
+                                        <div class="card-body p-2">
+                                            <div id="loss-comparison-chart" style="height: 300px;"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Perplexity Comparison -->
+                                <div class="col-lg-6 mb-4">
+                                    <div class="card h-100">
+                                        <div class="card-header">
+                                            <i class="fas fa-brain me-2"></i>Perplexity Analysis
+                                            <small class="text-muted float-end">Lower is better</small>
+                                        </div>
+                                        <div class="card-body p-2">
+                                            <div id="perplexity-comparison-chart" style="height: 300px;"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="row">
+                                <!-- Loss Stability Comparison -->
+                                <div class="col-lg-6 mb-4">
+                                    <div class="card h-100">
+                                        <div class="card-header">
+                                            <i class="fas fa-wave-square me-2"></i>Loss Stability
+                                            <small class="text-muted float-end">Variance analysis</small>
+                                        </div>
+                                        <div class="card-body p-2">
+                                            <div id="stability-comparison-chart" style="height: 300px;"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Generalization Gap Comparison -->
+                                <div class="col-lg-6 mb-4">
+                                    <div class="card h-100">
+                                        <div class="card-header">
+                                            <i class="fas fa-balance-scale me-2"></i>Generalization Gap
+                                            <small class="text-muted float-end">Val Loss - Train Loss</small>
+                                        </div>
+                                        <div class="card-body p-2">
+                                            <div id="generalization-comparison-chart" style="height: 300px;"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Summary Table (shown when sessions are selected, full width) -->
+    <div class="card mt-4" id="summary-table-card" style="display: none;">
+        <div class="card-header">
+            <i class="fas fa-table me-2"></i>Training Sessions Summary
+            <small class="text-muted float-end">Sorted by validation loss (best first)</small>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover" id="sessions-summary-table">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Training Session</th>
+                            <th>Type</th>
+                            <th>Method</th>
+                            <th>Seq Len</th>
+                            <th>Best Checkpoint</th>
+                            <th>Best Loss</th>
+                            <th>Learning Rate</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="sessions-summary-tbody">
+                        <!-- Table rows will be populated here -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div> 

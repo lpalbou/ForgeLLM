@@ -1,0 +1,198 @@
+<!-- Monitoring Tab -->
+<div class="tab-pane fade" id="monitoring" role="tabpanel">
+    <div class="row">
+        <!-- Training Session Selection -->
+        <div class="col-12 mb-4">
+            <div class="card">
+                <div class="card-header">
+                    <i class="fas fa-history me-2"></i>Training Session
+                </div>
+                <div class="card-body">
+                    <div class="row align-items-end">
+                        <div class="col-md-8">
+                            <label for="training-session-select" class="form-label">Select Training Session</label>
+                            <select class="form-select" id="training-session-select">
+                                <option value="">Current training session</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4 d-flex gap-2">
+                            <button type="button" class="btn btn-danger" id="stop-training-monitor-btn" style="display: none;" title="Stop active training">
+                                <i class="fas fa-stop me-2"></i>Stop Training
+                            </button>
+                            <button type="button" class="btn btn-primary flex-grow-1" id="load-session-btn">
+                                <i class="fas fa-eye me-2"></i>View Session
+                            </button>
+                            <button type="button" class="btn btn-outline-info" id="view-logs-btn" title="View session logs">
+                                <i class="fas fa-file-code"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Key Metrics -->
+        <div class="col-12">
+            <div class="row" id="metrics-row">
+                <div class="col-md-2">
+                    <div class="metric-card">
+                        <div class="metric-value" id="current-iteration">-</div>
+                        <div class="metric-label">Iteration</div>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="metric-card">
+                        <div class="metric-value" id="train-loss">-</div>
+                        <div class="metric-label">Train Loss</div>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="metric-card">
+                        <div class="metric-value" id="val-loss">-</div>
+                        <div class="metric-label">Val Loss</div>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="metric-card">
+                        <div class="metric-value" id="perplexity">-</div>
+                        <div class="metric-label">Perplexity</div>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="metric-card">
+                        <div class="metric-value" id="tokens-per-sec">-</div>
+                        <div class="metric-label">Tokens/sec</div>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="metric-card">
+                        <div class="metric-value" id="trained-tokens">-</div>
+                        <div class="metric-label">Trained Tokens</div>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="metric-card">
+                        <div class="metric-value" id="epoch-done">-</div>
+                        <div class="metric-label">Epoch</div>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="metric-card">
+                        <div class="metric-value" id="memory-usage">-</div>
+                        <div class="metric-label">Memory (GB)</div>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="metric-card">
+                        <div class="metric-value" id="display-learning-rate">-</div>
+                        <div class="metric-label">Learning Rate</div>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="metric-card">
+                        <div class="metric-value" id="display-warmup-steps">-</div>
+                        <div class="metric-label">Warmup Steps</div>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="metric-card">
+                        <div class="metric-value" id="display-lr-decay-factor">-</div>
+                        <div class="metric-label">LR Decay</div>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="metric-card">
+                        <div class="metric-value" id="display-weight-decay">-</div>
+                        <div class="metric-label">Weight Decay</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Progress Bar -->
+        <div class="col-12 mb-4">
+            <div class="card">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span>Training Progress</span>
+                        <div class="d-flex align-items-center gap-3">
+                            <span id="elapsed-time" class="text-muted small">E.Time: --</span>
+                            <span id="eta-time" class="text-muted small">R.Time: --</span>
+                            <span id="progress-text">0%</span>
+                        </div>
+                    </div>
+                    <div class="progress">
+                        <div class="progress-bar" id="progress-bar" role="progressbar" style="width: 0%"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Charts -->
+        <div class="col-lg-6">
+            <div class="chart-container">
+                <div id="loss-chart"></div>
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <div class="chart-container">
+                <div id="perplexity-chart"></div>
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <div class="chart-container">
+                <div id="lr-chart"></div>
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <div class="chart-container">
+                <div id="speed-chart"></div>
+            </div>
+        </div>
+        
+        <!-- Best Checkpoints -->
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <i class="fas fa-trophy me-2"></i>Top 3 Best Checkpoints
+                </div>
+                <div class="card-body">
+                    <div id="best-checkpoints">
+                        <div class="text-center text-muted">
+                            <i class="fas fa-chart-line fa-2x mb-3"></i>
+                            <p>No training data available</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- All Checkpoints Selection -->
+        <div class="col-12 mt-3">
+            <div class="card">
+                <div class="card-header">
+                    <i class="fas fa-list-alt me-2"></i>All Available Checkpoints
+                </div>
+                <div class="card-body">
+                    <div class="row align-items-end">
+                        <div class="col-md-8">
+                            <label for="checkpoint-select" class="form-label">Select Checkpoint to Publish</label>
+                            <select class="form-select" id="checkpoint-select">
+                                <option value="">Select a checkpoint...</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <button type="button" class="btn btn-primary w-100" id="publish-selected-checkpoint-btn">
+                                <i class="fas fa-cloud-upload-alt me-2"></i>Publish Selected Checkpoint
+                            </button>
+                        </div>
+                    </div>
+                    <div class="mt-3 small text-muted">
+                        <i class="fas fa-info-circle me-1"></i>
+                        This list shows all available checkpoints for the selected training session.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div> 

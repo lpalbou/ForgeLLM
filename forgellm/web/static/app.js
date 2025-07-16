@@ -25,6 +25,9 @@ class TrainingInterface {
         this.isMonitoringPollingActive = false; // Flag to prevent duplicate polling
         
         this.init();
+        
+        // Add global modal cleanup on page unload
+        window.addEventListener('beforeunload', () => this.cleanupAllModals());
     }
     
     init() {
@@ -435,7 +438,7 @@ class TrainingInterface {
             if (selectedOption) {
                 // Use the stored path if available, otherwise fall back to the value
                 const modelPath = selectedOption.getAttribute('data-path') || selectedOption.value;
-                this.openModelFolder(modelPath);
+                this.showModelFolder(modelPath);
             } else {
                 this.showAlert('No model selected', 'warning');
             }
@@ -447,6 +450,19 @@ class TrainingInterface {
                 navigator.clipboard.writeText(adapterPath)
                     .then(() => this.showTooltip('copy-adapter-path-btn', 'Copied!'))
                     .catch(err => this.showAlert('Failed to copy: ' + err, 'danger'));
+            } else {
+                this.showAlert('No adapter selected', 'warning');
+            }
+        });
+        
+        document.getElementById('open-adapter-folder-btn').addEventListener('click', () => {
+            const adapterSelect = document.getElementById('adapter-path');
+            const selectedOption = adapterSelect.selectedOptions[0];
+            
+            if (selectedOption && selectedOption.value) {
+                // Use the stored path if available, otherwise fall back to the value
+                const adapterPath = selectedOption.getAttribute('data-path') || selectedOption.value;
+                this.showAdapterFolder(adapterPath);
             } else {
                 this.showAlert('No adapter selected', 'warning');
             }
@@ -3824,27 +3840,86 @@ ${content.trim()}
         }, 1500);
     }
     
-    // Method to open model folder in system file explorer
-    async openModelFolder(modelPath) {
+    // Method to show model folder contents in modal
+    async showModelFolder(modelPath) {
         try {
-            const response = await fetch('/api/open_folder', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ path: modelPath })
-            });
+            // Use the existing file browser modal in view mode
+            window.currentBrowserCallback = null; // No callback needed for viewing
+            window.currentBrowserType = 'view';
             
-            const data = await response.json();
+            // Set modal title
+            const modal = document.getElementById('file-browser-modal');
+            const modalTitle = modal.querySelector('#file-browser-title');
+            const modelName = modelPath.split('/').pop();
+            modalTitle.textContent = `Model Folder: ${modelName}`;
             
-            if (data.success) {
-                this.showTooltip('open-model-folder-btn', 'Folder opened!');
-            } else {
-                this.showAlert(`Failed to open folder: ${data.error}`, 'danger');
-            }
+            // Hide the select button since we're just viewing
+            const selectBtn = modal.querySelector('#browser-select-btn');
+            selectBtn.style.display = 'none';
+            
+            // Load the directory contents
+            await this.loadDirectoryContents(modelPath);
+            
+            // Show the modal
+            const bsModal = new bootstrap.Modal(modal);
+            bsModal.show();
+            
+            // Reset modal when it's hidden to restore normal functionality for other uses
+            modal.addEventListener('hidden.bs.modal', () => {
+                const selectBtn = modal.querySelector('#browser-select-btn');
+                const modalTitle = modal.querySelector('#file-browser-title');
+                selectBtn.style.display = 'block';
+                modalTitle.textContent = 'Select Directory';
+            }, { once: true });
+            
         } catch (error) {
-            console.error('Error opening folder:', error);
-            this.showAlert(`Error opening folder: ${error.message}`, 'danger');
+            console.error('Error showing model folder:', error);
+            this.showAlert(`Error showing model folder: ${error.message}`, 'danger');
+        }
+    }
+
+    // Method to show adapter folder contents in modal
+    async showAdapterFolder(adapterPath) {
+        try {
+            // Use the existing file browser modal in view mode
+            window.currentBrowserCallback = null; // No callback needed for viewing
+            window.currentBrowserType = 'view';
+            
+            // If the adapter path is a file (.safetensors), get its directory
+            let folderPath = adapterPath;
+            if (adapterPath.endsWith('.safetensors')) {
+                folderPath = adapterPath.substring(0, adapterPath.lastIndexOf('/'));
+                console.log(`📂 Adapter file detected, using directory: ${folderPath}`);
+            }
+            
+            // Set modal title
+            const modal = document.getElementById('file-browser-modal');
+            const modalTitle = modal.querySelector('#file-browser-title');
+            const adapterName = folderPath.split('/').pop();
+            modalTitle.textContent = `Adapter Folder: ${adapterName}`;
+            
+            // Hide the select button since we're just viewing
+            const selectBtn = modal.querySelector('#browser-select-btn');
+            selectBtn.style.display = 'none';
+            
+            // Load the directory contents
+            await this.loadDirectoryContents(folderPath);
+            
+            // Show the modal
+            const bsModal = new bootstrap.Modal(modal);
+            bsModal.show();
+            
+            // Reset modal when it's hidden to restore normal functionality for other uses
+            modal.addEventListener('hidden.bs.modal', () => {
+                const selectBtn = modal.querySelector('#browser-select-btn');
+                const modalTitle = modal.querySelector('#file-browser-title');
+                selectBtn.style.display = 'block';
+                modalTitle.textContent = 'Select Directory';
+            }, { once: true });
+            
+        } catch (error) {
+            console.error('Error showing adapter folder:', error);
+            this.showAlert(`Error showing adapter folder: ${error.message}`, 'danger');
         }
     }
 
@@ -4004,6 +4079,88 @@ ${content.trim()}
         // Add event listeners for modal buttons
         this.initFileBrowserEventListeners();
     }
+
+    closeFileBrowserModal() {
+        // Robust modal closing that handles all edge cases
+        const modalElement = document.getElementById('file-browser-modal');
+        if (!modalElement) {
+            console.warn('File browser modal element not found');
+            return;
+        }
+
+        try {
+            // Try to get existing modal instance
+            let modal = bootstrap.Modal.getInstance(modalElement);
+            
+            if (modal) {
+                // Modal instance exists, hide it normally
+                modal.hide();
+            } else {
+                // No modal instance found, create one and hide it
+                modal = new bootstrap.Modal(modalElement);
+                modal.hide();
+            }
+            
+            // Additional cleanup: remove modal backdrop if it exists
+            setTimeout(() => {
+                const backdrop = document.querySelector('.modal-backdrop');
+                if (backdrop) {
+                    backdrop.remove();
+                }
+                
+                // Ensure body doesn't have modal-open class
+                document.body.classList.remove('modal-open');
+                
+                // Reset body overflow
+                document.body.style.overflow = '';
+                document.body.style.paddingRight = '';
+            }, 150); // Small delay to allow Bootstrap animation to complete
+            
+        } catch (error) {
+            console.error('Error closing file browser modal:', error);
+            
+            // Fallback: force remove modal elements
+            const backdrop = document.querySelector('.modal-backdrop');
+            if (backdrop) {
+                backdrop.remove();
+            }
+            
+            modalElement.classList.remove('show');
+            modalElement.style.display = 'none';
+            modalElement.setAttribute('aria-hidden', 'true');
+            
+            document.body.classList.remove('modal-open');
+            document.body.style.overflow = '';
+            document.body.style.paddingRight = '';
+        }
+    }
+
+    cleanupAllModals() {
+        // General cleanup function for all modal backdrops
+        try {
+            // Remove all modal backdrops
+            const backdrops = document.querySelectorAll('.modal-backdrop');
+            backdrops.forEach(backdrop => backdrop.remove());
+            
+            // Remove modal-open class from body
+            document.body.classList.remove('modal-open');
+            
+            // Reset body styles
+            document.body.style.overflow = '';
+            document.body.style.paddingRight = '';
+            
+            // Hide all modals
+            const modals = document.querySelectorAll('.modal');
+            modals.forEach(modal => {
+                modal.classList.remove('show');
+                modal.style.display = 'none';
+                modal.setAttribute('aria-hidden', 'true');
+            });
+            
+        } catch (error) {
+            console.error('Error cleaning up modals:', error);
+        }
+    }
     
     initFileBrowserEventListeners() {
         // Remove existing listeners to prevent duplicates
@@ -4033,10 +4190,21 @@ ${content.trim()}
                     this.updateTrainingEstimates();
                 }
                 
-                // Close modal
-                const modal = bootstrap.Modal.getInstance(document.getElementById('file-browser-modal'));
-                modal.hide();
+                // Close modal properly
+                this.closeFileBrowserModal();
             }
+        });
+        
+        // Add explicit handlers for all dismiss buttons to ensure proper modal closing
+        const modal = document.getElementById('file-browser-modal');
+        const dismissButtons = modal.querySelectorAll('button[data-bs-dismiss="modal"]');
+        dismissButtons.forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                console.log('File browser dismiss button clicked:', btn.textContent.trim());
+                e.preventDefault();
+                e.stopPropagation();
+                this.closeFileBrowserModal();
+            });
         });
     }
     
@@ -4129,9 +4297,8 @@ ${content.trim()}
                 this.updateTrainingEstimates();
             }
             
-            // Close modal
-            const modal = bootstrap.Modal.getInstance(document.getElementById('file-browser-modal'));
-            modal.hide();
+            // Close modal properly
+            this.closeFileBrowserModal();
         });
         
         return div;
@@ -4685,6 +4852,61 @@ console.log('code block');
         const modal = new bootstrap.Modal(document.getElementById('fusion-config-modal'));
         modal.show();
     }
+
+    closeFusionConfigModal() {
+        // Robust modal closing that handles all edge cases
+        const modalElement = document.getElementById('fusion-config-modal');
+        if (!modalElement) {
+            console.warn('Fusion config modal element not found');
+            return;
+        }
+
+        try {
+            // Try to get existing modal instance
+            let modal = bootstrap.Modal.getInstance(modalElement);
+            
+            if (modal) {
+                // Modal instance exists, hide it normally
+                modal.hide();
+            } else {
+                // No modal instance found, create one and hide it
+                modal = new bootstrap.Modal(modalElement);
+                modal.hide();
+            }
+            
+            // Additional cleanup: remove modal backdrop if it exists
+            setTimeout(() => {
+                const backdrop = document.querySelector('.modal-backdrop');
+                if (backdrop) {
+                    backdrop.remove();
+                }
+                
+                // Ensure body doesn't have modal-open class
+                document.body.classList.remove('modal-open');
+                
+                // Reset body overflow
+                document.body.style.overflow = '';
+                document.body.style.paddingRight = '';
+            }, 150); // Small delay to allow Bootstrap animation to complete
+            
+        } catch (error) {
+            console.error('Error closing fusion config modal:', error);
+            
+            // Fallback: force remove modal elements
+            const backdrop = document.querySelector('.modal-backdrop');
+            if (backdrop) {
+                backdrop.remove();
+            }
+            
+            modalElement.classList.remove('show');
+            modalElement.style.display = 'none';
+            modalElement.setAttribute('aria-hidden', 'true');
+            
+            document.body.classList.remove('modal-open');
+            document.body.style.overflow = '';
+            document.body.style.paddingRight = '';
+        }
+    }
     
     updateFusionPreview() {
         const adapterSelect = document.getElementById('fuse-adapter-select');
@@ -4716,9 +4938,8 @@ console.log('code block');
         const suffix = document.getElementById('fusion-suffix').value;
         const description = document.getElementById('fusion-description').value;
         
-        // Close modal
-        const modal = bootstrap.Modal.getInstance(document.getElementById('fusion-config-modal'));
-        modal.hide();
+        // Close modal properly
+        this.closeFusionConfigModal();
         
         // Start fusion with config
         this.startFusion(suffix, description);

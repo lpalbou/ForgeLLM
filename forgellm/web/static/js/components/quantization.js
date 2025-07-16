@@ -620,8 +620,8 @@ class QuantizationComponent {
                         </div>
                         <div class="col-2 text-end">
                             <button class="btn btn-sm btn-outline-primary" 
-                                    onclick="quantizationComponent.openQuantizedModel('${model.full_path}')"
-                                    title="Open model folder">
+                                    onclick="quantizationComponent.showQuantizedModelFolder('${model.full_path}')"
+                                    title="Show model folder contents">
                                 <i class="fas fa-folder-open"></i>
                             </button>
                         </div>
@@ -633,21 +633,109 @@ class QuantizationComponent {
     }
 
     /**
-     * Open quantized model folder
+     * Show quantized model folder contents in modal
      */
-    async openQuantizedModel(modelPath) {
+    async showQuantizedModelFolder(modelPath) {
         try {
-            const response = await apiService.post('open_folder', {
-                path: modelPath
-            });
+            // Use the existing file browser modal in view mode
+            window.currentBrowserCallback = null; // No callback needed for viewing
+            window.currentBrowserType = 'view';
             
-            if (!response.success) {
-                this.showError(response.error || 'Failed to open folder');
-            }
+            // Set modal title
+            const modal = document.getElementById('file-browser-modal');
+            const modalTitle = modal.querySelector('#file-browser-title');
+            const modelName = modelPath.split('/').pop();
+            modalTitle.textContent = `Quantized Model: ${modelName}`;
+            
+            // Hide the select button since we're just viewing
+            const selectBtn = modal.querySelector('#browser-select-btn');
+            selectBtn.style.display = 'none';
+            
+            // Load the directory contents using the existing function
+            await this.loadDirectoryContents(modelPath);
+            
+            // Show the modal
+            const bsModal = new bootstrap.Modal(modal);
+            bsModal.show();
+            
+            // Reset modal when it's hidden to restore normal functionality for other uses
+            modal.addEventListener('hidden.bs.modal', () => {
+                const selectBtn = modal.querySelector('#browser-select-btn');
+                const modalTitle = modal.querySelector('#file-browser-title');
+                selectBtn.style.display = 'block';
+                modalTitle.textContent = 'Select Directory';
+            }, { once: true });
+            
         } catch (error) {
-            console.error('Error opening folder:', error);
-            this.showError('Error opening folder: ' + error.message);
+            console.error('Error showing quantized model folder:', error);
+            this.showError('Error showing quantized model folder: ' + error.message);
         }
+    }
+
+    /**
+     * Load directory contents for the file browser modal
+     */
+    async loadDirectoryContents(path) {
+        const loadingEl = document.getElementById('browser-loading');
+        const contentEl = document.getElementById('browser-content');
+        const currentPathEl = document.getElementById('browser-current-path');
+        const upBtn = document.getElementById('browser-up-btn');
+        
+        // Show loading
+        loadingEl.classList.remove('d-none');
+        contentEl.innerHTML = '';
+        
+        try {
+            const response = await fetch(`/api/filesystem/browse?path=${encodeURIComponent(path)}`);
+            const data = await response.json();
+            
+            if (!data.success) {
+                throw new Error(data.error || 'Failed to load directory');
+            }
+            
+            // Update current path
+            currentPathEl.value = path;
+            
+            // Enable/disable up button
+            upBtn.disabled = path === '/' || path === '';
+            
+            // Generate directory listing
+            const items = data.items || [];
+            contentEl.innerHTML = items.map(item => {
+                const icon = item.type === 'directory' ? 'fas fa-folder' : 'fas fa-file';
+                const sizeText = item.type === 'file' ? `(${this.formatFileSize(item.size)})` : '';
+                return `
+                    <div class="list-group-item list-group-item-action d-flex align-items-center">
+                        <i class="${icon} me-2"></i>
+                        <span class="flex-grow-1">${item.name}</span>
+                        <small class="text-muted">${sizeText}</small>
+                    </div>
+                `;
+            }).join('');
+            
+        } catch (error) {
+            console.error('Error loading directory:', error);
+            contentEl.innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    Error loading directory: ${error.message}
+                </div>
+            `;
+        } finally {
+            // Hide loading
+            loadingEl.classList.add('d-none');
+        }
+    }
+
+    /**
+     * Format file size for display
+     */
+    formatFileSize(bytes) {
+        if (bytes === 0) return '0 B';
+        const k = 1024;
+        const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
     }
 
     /**
