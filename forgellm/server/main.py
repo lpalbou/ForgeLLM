@@ -160,7 +160,7 @@ class ModelHandler(BaseHTTPRequestHandler):
         top_p = data.get('top_p', 0.9)
         repetition_penalty = data.get('repetition_penalty', 1.1)
         max_kv_size = data.get('max_kv_size')
-        seed = data.get('seed', 42)  # Default to 42 for deterministic generation
+        seed = data.get('seed')  # No default - use None for random generation
         streaming = data.get('streaming', False)
         
         # NEW: Handle history array and model type hint from frontend

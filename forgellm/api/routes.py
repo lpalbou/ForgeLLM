@@ -551,7 +551,7 @@ def setup_api(app: Flask) -> Blueprint:
             top_p = data.get('top_p', 0.9)
             repetition_penalty = data.get('repetition_penalty', 1.1)
             max_kv_size = data.get('max_kv_size', 8192)
-            seed = data.get('seed', 42)  # Default to 42 for deterministic generation
+            seed = data.get('seed')  # No default - use None for random generation
             system_prompt = data.get('system_prompt', '')  # Legacy support
             streaming = data.get('streaming', False)
             is_base_model = data.get('is_base_model', None)  # New parameter

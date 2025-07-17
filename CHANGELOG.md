@@ -44,6 +44,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Chat History**: Random seed sessions are saved with `'random'` in metadata and properly restored as `-1` when loading history
   - **Technical Details**: The request body conditionally includes the seed parameter only when seed ≠ -1, ensuring no seed interference with random generation
 
+#### **🐛 Random Seed Bug Fix**
+- **Issue**: Backend was defaulting to seed=42 when no seed parameter was provided, preventing true random generation
+  - **Problem**: Even when frontend correctly omitted seed parameter (when user set -1), backend was applying default seed=42
+  - **Files Fixed**: 
+    - `forgellm/server/main.py`: Removed `seed = data.get('seed', 42)` default
+    - `forgellm/api/routes.py`: Removed `seed = data.get('seed', 42)` default
+  - **Solution**: Backend now uses `seed = data.get('seed')` which returns `None` when no seed provided
+  - **Result**: Setting seed to -1 now provides truly random generation without any seed interference
+
 ## [0.4.5] - 2025-07-16
 
 ### 🔧 Critical Data Processing Fix
