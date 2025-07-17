@@ -53,6 +53,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Solution**: Backend now uses `seed = data.get('seed')` which returns `None` when no seed provided
   - **Result**: Setting seed to -1 now provides truly random generation without any seed interference
 
+#### **🐛 File Browser Modal Finder Button Fix**
+- **Issue**: Blue "Open in Finder" button (top-right of file browser modal) was not working when modal opened in view mode
+  - **Problem**: Event listeners for Finder button were only set up when using modal for directory selection, not for viewing
+  - **Affected Scenarios**: 
+    - Opening adapter folders from Testing tab
+    - Opening model folders from Testing tab  
+    - Opening session folders from Compare tab
+    - Opening quantized model folders from Quantization tab
+  - **Solution**: Added `setupFinderButton()` method that ensures Finder button always works regardless of modal context
+    - **Universal Setup**: All modal opening functions now call `setupFinderButton()` to ensure functionality
+    - **Event Listener Management**: Properly removes old listeners and adds fresh ones to prevent conflicts
+    - **Cross-Component**: Added to TrainingInterface, Compare component, and Quantization component
+  - **Result**: Blue Finder button now consistently opens the current directory in system file manager across all tabs
+
 ## [0.4.5] - 2025-07-16
 
 ### 🔧 Critical Data Processing Fix

@@ -661,6 +661,9 @@ class QuantizationComponent {
             selectBtn.style.display = 'none';
             helpSelect.innerHTML = '<small class="text-muted"><i class="fas fa-info-circle me-1"></i>Click on folders to navigate</small>';
             
+            // Ensure Finder button works in view mode
+            this.setupFinderButton();
+            
             // Add up button event handler
             const upBtn = document.getElementById('browser-up-btn');
             const upHandler = () => {
@@ -848,6 +851,75 @@ class QuantizationComponent {
         this.updateProgress();
         
         console.log('✅ Quantization tab activation complete');
+    }
+
+    setupFinderButton() {
+        // Ensure the Finder button always works by setting up a fresh event listener
+        const finderBtn = document.getElementById('browser-open-finder-btn');
+        if (!finderBtn) return;
+        
+        // Remove any existing event listeners by cloning the button
+        const newFinderBtn = finderBtn.cloneNode(true);
+        finderBtn.parentNode.replaceChild(newFinderBtn, finderBtn);
+        
+        // Add the event listener
+        document.getElementById('browser-open-finder-btn').addEventListener('click', async () => {
+            const currentPath = document.getElementById('browser-current-path').value;
+            if (currentPath) {
+                await this.openDirectoryInFinder(currentPath);
+            }
+        });
+    }
+
+    async openDirectoryInFinder(directoryPath) {
+        try {
+            const response = await fetch('/api/open_folder', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ path: directoryPath })
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                // Show success feedback
+                const finderBtn = document.getElementById('browser-open-finder-btn');
+                const originalHtml = finderBtn.innerHTML;
+                finderBtn.innerHTML = '<i class="fas fa-check text-success"></i>';
+                finderBtn.classList.add('btn-outline-success');
+                finderBtn.classList.remove('btn-outline-primary');
+                
+                // Reset button after 2 seconds
+                setTimeout(() => {
+                    finderBtn.innerHTML = originalHtml;
+                    finderBtn.classList.remove('btn-outline-success');
+                    finderBtn.classList.add('btn-outline-primary');
+                }, 2000);
+            } else {
+                throw new Error(data.error || 'Failed to open directory');
+            }
+        } catch (error) {
+            console.error('Error opening directory in finder:', error);
+            
+            // Show error feedback
+            const finderBtn = document.getElementById('browser-open-finder-btn');
+            const originalHtml = finderBtn.innerHTML;
+            finderBtn.innerHTML = '<i class="fas fa-exclamation-triangle text-danger"></i>';
+            finderBtn.classList.add('btn-outline-danger');
+            finderBtn.classList.remove('btn-outline-primary');
+            
+            // Reset button after 3 seconds
+            setTimeout(() => {
+                finderBtn.innerHTML = originalHtml;
+                finderBtn.classList.remove('btn-outline-danger');
+                finderBtn.classList.add('btn-outline-primary');
+            }, 3000);
+            
+            // Also show alert for more details
+            alert(`Failed to open directory: ${error.message}\n\nThis feature only works when the server and client are on the same machine.`);
+        }
     }
 
     /**

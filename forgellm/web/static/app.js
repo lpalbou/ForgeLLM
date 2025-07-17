@@ -3908,6 +3908,9 @@ ${content.trim()}
             selectBtn.style.display = 'none';
             helpSelect.innerHTML = '<small class="text-muted"><i class="fas fa-info-circle me-1"></i>Click on folders to navigate</small>';
             
+            // Ensure Finder button works in view mode
+            this.setupFinderButton();
+            
             // Load the directory contents
             await this.loadDirectoryContents(modelPath);
             
@@ -3978,6 +3981,9 @@ ${content.trim()}
             const helpSelect = modal.querySelector('#browser-help-select');
             selectBtn.style.display = 'none';
             helpSelect.innerHTML = '<small class="text-muted"><i class="fas fa-info-circle me-1"></i>Click on folders to navigate</small>';
+            
+            // Ensure Finder button works in view mode
+            this.setupFinderButton();
             
             // Load the directory contents
             await this.loadDirectoryContents(folderPath);
@@ -4389,13 +4395,8 @@ ${content.trim()}
             }
         });
         
-        // Add Finder button event listener
-        document.getElementById('browser-open-finder-btn').addEventListener('click', () => {
-            const currentPath = document.getElementById('browser-current-path').value;
-            if (currentPath) {
-                this.openDirectoryInFinder(currentPath);
-            }
-        });
+        // Setup Finder button functionality
+        this.setupFinderButton();
         
         // Add explicit handlers for all dismiss buttons to ensure proper modal closing
         const modal = document.getElementById('file-browser-modal');
@@ -4482,6 +4483,24 @@ ${content.trim()}
         }
     }
     
+    setupFinderButton() {
+        // Ensure the Finder button always works by setting up a fresh event listener
+        const finderBtn = document.getElementById('browser-open-finder-btn');
+        if (!finderBtn) return;
+        
+        // Remove any existing event listeners by cloning the button
+        const newFinderBtn = finderBtn.cloneNode(true);
+        finderBtn.parentNode.replaceChild(newFinderBtn, finderBtn);
+        
+        // Add the event listener
+        document.getElementById('browser-open-finder-btn').addEventListener('click', () => {
+            const currentPath = document.getElementById('browser-current-path').value;
+            if (currentPath) {
+                this.openDirectoryInFinder(currentPath);
+            }
+        });
+    }
+
     async openDirectoryInFinder(directoryPath) {
         try {
             const response = await fetch('/api/open_folder', {
