@@ -404,11 +404,54 @@ def setup_api(app: Flask) -> Blueprint:
                     'error': 'Missing model_name (could not auto-detect from adapter)'
                 }), 400
             
-            # If adapter_path is a .safetensors file, pass the directory to MLX-LM
+            # Handle specific checkpoint files - if it's a specific checkpoint, ensure adapters.safetensors exists
             final_adapter_path = adapter_path
+            
             if adapter_path and adapter_path.endswith('.safetensors'):
-                final_adapter_path = adapter_path.rsplit('/', 1)[0]
-                logger.info(f"📂 Using adapter directory for MLX-LM: {final_adapter_path}")
+                adapter_dir = adapter_path.rsplit('/', 1)[0]
+                adapter_filename = adapter_path.rsplit('/', 1)[1]
+                
+                # Check if this is a specific checkpoint file (pattern: 0000175_adapters.safetensors)
+                import re
+                if re.match(r'^\d+_adapters\.safetensors$', adapter_filename):
+                    logger.info(f"🎯 Detected specific checkpoint file: {adapter_filename}")
+                    
+                    expected_adapter_path = os.path.join(adapter_dir, 'adapters.safetensors')
+                    
+                    # ALWAYS remove existing adapters.safetensors and recreate it
+                    # This ensures we're always loading the specific checkpoint selected
+                    if os.path.exists(expected_adapter_path) or os.path.islink(expected_adapter_path):
+                        logger.info(f"🔄 Removing existing adapters.safetensors to update checkpoint")
+                        os.remove(expected_adapter_path)
+                    
+                    # Create a symlink to the specific checkpoint
+                    try:
+                        # Use absolute paths for the symlink
+                        abs_adapter_path = os.path.abspath(adapter_path)
+                        abs_expected_path = os.path.abspath(expected_adapter_path)
+                        
+                        os.symlink(abs_adapter_path, abs_expected_path)
+                        logger.info(f"✅ Created symlink: {abs_expected_path} -> {abs_adapter_path}")
+                        
+                    except Exception as e:
+                        logger.warning(f"⚠️ Failed to create symlink, trying copy: {e}")
+                        try:
+                            # Fallback: copy the file
+                            shutil.copy2(adapter_path, expected_adapter_path)
+                            logger.info(f"✅ Copied checkpoint file: {adapter_path} -> {expected_adapter_path}")
+                        except Exception as copy_error:
+                            logger.error(f"❌ Failed to copy checkpoint file: {copy_error}")
+                            return jsonify({
+                                'success': False,
+                                'error': f'Failed to prepare checkpoint file: {copy_error}'
+                            }), 500
+                    
+                    # Always use the directory for MLX-LM
+                    final_adapter_path = adapter_dir
+                else:
+                    # Regular adapter file, use directory
+                    final_adapter_path = adapter_dir
+                    logger.info(f"📂 Using adapter directory for MLX-LM: {final_adapter_path}")
             
             # Start loading the model
             load_started = model_manager.load(model_name, final_adapter_path)

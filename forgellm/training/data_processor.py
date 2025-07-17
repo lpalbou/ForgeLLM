@@ -117,7 +117,8 @@ class DocumentProcessor:
     
     def chunk_text(self, text: str, max_length: int = 2048) -> List[str]:
         """
-        Chunk text into smaller pieces while preserving meaning.
+        Chunk text into smaller pieces while preserving meaning and original formatting.
+        CRITICAL: No newlines are added that weren't in the original text.
         Each chunk will later have an EOS token appended when saved to JSONL.
         """
         # Be more conservative to avoid truncation warnings
@@ -127,47 +128,40 @@ class DocumentProcessor:
         # This will match patterns like "1. Text" or "1) Text" and keep them together
         text = re.sub(r'(\d+)[\.\)](\s+)([^\n]+)', r'\1. \3', text)
         
-        # Split by paragraphs first, then sentences
+        # Split by paragraphs (double newlines) to preserve document structure
         paragraphs = text.split('\n\n')
         chunks = []
-        current_chunk = []
+        current_chunk_paragraphs = []
         current_length = 0
         
         for paragraph in paragraphs:
-            # Check if this is a numbered list item and preserve its formatting
-            is_numbered_list = re.match(r'^\d+[\.\)]', paragraph.strip())
+            paragraph_length = len(paragraph.split())
             
-            # Split long paragraphs into sentences, but keep numbered lists intact
-            if is_numbered_list:
-                sentences = [paragraph]
+            # If adding this paragraph would exceed target length and we have content
+            if current_length + paragraph_length > target_length and current_chunk_paragraphs:
+                # Join paragraphs with double newlines to preserve original structure
+                chunks.append('\n\n'.join(current_chunk_paragraphs))
+                current_chunk_paragraphs = [paragraph]
+                current_length = paragraph_length
             else:
-                sentences = paragraph.split('. ')
-            
-            for sentence in sentences:
-                sentence_length = len(sentence.split())
-                
-                if current_length + sentence_length > target_length and current_chunk:
-                    chunks.append('\n\n'.join(current_chunk))  # Use double newlines to preserve paragraph structure
-                    current_chunk = [sentence]
-                    current_length = sentence_length
-                else:
-                    current_chunk.append(sentence)
-                    current_length += sentence_length
+                current_chunk_paragraphs.append(paragraph)
+                current_length += paragraph_length
                     
-        if current_chunk:
-            chunks.append('\n\n'.join(current_chunk))  # Use double newlines to preserve paragraph structure
+        if current_chunk_paragraphs:
+            # Join paragraphs with double newlines to preserve original structure
+            chunks.append('\n\n'.join(current_chunk_paragraphs))
             
         # Filter chunks and ensure they're not too long
         valid_chunks = []
         for chunk in chunks:
-            if len(chunk.strip()) > 50:  # Filter very short chunks
+            if len(chunk.strip()) > 10:  # Filter only extremely short chunks (was 50, now 10)
                 # Double-check chunk length and split if needed
                 words = chunk.split()
                 if len(words) > target_length:
                     # Split oversized chunks more aggressively
                     for i in range(0, len(words), target_length // 2):  # Overlap for context
                         sub_chunk = ' '.join(words[i:i + target_length // 2])
-                        if len(sub_chunk.strip()) > 50:
+                        if len(sub_chunk.strip()) > 10:
                             valid_chunks.append(sub_chunk)
                 else:
                     valid_chunks.append(chunk)

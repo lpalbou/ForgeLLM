@@ -641,17 +641,34 @@ class QuantizationComponent {
             window.currentBrowserCallback = null; // No callback needed for viewing
             window.currentBrowserType = 'view';
             
-            // Set modal title
+            // Set modal title with proper truncation
             const modal = document.getElementById('file-browser-modal');
             const modalTitle = modal.querySelector('#file-browser-title');
             const modelName = modelPath.split('/').pop();
-            modalTitle.innerHTML = `<i class="fas fa-folder-open me-2 text-primary"></i>Quantized: ${modelName}`;
+            
+            // Truncate model name if too long (keep first 40 chars + ellipsis)
+            const maxLength = 40;
+            const displayName = modelName.length > maxLength ? 
+                modelName.substring(0, maxLength) + '...' : modelName;
+            
+            modalTitle.innerHTML = `<i class="fas fa-folder-open me-2 text-primary"></i>Quantized: <span class="text-truncate" title="${modelName}">${displayName}</span>`;
+            modalTitle.style.maxWidth = '100%';
+            modalTitle.style.overflow = 'hidden';
             
             // Hide the select button and update help text since we're just viewing
             const selectBtn = modal.querySelector('#browser-select-btn');
             const helpSelect = modal.querySelector('#browser-help-select');
             selectBtn.style.display = 'none';
             helpSelect.innerHTML = '<small class="text-muted"><i class="fas fa-info-circle me-1"></i>Click on folders to navigate</small>';
+            
+            // Add up button event handler
+            const upBtn = document.getElementById('browser-up-btn');
+            const upHandler = () => {
+                const currentPath = document.getElementById('browser-current-path').value;
+                const parentPath = currentPath.split('/').slice(0, -1).join('/') || '/';
+                this.loadDirectoryContents(parentPath);
+            };
+            upBtn.addEventListener('click', upHandler);
             
             // Load the directory contents using the existing function
             await this.loadDirectoryContents(modelPath);
@@ -668,6 +685,23 @@ class QuantizationComponent {
                 selectBtn.style.display = 'block';
                 modalTitle.innerHTML = '<i class="fas fa-folder-open me-2 text-primary"></i>Select Directory';
                 helpSelect.innerHTML = '<small class="text-muted"><i class="fas fa-info-circle me-1"></i>Click on folders to navigate • Double-click to select and close</small>';
+                
+                // Remove up button event handler
+                upBtn.removeEventListener('click', upHandler);
+                
+                // Dispose of the modal instance to prevent memory leaks and scroll issues
+                bsModal.dispose();
+                
+                // Additional cleanup to ensure scrolling works
+                document.body.classList.remove('modal-open');
+                document.body.style.overflow = '';
+                document.body.style.paddingRight = '';
+                document.documentElement.style.overflow = '';
+                document.body.style.overflowY = 'auto';
+                
+                // Remove any remaining backdrops
+                const backdrops = document.querySelectorAll('.modal-backdrop');
+                backdrops.forEach(backdrop => backdrop.remove());
             }, { once: true });
             
         } catch (error) {
@@ -706,16 +740,23 @@ class QuantizationComponent {
             // Generate directory listing
             const items = data.items || [];
             contentEl.innerHTML = items.map(item => {
-                const icon = item.type === 'directory' ? 'fas fa-folder' : 'fas fa-file';
-                const sizeText = item.type === 'file' ? `(${this.formatFileSize(item.size)})` : '';
+                const icon = item.is_directory ? 'fas fa-folder' : 'fas fa-file';
                 return `
-                    <div class="list-group-item list-group-item-action d-flex align-items-center">
+                    <div class="list-group-item list-group-item-action d-flex align-items-center" ${item.is_directory ? 'data-path="' + item.path + '" style="cursor: pointer;"' : ''}>
                         <i class="${icon} me-2"></i>
                         <span class="flex-grow-1">${item.name}</span>
-                        <small class="text-muted">${sizeText}</small>
+                        <small class="text-muted">${item.description}</small>
                     </div>
                 `;
             }).join('');
+            
+            // Add click handlers for directory navigation
+            contentEl.querySelectorAll('.list-group-item[data-path]').forEach(item => {
+                item.addEventListener('click', () => {
+                    const path = item.getAttribute('data-path');
+                    this.loadDirectoryContents(path);
+                });
+            });
             
         } catch (error) {
             console.error('Error loading directory:', error);

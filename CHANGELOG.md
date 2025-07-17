@@ -5,6 +5,130 @@ All notable changes to ForgetLLM will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### ✨ Enhanced Features
+
+#### **Specific Checkpoint File Support**
+- **Feature**: Enhanced adapter loading to support specific checkpoint files (e.g., `0000175_adapters.safetensors`)
+  - **Problem**: MLX-LM requires `adapters.safetensors` in the adapter directory, but checkpoint files are named with iteration numbers
+  - **Root Cause**: The exact MLX-LM command used is `from mlx_lm import load` with `load(model_name, adapter_path=directory)` - it expects the directory to contain `adapters.safetensors`
+  - **Solution**: 
+    - **Backend**: Automatically detects specific checkpoint files (pattern: `^\d+_adapters\.safetensors$`)
+    - **Symlink Management**: Always removes existing `adapters.safetensors` and recreates it as a symlink to the selected checkpoint
+    - **Fallback**: If symlink creation fails, falls back to copying the file
+    - **Critical**: Ensures each checkpoint selection updates the symlink to point to the correct iteration
+  - **User Experience**: Users can now directly select specific checkpoint iterations and each selection will load the correct checkpoint
+  - **Error Handling**: Provides clear error messages if checkpoint file preparation fails
+
+#### **🚨 Critical Bug: Adapter-Only Loading Issue**
+- **Issue**: When selecting only adapters (without base model), the system may fall back to the last recorded checkpoint instead of the selected checkpoint
+  - **Symptoms**: 
+    - Model server fails to start when loading adapter-only configurations
+    - Error: "Failed to start model server" during adapter loading
+    - Potential fallback to previously used checkpoint instead of user selection
+  - **Impact**: Users cannot reliably test specific checkpoints in adapter-only mode
+  - **Root Cause**: Potential race condition or state management issue in adapter-only loading path
+  - **Status**: **UNDER INVESTIGATION** - Fix in progress
+  - **Workaround**: Always select both base model and adapter explicitly until fix is deployed
+  - **Priority**: HIGH - Affects core checkpoint testing functionality
+
+#### **Random Seed Support in Testing Tab**
+- **Feature**: Added support for random seed generation in the testing tab
+  - **Implementation**: Setting seed to `-1` now enables random seed generation (non-reproducible)
+  - **UI Updates**: 
+    - Updated seed input field to accept values from `-1` to `2147483647`
+    - Enhanced tooltip to explain `-1` functionality: "Random seed for reproducible generation. Set to -1 for random seed (non-reproducible)"
+    - Updated help text to mention random seed option
+  - **Backend Integration**: When seed is set to `-1`, the seed parameter is completely omitted from the API request, enabling true random generation
+  - **Chat History**: Random seed sessions are saved with `'random'` in metadata and properly restored as `-1` when loading history
+  - **Technical Details**: The request body conditionally includes the seed parameter only when seed ≠ -1, ensuring no seed interference with random generation
+
+## [0.4.5] - 2025-07-16
+
+### 🔧 Critical Data Processing Fix
+
+#### **JSONL Dataset Corruption Resolution**
+- **Issue**: JSONL dataset generation was adding extra newlines that weren't in the original text, corrupting document structure
+  - **Examples**: 
+    - Original: `"### 4. The Importance of Embodied Experience"`
+    - Corrupted: `"### 4\n\nThe Importance of Embodied Experience"`
+  - **Impact**: Headers, numbered lists, and paragraph structure were being damaged during chunking
+- **Root Cause**: The `chunk_text` method in `DocumentProcessor` was:
+  1. Splitting text by `\n\n` to get paragraphs
+  2. Splitting paragraphs by `. ` (sentences) 
+  3. Joining chunks back with `\n\n`
+  - This corrupted formatting by adding newlines that weren't in the original text
+- **Solution**: Complete rewrite of chunking logic to preserve original text structure
+  - **Paragraph-Level Processing**: Work at paragraph level only (split by `\n\n`)
+  - **Structure Preservation**: Preserve original paragraph structure when rejoining
+  - **Eliminated Sentence Splitting**: Removed sentence-level splitting that was adding extra newlines
+  - **Filter Adjustment**: Reduced minimum chunk length from 50 to 10 characters to avoid filtering valid content
+- **Verification**: 
+  - **Perfect Reconstruction**: Chunked text, when rejoined, is identical to original content
+  - **Header Preservation**: All headers preserved correctly without extra newlines
+  - **Real File Testing**: Verified on actual dataset files with complex markdown structure
+  - **No Corruption**: Zero instances of triple newlines or corrupted headers
+
+### 🔧 Technical Implementation
+- **Robust General-Purpose Logic**: Designed to work for all text inputs, not just test cases
+- **Original Text Integrity**: Maintains exact original formatting and structure
+- **Comprehensive Testing**: Verified against real dataset files with headers, lists, and complex formatting
+- **Backward Compatibility**: Maintains existing chunking API while fixing corruption issues
+
+### 🐛 Bug Fixes
+- Fixed JSONL dataset generation adding extra newlines not present in original text
+- Resolved header corruption during text chunking (e.g., "### 4\n\nTitle" → "### 4. Title")
+- Eliminated paragraph structure damage in training data
+- Fixed chunk filtering removing valid short content
+- Prevented sentence-level splitting from corrupting document formatting
+
+---
+
+## [0.4.4] - 2025-07-16
+
+### 🔧 Modal System Fixes
+
+#### **Directory Item Count Display**
+- **Issue**: File browser modal was showing "Empty" for all directories instead of actual item counts
+- **Root Cause**: Frontend JavaScript was looking for `item.item_count` field, but backend API was returning `item.description` with count information
+- **Solution**: Updated all modal components to use the correct `description` field
+  - **Format**: Backend returns "X dirs, Y files" or file sizes like "1.6 KB"
+  - **Empty Detection**: Properly detects "0 dirs, 0 files" to show "Empty" annotation
+  - **Consistent Display**: All tabs now show directory contents correctly
+
+#### **Modal Scroll Lock Fix**
+- **Issue**: After closing any modal (Cancel, Select Directory, etc.), main page scroll was locked and clicking was blocked
+- **Root Cause**: Bootstrap modal instances weren't being properly disposed, leaving invisible backdrops that blocked interactions
+- **Solution**: Comprehensive modal cleanup system
+  - **Immediate Disposal**: All modal instances now properly disposed with `modal.dispose()`
+  - **Complete Cleanup**: Removes all modal backdrops and resets body/HTML styles
+  - **Emergency Tools**: Added Escape key handler and console debug functions
+  - **Pointer Events**: Explicitly enables `pointer-events: auto` to restore clicking
+  - **Applied Everywhere**: Fixed all modal types across Training, Quantization, Compare, and Test tabs
+
+#### **Modal Title Overflow Fix**
+- **Issue**: Long model names in modal titles overflowed the header, breaking layout
+- **Root Cause**: Extremely long quantized model names like "models--published--Qwen3-32B-MLX-bf16_fused..." exceeded modal width
+- **Solution**: Smart text truncation with tooltips
+  - **Truncation Logic**: Names longer than 40 characters are truncated with ellipsis
+  - **Tooltip Support**: Full names shown on hover using `title` attribute
+  - **CSS Styling**: Added proper modal title styling with text overflow handling
+  - **Consistent Application**: Applied to all modal types (Model, Adapter, Quantized, Session)
+
+### 🔧 Technical Implementation
+- **Enhanced Modal Cleanup**: Added `forceModalCleanup()` function with comprehensive DOM cleanup
+- **Debug Tools**: Global `debugModalState()` and `cleanupAllModals()` functions for troubleshooting
+- **CSS Improvements**: Added modal title styling with proper text truncation and responsive layout
+- **Cross-Component Consistency**: Unified modal handling across all JavaScript components
+
+### 🐛 Bug Fixes
+- Fixed directory item counts showing "Empty" instead of actual file/folder counts
+- Resolved modal scroll lock preventing page interaction after modal closure
+- Fixed modal title overflow breaking header layout with long model names
+- Eliminated modal backdrop remnants blocking clicks and scrolling
+- Improved modal disposal preventing memory leaks and interaction issues
+
 ## [0.4.3] - 2025-07-16
 
 ### 🔧 Data Processing Improvements

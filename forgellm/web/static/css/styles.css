@@ -55,6 +55,7 @@
     --card-shadow: 0 4px 15px rgba(0,0,0,0.3);
     --navbar-bg: linear-gradient(135deg, #1f5f7a, #7a1f4f);
     --bs-info-bg-subtle: #7bdbf0;
+    --bs-body-bg: #464646;
     
     /* Dark Chat Theme Variables */
     --chat-user-bg: linear-gradient(135deg, #0066cc, #4da6ff);
@@ -544,7 +545,7 @@ small, .small {
     line-height: 1.45 !important;
     word-wrap: break-word !important;
     font-weight: 400 !important;
-    text-align: right;
+    text-align: justify;
     transition: background 0.3s ease;
 }
 
@@ -1342,3 +1343,33 @@ small, .small {
     align-self: flex-start;
     color: var(--chat-assistant-text);
 } 
+
+/* ==========================================================================
+   MODAL TITLE STYLING
+   ========================================================================== */
+
+.modal-title {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+    display: flex;
+    align-items: center;
+}
+
+.modal-title .text-truncate {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
+}
+
+.modal-header {
+    padding: 1rem 1.5rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.modal-header .btn-close {
+    flex-shrink: 0;
+    margin-left: auto;
+}

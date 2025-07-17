@@ -104,14 +104,14 @@
                             <div class="col-md-4">
                                 <div class="input-group input-group-sm">
                                     <span class="input-group-text">Seed</span>
-                                    <input type="number" class="form-control" id="seed" value="42" min="1" max="2147483647" step="1"
+                                    <input type="number" class="form-control" id="seed" value="42" min="-1" max="2147483647" step="1"
                                            data-bs-toggle="tooltip" data-bs-placement="top" 
-                                           title="Random seed for reproducible generation">
+                                           title="Random seed for reproducible generation. Set to -1 for random seed (non-reproducible)">
                                 </div>
                             </div>
                             <div class="col-md-8">
                                 <small class="text-muted">
-                                    <i class="fas fa-dice me-1"></i>Set seed for reproducible generation
+                                    <i class="fas fa-dice me-1"></i>Set seed for reproducible generation (or -1 for random)
                                 </small>
                             </div>
                         </div>

@@ -28,6 +28,14 @@ class TrainingInterface {
         
         // Add global modal cleanup on page unload
         window.addEventListener('beforeunload', () => this.cleanupAllModals());
+        
+        // Add global escape key handler for emergency modal cleanup
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                console.log('🚨 Escape key pressed - emergency modal cleanup');
+                this.cleanupAllModals();
+            }
+        });
     }
     
     init() {
@@ -46,6 +54,10 @@ class TrainingInterface {
         // Initialize tooltips
         const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]');
         [...tooltipTriggerList].map(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl));
+        
+        // Make debug function globally accessible
+        window.debugModalState = () => this.debugModalState();
+        window.cleanupAllModals = () => this.cleanupAllModals();
         
         // Initialize learning rate chart
         this.updateLearningRateChart();
@@ -1500,21 +1512,24 @@ class TrainingInterface {
             console.log('🔄 Step 2: Loading new model...');
             this.showLoading('Loading model...');
             
-            const actualAdapterPath = adapter && adapter.endsWith('.safetensors') 
-                ? adapter.substring(0, adapter.lastIndexOf('/'))
-                : adapter;
+            // The backend will automatically handle specific checkpoint files
+            const actualAdapterPath = adapter;
             
             const startTime = Date.now();
             console.log(`⏱️ Starting model load at: ${startTime}`);
             
+            const requestBody = {
+                model_name: model,
+                adapter_path: actualAdapterPath,
+                system_prompt: prompt
+            };
+            
+            console.log('📡 Sending load request:', requestBody);
+            
             const response = await fetch('/api/model/load', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    model_name: model,
-                    adapter_path: actualAdapterPath,
-                    system_prompt: prompt
-                })
+                body: JSON.stringify(requestBody)
             });
             
             const endTime = Date.now();
@@ -2458,7 +2473,8 @@ ${content.trim()}
         const topP = parseFloat(document.getElementById('top-p').value);
         const repetitionPenalty = parseFloat(document.getElementById('repetition-penalty').value);
         const maxKvSize = parseInt(document.getElementById('max-kv-size').value);
-        const seed = parseInt(document.getElementById('seed').value);
+        const seedValue = parseInt(document.getElementById('seed').value);
+        const seed = seedValue === -1 ? undefined : seedValue; // Use undefined for random seed when -1
         const systemPrompt = document.getElementById('system-prompt').value.trim();
         const streaming = document.getElementById('streaming-toggle').checked;
         
@@ -2600,11 +2616,15 @@ ${content.trim()}
                 top_p: topP || undefined,
                 repetition_penalty: repetitionPenalty || undefined,
                 max_kv_size: maxKvSize || undefined,
-                seed: seed || undefined,
                 streaming: streaming,
                 // Add model type hint for backend
                 is_base_model: isBaseModel
             };
+            
+            // Only include seed if it's not -1 (random seed)
+            if (seed !== undefined) {
+                requestBody.seed = seed;
+            }
             
             console.log('🚀 Sending request:', requestBody);
             
@@ -3138,6 +3158,23 @@ ${content.trim()}
             const logsModal = new bootstrap.Modal(document.getElementById('logsModal'));
             logsModal.show();
             
+            // Add disposal when modal is hidden
+            const logsModalEl = document.getElementById('logsModal');
+            logsModalEl.addEventListener('hidden.bs.modal', () => {
+                logsModal.dispose();
+                
+                // Additional cleanup to ensure scrolling works
+                document.body.classList.remove('modal-open');
+                document.body.style.overflow = '';
+                document.body.style.paddingRight = '';
+                document.documentElement.style.overflow = '';
+                document.body.style.overflowY = 'auto';
+                
+                // Remove any remaining backdrops
+                const backdrops = document.querySelectorAll('.modal-backdrop');
+                backdrops.forEach(backdrop => backdrop.remove());
+            }, { once: true });
+            
             // Hide loading and show success message
             clearTimeout(timeoutId);
             this.hideLoading();
@@ -3617,7 +3654,8 @@ ${content.trim()}
         const topP = parseFloat(document.getElementById('top-p').value);
         const repetitionPenalty = parseFloat(document.getElementById('repetition-penalty').value);
         const maxKvSize = parseInt(document.getElementById('max-kv-size').value);
-        const seed = parseInt(document.getElementById('seed').value);
+        const seedValue = parseInt(document.getElementById('seed').value);
+        const seed = seedValue === -1 ? 'random' : seedValue; // Store 'random' for -1 seed in metadata
         
         // Create metadata object
         const metadata = {
@@ -3740,7 +3778,10 @@ ${content.trim()}
                 }
                 if (params.seed !== undefined) {
                     const seedInput = document.getElementById('seed');
-                    if (seedInput) seedInput.value = params.seed;
+                    if (seedInput) {
+                        // Handle 'random' seed value from saved history
+                        seedInput.value = params.seed === 'random' ? '-1' : params.seed;
+                    }
                 }
             }
 
@@ -3847,11 +3888,19 @@ ${content.trim()}
             window.currentBrowserCallback = null; // No callback needed for viewing
             window.currentBrowserType = 'view';
             
-            // Set modal title
+            // Set modal title with proper truncation
             const modal = document.getElementById('file-browser-modal');
             const modalTitle = modal.querySelector('#file-browser-title');
             const modelName = modelPath.split('/').pop();
-            modalTitle.innerHTML = `<i class="fas fa-folder-open me-2 text-primary"></i>Model: ${modelName}`;
+            
+            // Truncate model name if too long (keep first 40 chars + ellipsis)
+            const maxLength = 40;
+            const displayName = modelName.length > maxLength ? 
+                modelName.substring(0, maxLength) + '...' : modelName;
+            
+            modalTitle.innerHTML = `<i class="fas fa-folder-open me-2 text-primary"></i>Model: <span class="text-truncate" title="${modelName}">${displayName}</span>`;
+            modalTitle.style.maxWidth = '100%';
+            modalTitle.style.overflow = 'hidden';
             
             // Hide the select button and update help text since we're just viewing
             const selectBtn = modal.querySelector('#browser-select-btn');
@@ -3874,6 +3923,20 @@ ${content.trim()}
                 selectBtn.style.display = 'block';
                 modalTitle.innerHTML = '<i class="fas fa-folder-open me-2 text-primary"></i>Select Directory';
                 helpSelect.innerHTML = '<small class="text-muted"><i class="fas fa-info-circle me-1"></i>Click on folders to navigate • Double-click to select and close</small>';
+                
+                // Dispose of the modal instance to prevent memory leaks and scroll issues
+                bsModal.dispose();
+                
+                // Additional cleanup to ensure scrolling works
+                document.body.classList.remove('modal-open');
+                document.body.style.overflow = '';
+                document.body.style.paddingRight = '';
+                document.documentElement.style.overflow = '';
+                document.body.style.overflowY = 'auto';
+                
+                // Remove any remaining backdrops
+                const backdrops = document.querySelectorAll('.modal-backdrop');
+                backdrops.forEach(backdrop => backdrop.remove());
             }, { once: true });
             
         } catch (error) {
@@ -3896,11 +3959,19 @@ ${content.trim()}
                 console.log(`📂 Adapter file detected, using directory: ${folderPath}`);
             }
             
-            // Set modal title
+            // Set modal title with proper truncation
             const modal = document.getElementById('file-browser-modal');
             const modalTitle = modal.querySelector('#file-browser-title');
             const adapterName = folderPath.split('/').pop();
-            modalTitle.innerHTML = `<i class="fas fa-folder-open me-2 text-primary"></i>Adapter: ${adapterName}`;
+            
+            // Truncate adapter name if too long (keep first 40 chars + ellipsis)
+            const maxLength = 40;
+            const displayName = adapterName.length > maxLength ? 
+                adapterName.substring(0, maxLength) + '...' : adapterName;
+            
+            modalTitle.innerHTML = `<i class="fas fa-folder-open me-2 text-primary"></i>Adapter: <span class="text-truncate" title="${adapterName}">${displayName}</span>`;
+            modalTitle.style.maxWidth = '100%';
+            modalTitle.style.overflow = 'hidden';
             
             // Hide the select button and update help text since we're just viewing
             const selectBtn = modal.querySelector('#browser-select-btn');
@@ -3923,6 +3994,20 @@ ${content.trim()}
                 selectBtn.style.display = 'block';
                 modalTitle.innerHTML = '<i class="fas fa-folder-open me-2 text-primary"></i>Select Directory';
                 helpSelect.innerHTML = '<small class="text-muted"><i class="fas fa-info-circle me-1"></i>Click on folders to navigate • Double-click to select and close</small>';
+                
+                // Dispose of the modal instance to prevent memory leaks and scroll issues
+                bsModal.dispose();
+                
+                // Additional cleanup to ensure scrolling works
+                document.body.classList.remove('modal-open');
+                document.body.style.overflow = '';
+                document.body.style.paddingRight = '';
+                document.documentElement.style.overflow = '';
+                document.body.style.overflowY = 'auto';
+                
+                // Remove any remaining backdrops
+                const backdrops = document.querySelectorAll('.modal-backdrop');
+                backdrops.forEach(backdrop => backdrop.remove());
             }, { once: true });
             
         } catch (error) {
@@ -3974,6 +4059,23 @@ ${content.trim()}
         // Show modal
         const dashboardModal = new bootstrap.Modal(document.getElementById('dashboardModal'));
         dashboardModal.show();
+        
+        // Add disposal when modal is hidden
+        const dashboardModalEl = document.getElementById('dashboardModal');
+        dashboardModalEl.addEventListener('hidden.bs.modal', () => {
+            dashboardModal.dispose();
+            
+            // Additional cleanup to ensure scrolling works
+            document.body.classList.remove('modal-open');
+            document.body.style.overflow = '';
+            document.body.style.paddingRight = '';
+            document.documentElement.style.overflow = '';
+            document.body.style.overflowY = 'auto';
+            
+            // Remove any remaining backdrops
+            const backdrops = document.querySelectorAll('.modal-backdrop');
+            backdrops.forEach(backdrop => backdrop.remove());
+        }, { once: true });
     }
     
     /**
@@ -4096,74 +4198,155 @@ ${content.trim()}
             return;
         }
 
+        console.log('🔄 Closing file browser modal...');
+
         try {
             // Try to get existing modal instance
             let modal = bootstrap.Modal.getInstance(modalElement);
             
             if (modal) {
-                // Modal instance exists, hide it normally
+                // Modal instance exists, hide it and dispose
+                console.log('📦 Disposing existing modal instance');
                 modal.hide();
+                modal.dispose();
             } else {
-                // No modal instance found, create one and hide it
+                // No modal instance found, create one, hide it, and dispose
+                console.log('🆕 Creating new modal instance to dispose');
                 modal = new bootstrap.Modal(modalElement);
                 modal.hide();
+                modal.dispose();
             }
-            
-            // Additional cleanup: remove modal backdrop if it exists
-            setTimeout(() => {
-                const backdrop = document.querySelector('.modal-backdrop');
-                if (backdrop) {
-                    backdrop.remove();
-                }
-                
-                // Ensure body doesn't have modal-open class
-                document.body.classList.remove('modal-open');
-                
-                // Reset body overflow
-                document.body.style.overflow = '';
-                document.body.style.paddingRight = '';
-            }, 150); // Small delay to allow Bootstrap animation to complete
             
         } catch (error) {
-            console.error('Error closing file browser modal:', error);
-            
-            // Fallback: force remove modal elements
-            const backdrop = document.querySelector('.modal-backdrop');
-            if (backdrop) {
-                backdrop.remove();
-            }
-            
-            modalElement.classList.remove('show');
+            console.error('Error with modal instance:', error);
+        }
+
+        // Immediate cleanup - don't wait for timeout
+        this.forceModalCleanup();
+        
+        // Additional cleanup with timeout as backup
+        setTimeout(() => {
+            this.forceModalCleanup();
+        }, 100);
+    }
+
+    forceModalCleanup() {
+        console.log('🧹 Force cleaning up modal elements...');
+        
+        // Remove ALL modal backdrops
+        const backdrops = document.querySelectorAll('.modal-backdrop');
+        console.log(`🎭 Found ${backdrops.length} modal backdrops to remove`);
+        backdrops.forEach((backdrop, index) => {
+            console.log(`🗑️ Removing backdrop ${index + 1}`);
+            backdrop.remove();
+        });
+        
+        // Force hide the modal element itself
+        const modalElement = document.getElementById('file-browser-modal');
+        if (modalElement) {
+            modalElement.classList.remove('show', 'fade');
             modalElement.style.display = 'none';
             modalElement.setAttribute('aria-hidden', 'true');
-            
-            document.body.classList.remove('modal-open');
-            document.body.style.overflow = '';
-            document.body.style.paddingRight = '';
+            modalElement.setAttribute('aria-modal', 'false');
+            console.log('👻 Modal element hidden');
+        }
+        
+        // Remove modal-open class from body
+        document.body.classList.remove('modal-open');
+        
+        // Reset ALL body and html styles that could block interaction
+        document.body.style.overflow = '';
+        document.body.style.overflowY = '';
+        document.body.style.paddingRight = '';
+        document.body.style.pointerEvents = '';
+        
+        document.documentElement.style.overflow = '';
+        document.documentElement.style.overflowY = '';
+        
+        // Force enable scrolling and interaction
+        document.body.style.overflowY = 'auto';
+        document.body.style.pointerEvents = 'auto';
+        
+        console.log('✅ Modal cleanup complete');
+    }
+
+    // Debug function to inspect modal state (can be called from browser console)
+    debugModalState() {
+        console.log('🔍 Modal State Debug:');
+        
+        const modals = document.querySelectorAll('.modal');
+        console.log(`📋 Found ${modals.length} modal elements:`);
+        modals.forEach((modal, index) => {
+            const instance = bootstrap.Modal.getInstance(modal);
+            console.log(`  Modal ${index + 1} (${modal.id}):`);
+            console.log(`    - Instance: ${instance ? 'EXISTS' : 'NONE'}`);
+            console.log(`    - Display: ${modal.style.display}`);
+            console.log(`    - Classes: ${modal.className}`);
+            console.log(`    - Aria-hidden: ${modal.getAttribute('aria-hidden')}`);
+        });
+        
+        const backdrops = document.querySelectorAll('.modal-backdrop');
+        console.log(`🎭 Found ${backdrops.length} modal backdrops`);
+        
+        console.log(`🎯 Body classes: ${document.body.className}`);
+        console.log(`📱 Body overflow: ${document.body.style.overflow}`);
+        console.log(`🖱️ Body pointer-events: ${document.body.style.pointerEvents}`);
+        
+        // Force cleanup if issues found
+        if (backdrops.length > 0 || document.body.classList.contains('modal-open')) {
+            console.log('🚨 Issues detected - forcing cleanup');
+            this.cleanupAllModals();
         }
     }
 
     cleanupAllModals() {
-        // General cleanup function for all modal backdrops
+        // General cleanup function for all modal backdrops and scroll issues
+        console.log('🧹 Cleaning up ALL modals...');
+        
         try {
-            // Remove all modal backdrops
+            // Dispose of all Bootstrap modal instances
+            const modals = document.querySelectorAll('.modal');
+            console.log(`🎭 Found ${modals.length} modal elements`);
+            
+            modals.forEach((modalEl, index) => {
+                const modalInstance = bootstrap.Modal.getInstance(modalEl);
+                if (modalInstance) {
+                    console.log(`📦 Disposing modal instance ${index + 1}`);
+                    modalInstance.dispose();
+                }
+                
+                // Force hide each modal
+                modalEl.classList.remove('show', 'fade');
+                modalEl.style.display = 'none';
+                modalEl.setAttribute('aria-hidden', 'true');
+                modalEl.setAttribute('aria-modal', 'false');
+            });
+            
+            // Remove ALL modal backdrops
             const backdrops = document.querySelectorAll('.modal-backdrop');
-            backdrops.forEach(backdrop => backdrop.remove());
+            console.log(`🎭 Found ${backdrops.length} modal backdrops to remove`);
+            backdrops.forEach((backdrop, index) => {
+                console.log(`🗑️ Removing backdrop ${index + 1}`);
+                backdrop.remove();
+            });
             
             // Remove modal-open class from body
             document.body.classList.remove('modal-open');
             
-            // Reset body styles
+            // Reset ALL body and html styles that could block interaction
             document.body.style.overflow = '';
+            document.body.style.overflowY = '';
             document.body.style.paddingRight = '';
+            document.body.style.pointerEvents = '';
             
-            // Hide all modals
-            const modals = document.querySelectorAll('.modal');
-            modals.forEach(modal => {
-                modal.classList.remove('show');
-                modal.style.display = 'none';
-                modal.setAttribute('aria-hidden', 'true');
-            });
+            document.documentElement.style.overflow = '';
+            document.documentElement.style.overflowY = '';
+            
+            // Force enable scrolling and interaction
+            document.body.style.overflowY = 'auto';
+            document.body.style.pointerEvents = 'auto';
+            
+            console.log('✅ All modals cleaned up');
             
         } catch (error) {
             console.error('Error cleaning up modals:', error);
@@ -4357,8 +4540,9 @@ ${content.trim()}
         div.style.borderRadius = '6px';
         div.style.margin = '1px 0';
         
-        const itemCount = item.item_count || 0;
-        const hasItems = itemCount > 0;
+        // Use description field from backend which contains "X dirs, Y files" or "Access denied"
+        const description = item.description || 'Unknown';
+        const isEmpty = description === '0 dirs, 0 files';
         
         div.innerHTML = `
             <div class="me-3 d-flex align-items-center justify-content-center" style="width: 20px;">
@@ -4366,7 +4550,7 @@ ${content.trim()}
             </div>
             <div class="flex-grow-1 min-w-0">
                 <div class="fw-medium text-truncate">${item.name}</div>
-                ${hasItems ? `<small class="text-muted">${itemCount} items</small>` : '<small class="text-muted opacity-75">Empty</small>'}
+                ${isEmpty ? '<small class="text-muted opacity-75">Empty</small>' : `<small class="text-muted">${description}</small>`}
             </div>
             <div class="text-muted">
                 <i class="fas fa-chevron-right small"></i>
@@ -4976,6 +5160,23 @@ console.log('code block');
         // Show modal
         const modal = new bootstrap.Modal(document.getElementById('fusion-config-modal'));
         modal.show();
+        
+        // Add disposal when modal is hidden
+        const fusionModalEl = document.getElementById('fusion-config-modal');
+        fusionModalEl.addEventListener('hidden.bs.modal', () => {
+            modal.dispose();
+            
+            // Additional cleanup to ensure scrolling works
+            document.body.classList.remove('modal-open');
+            document.body.style.overflow = '';
+            document.body.style.paddingRight = '';
+            document.documentElement.style.overflow = '';
+            document.body.style.overflowY = 'auto';
+            
+            // Remove any remaining backdrops
+            const backdrops = document.querySelectorAll('.modal-backdrop');
+            backdrops.forEach(backdrop => backdrop.remove());
+        }, { once: true });
     }
 
     closeFusionConfigModal() {
