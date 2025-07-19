@@ -2455,7 +2455,7 @@ ${content.trim()}
         await this.generateText(prompt);
     }
 
-    async generateText(prompt = null) {
+    async generateText(prompt = null, fromEdit = false) {
         // If no prompt provided, try to get it from the old input (for backward compatibility)
         if (!prompt) {
             const promptInput = document.getElementById('prompt-input');
@@ -2481,12 +2481,16 @@ ${content.trim()}
         // Disable chat input during generation
         const chatInput = document.getElementById('chat-input');
         const sendBtn = document.getElementById('send-message-btn');
+        const chatHistory = document.getElementById('chat-history');
+        
         if (chatInput) {
             chatInput.disabled = true;
             sendBtn.disabled = true;
         }
         
-        const chatHistory = document.getElementById('chat-history');
+        // Disable all edit buttons during generation
+        const editButtons = chatHistory.querySelectorAll('.message-edit-controls button');
+        editButtons.forEach(btn => btn.disabled = true);
         
         // First interaction – clear placeholder
         if (!this.chatInitialized) {
@@ -2503,7 +2507,8 @@ ${content.trim()}
         let finalPrompt = prompt;
         let historyArray = [];
         
-        if (this.includeHistory) {
+        // When editing a message, we completely skip history to avoid duplication
+        if (this.includeHistory && !fromEdit) {
             const bubbles = chatHistory.querySelectorAll('.list-group-item');
             
             if (isBaseModel) {
@@ -2578,6 +2583,7 @@ ${content.trim()}
         console.log('📤 Final prompt being sent:', finalPrompt);
         console.log('📋 History array:', historyArray);
         console.log('🤖 Model type:', isBaseModel ? 'BASE' : 'INSTRUCT');
+        console.log('🔄 Is from edit?', fromEdit ? 'YES - History skipped' : 'NO - Normal history');
 
         // Hide welcome message when first message is sent
         const welcomeMsg = document.getElementById('chat-welcome');
@@ -2585,19 +2591,26 @@ ${content.trim()}
             welcomeMsg.style.display = 'none';
         }
         
-        // USER bubble
-        const userBubble = document.createElement('div');
-        userBubble.className = 'list-group-item chat-user';
-        userBubble.innerText = prompt;
-        chatHistory.appendChild(userBubble);
-        
-        // Add user message tokens to conversation total
-        const userMessageTokens = this.estimateUserMessageTokens(prompt);
-        this.conversationTokens += userMessageTokens;
-        console.log(`👤 User message: ${userMessageTokens} tokens (conversation total: ${this.conversationTokens})`);
-        
-        // Update stats immediately after user prompt is added
-        this.updateChatStats();
+        // Only create USER bubble if not from edit (edit already has the message)
+        if (!fromEdit) {
+            // USER bubble
+            const userBubble = document.createElement('div');
+            userBubble.className = 'list-group-item chat-user';
+            userBubble.innerText = prompt;
+            userBubble.setAttribute('data-original-prompt', prompt);
+            chatHistory.appendChild(userBubble);
+            
+            // Add edit button to user message
+            this.addEditButtonToUserMessage(userBubble, prompt);
+            
+            // Add user message tokens to conversation total
+            const userMessageTokens = this.estimateUserMessageTokens(prompt);
+            this.conversationTokens += userMessageTokens;
+            console.log(`👤 User message: ${userMessageTokens} tokens (conversation total: ${this.conversationTokens})`);
+            
+            // Update stats immediately after user prompt is added
+            this.updateChatStats();
+        }
         
         // ASSISTANT placeholder bubble
         const botBubble = document.createElement('div');
@@ -2659,6 +2672,10 @@ ${content.trim()}
                 // Focus the input for better UX
                 chatInput.focus();
             }
+            
+            // Re-enable edit buttons after generation
+            const editButtons = chatHistory.querySelectorAll('.message-edit-controls button');
+            editButtons.forEach(btn => btn.disabled = false);
             
             // Update stats after generation is complete
             this.updateChatStats();
@@ -3804,6 +3821,9 @@ ${content.trim()}
                         this.renderMarkdownContent(bubble, message.content, false);
                     } else {
                         bubble.innerText = message.content;
+                        bubble.setAttribute('data-original-prompt', message.content);
+                        // Add edit button to loaded user messages
+                        this.addEditButtonToUserMessage(bubble, message.content);
                     }
                     
                     chatHistory.appendChild(bubble);
@@ -5529,6 +5549,234 @@ console.log('code block');
             console.error('Error opening fusion folder:', error);
             this.showAlert('Error opening folder (this feature only works for locally trained models)', 'warning');
         }
+    }
+
+    // Add edit button to user message
+    addEditButtonToUserMessage(userBubble, originalPrompt) {
+        // Create edit button container
+        const editContainer = document.createElement('div');
+        editContainer.className = 'message-edit-controls d-flex justify-content-end mt-2';
+        editContainer.style.opacity = '0';
+        editContainer.style.transition = 'opacity 0.2s ease';
+        
+        const editBtn = document.createElement('button');
+        editBtn.className = 'btn btn-sm btn-outline-light';
+        editBtn.style.fontSize = '0.75rem';
+        editBtn.style.padding = '0.25rem 0.5rem';
+        editBtn.innerHTML = '<i class="fas fa-edit"></i>';
+        editBtn.title = 'Edit this message';
+        
+        editBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.startEditingMessage(userBubble, originalPrompt);
+        });
+        
+        editContainer.appendChild(editBtn);
+        userBubble.appendChild(editContainer);
+        
+        // Show edit button on hover
+        userBubble.addEventListener('mouseenter', () => {
+            editContainer.style.opacity = '1';
+        });
+        
+        userBubble.addEventListener('mouseleave', () => {
+            editContainer.style.opacity = '0';
+        });
+    }
+    
+    // Start editing a user message
+    startEditingMessage(userBubble, originalPrompt) {
+        // Store original content and position
+        const messageIndex = Array.from(userBubble.parentNode.children).indexOf(userBubble);
+        const chatHistory = document.getElementById('chat-history');
+        const allMessages = Array.from(chatHistory.children);
+        const messagesToRemove = allMessages.slice(messageIndex + 1);
+        
+        // Count messages that will be removed
+        const messagesToRemoveCount = messagesToRemove.filter(msg => 
+            msg.classList.contains('chat-user') || msg.classList.contains('chat-assistant')
+        ).length;
+        
+        // Create edit interface
+        const editContainer = document.createElement('div');
+        editContainer.className = 'message-edit-interface';
+        editContainer.innerHTML = `
+            <div class="mb-2">
+                <small class="text-light">
+                    <i class="fas fa-edit me-1"></i>Editing message
+                    ${messagesToRemoveCount > 0 ? 
+                        `<span class="text-warning"> - This will remove ${messagesToRemoveCount} message${messagesToRemoveCount > 1 ? 's' : ''} after this point</span>` : 
+                        ''
+                    }
+                </small>
+            </div>
+            <div class="input-group mb-2">
+                <textarea class="form-control edit-textarea" rows="3" style="resize: none;">${originalPrompt}</textarea>
+            </div>
+            <div class="d-flex justify-content-between align-items-center">
+                <small class="text-light opacity-75">
+                    <i class="fas fa-keyboard me-1"></i>Ctrl+Enter to save, Esc to cancel
+                </small>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-sm btn-outline-light cancel-edit-btn">
+                        <i class="fas fa-times me-1"></i>Cancel
+                    </button>
+                    <button class="btn btn-sm btn-light save-edit-btn">
+                        <i class="fas fa-check me-1"></i>Save & Continue
+                    </button>
+                </div>
+            </div>
+        `;
+        
+        // Replace the message content with edit interface
+        const originalContent = userBubble.innerHTML;
+        userBubble.innerHTML = '';
+        userBubble.appendChild(editContainer);
+        
+        // Disable chat input while editing
+        const chatInput = document.getElementById('chat-input');
+        const sendBtn = document.getElementById('send-message-btn');
+        const originalChatInputState = chatInput?.disabled;
+        const originalSendBtnState = sendBtn?.disabled;
+        
+        if (chatInput) chatInput.disabled = true;
+        if (sendBtn) sendBtn.disabled = true;
+        
+        const textarea = editContainer.querySelector('.edit-textarea');
+        const cancelBtn = editContainer.querySelector('.cancel-edit-btn');
+        const saveBtn = editContainer.querySelector('.save-edit-btn');
+        
+        // Auto-resize textarea
+        textarea.addEventListener('input', () => {
+            textarea.style.height = 'auto';
+            textarea.style.height = Math.min(textarea.scrollHeight, 150) + 'px';
+        });
+        
+        // Focus and select the text
+        textarea.focus();
+        textarea.select();
+        
+        // Handle cancel
+        cancelBtn.addEventListener('click', () => {
+            userBubble.innerHTML = originalContent;
+            // Restore chat input state
+            if (chatInput) chatInput.disabled = originalChatInputState;
+            if (sendBtn) sendBtn.disabled = originalSendBtnState;
+        });
+        
+        // Handle save
+        saveBtn.addEventListener('click', () => {
+            const newPrompt = textarea.value.trim();
+            if (!newPrompt) {
+                this.showAlert('Message cannot be empty', 'warning');
+                return;
+            }
+            
+            // Show confirmation if there are messages to remove
+            if (messagesToRemoveCount > 0) {
+                const confirmed = confirm(
+                    `This will remove ${messagesToRemoveCount} message${messagesToRemoveCount > 1 ? 's' : ''} after this point and generate a new response. Continue?`
+                );
+                if (!confirmed) {
+                    return;
+                }
+            }
+            
+            this.saveEditedMessage(userBubble, newPrompt, messageIndex);
+            // Restore chat input state (will be managed by generateText)
+            if (chatInput) chatInput.disabled = originalChatInputState;
+            if (sendBtn) sendBtn.disabled = originalSendBtnState;
+        });
+        
+        // Handle enter key
+        textarea.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && e.ctrlKey) {
+                e.preventDefault();
+                saveBtn.click();
+            } else if (e.key === 'Escape') {
+                e.preventDefault();
+                cancelBtn.click();
+            }
+        });
+        
+        // Also handle escape at the container level
+        editContainer.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                cancelBtn.click();
+            }
+        });
+    }
+    
+    // Save edited message and truncate history
+    saveEditedMessage(userBubble, newPrompt, messageIndex) {
+        const chatHistory = document.getElementById('chat-history');
+        
+        // Truncate history from this point forward
+        const allMessages = Array.from(chatHistory.children);
+        const messagesToRemove = allMessages.slice(messageIndex + 1);
+        
+        // Calculate tokens to subtract from removed messages
+        let tokensToSubtract = 0;
+        messagesToRemove.forEach(message => {
+            if (message.classList.contains('chat-user') || message.classList.contains('chat-assistant')) {
+                const messageText = message.hasAttribute('data-raw-text') ? 
+                    message.getAttribute('data-raw-text') : message.innerText;
+                tokensToSubtract += this.estimateUserMessageTokens(messageText);
+            }
+        });
+        
+        // Remove messages after the edited one
+        messagesToRemove.forEach(message => message.remove());
+        
+        // Update the user message with new content
+        userBubble.innerHTML = '';
+        userBubble.innerText = newPrompt;
+        
+        // Add edit button to the updated message
+        this.addEditButtonToUserMessage(userBubble, newPrompt);
+        
+        // Update token counts
+        const originalTokens = this.estimateUserMessageTokens(userBubble.getAttribute('data-original-prompt') || '');
+        const newTokens = this.estimateUserMessageTokens(newPrompt);
+        const tokenDifference = newTokens - originalTokens;
+        
+        this.conversationTokens = this.conversationTokens - tokensToSubtract + tokenDifference;
+        
+        // Store the new prompt for future edits
+        userBubble.setAttribute('data-original-prompt', newPrompt);
+        
+        // Update chat stats
+        this.updateChatStats();
+        
+        // Scroll to bottom
+        chatHistory.scrollTop = chatHistory.scrollHeight;
+        
+        // Show confirmation and auto-generate response
+        this.showAlert('Message edited! Generating new response...', 'info');
+        
+        // Generate new response with the edited message
+        setTimeout(() => {
+            this.generateText(newPrompt, true); // fromEdit = true
+        }, 500);
+    }
+    
+    async generateTextFromInput() {
+        const chatInput = document.getElementById('chat-input');
+        const prompt = chatInput.value.trim();
+        
+        if (!prompt) {
+            this.showAlert('Please enter a message', 'warning');
+            return;
+        }
+        
+        // Clear the input and reset its height
+        chatInput.value = '';
+        chatInput.style.height = 'auto';
+        document.getElementById('send-message-btn').disabled = true;
+        
+        // Call the main generation function
+        await this.generateText(prompt);
     }
 }
 

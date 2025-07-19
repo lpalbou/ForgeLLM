@@ -566,6 +566,71 @@ small, .small {
     transition: background 0.3s ease, color 0.3s ease, border-color 0.3s ease;
 }
 
+/* Message edit controls */
+.message-edit-controls {
+    margin-top: 8px !important;
+    transition: opacity 0.2s ease;
+}
+
+.message-edit-controls .btn {
+    background: rgba(255, 255, 255, 0.2) !important;
+    border: 1px solid rgba(255, 255, 255, 0.3) !important;
+    color: white !important;
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+}
+
+.message-edit-controls .btn:hover {
+    background: rgba(255, 255, 255, 0.3) !important;
+    border-color: rgba(255, 255, 255, 0.5) !important;
+}
+
+.message-edit-interface {
+    background: rgba(255, 255, 255, 0.1) !important;
+    border-radius: 12px !important;
+    padding: 12px !important;
+    margin-top: 8px !important;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+}
+
+.message-edit-interface .edit-textarea {
+    background: rgba(255, 255, 255, 0.9) !important;
+    border: 1px solid rgba(255, 255, 255, 0.3) !important;
+    color: #333 !important;
+    border-radius: 8px !important;
+}
+
+.message-edit-interface .edit-textarea:focus {
+    background: rgba(255, 255, 255, 0.95) !important;
+    border-color: #007bff !important;
+    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25) !important;
+}
+
+.message-edit-interface .btn {
+    background: rgba(255, 255, 255, 0.2) !important;
+    border: 1px solid rgba(255, 255, 255, 0.3) !important;
+    color: white !important;
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+}
+
+.message-edit-interface .btn:hover {
+    background: rgba(255, 255, 255, 0.3) !important;
+    border-color: rgba(255, 255, 255, 0.5) !important;
+}
+
+.message-edit-interface .save-edit-btn {
+    background: rgba(40, 167, 69, 0.8) !important;
+    border-color: rgba(40, 167, 69, 0.9) !important;
+}
+
+.message-edit-interface .save-edit-btn:hover {
+    background: rgba(40, 167, 69, 0.9) !important;
+    border-color: rgba(40, 167, 69, 1) !important;
+}
+
 /* Chat input */
 .chat-input {
     display: flex;

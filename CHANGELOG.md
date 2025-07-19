@@ -9,6 +9,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### ✨ Enhanced Features
 
+## [0.4.6] - 2025-07-19
+
+### 🔄 Message Editing Feature
+
+- **User Message Editing**: Added ability to edit previous messages in chat history
+  - **Edit Button**: Hover-activated edit button on user messages
+  - **History Truncation**: Automatically removes subsequent messages when editing
+  - **Token Recalculation**: Properly updates token counts after editing
+  - **Smart Warnings**: Shows how many messages will be removed before confirming edit
+  - **Keyboard Shortcuts**: Ctrl+Enter to save, Esc to cancel
+
+- **Technical Implementation**:
+  - **Clean UI**: Edit interface with textarea and action buttons
+  - **Visual Feedback**: Clear indicators when editing will remove messages
+  - **History Management**: Proper handling of conversation flow after edits
+  - **API Integration**: Sends edited messages without duplicating in history
+  - **Confirmation Dialogs**: Asks for confirmation when edits will remove messages
+
 #### **Specific Checkpoint File Support**
 - **Feature**: Enhanced adapter loading to support specific checkpoint files (e.g., `0000175_adapters.safetensors`)
   - **Problem**: MLX-LM requires `adapters.safetensors` in the adapter directory, but checkpoint files are named with iteration numbers
