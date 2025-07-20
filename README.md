@@ -255,6 +255,10 @@ This allows you to use just the CLI for testing, or the full web interface for t
 - **Model Publishing**: LoRA to full model conversion with comprehensive documentation
 - **Error Recovery**: Robust error handling and automatic recovery mechanisms
 
+## Changelog
+
+All notable changes to this project are documented in the [CHANGELOG.md](CHANGELOG.md) file.
+
 ## Contributing
 
 Contributions welcome! Please submit pull requests.
