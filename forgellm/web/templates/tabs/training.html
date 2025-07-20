@@ -9,7 +9,7 @@
                 <div class="card-body">
                     <form id="training-form">
                         <div class="row">
-                            <div class="col-md-6">
+                            <div class="col-md-8">
                                 <div class="mb-3">
                                     <label for="model-select" class="form-label">Model</label>
                                     <select class="form-select" id="model-select" required
@@ -19,7 +19,7 @@
                                     </select>
                                 </div>
                             </div>
-                            <div class="col-md-3">
+                            <div class="col-md-4">
                                 <div class="mb-3">
                                     <label for="input-dir" class="form-label">Training Dataset</label>
                                     <div class="input-group">
@@ -27,19 +27,6 @@
                                                data-bs-toggle="tooltip" data-bs-placement="top" 
                                                title="Directory containing your training data. Should contain text files or JSONL format.">
                                         <button type="button" class="btn btn-outline-primary" id="browse-input-dir">
-                                            <i class="fas fa-folder-open"></i>
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-md-3">
-                                <div class="mb-3">
-                                    <label for="output-dir" class="form-label">Output Directory</label>
-                                    <div class="input-group">
-                                        <input type="text" class="form-control" id="output-dir" value="models" required readonly
-                                               data-bs-toggle="tooltip" data-bs-placement="top" 
-                                               title="Directory where the fine-tuned model and checkpoints will be saved.">
-                                        <button type="button" class="btn btn-outline-primary" id="browse-output-dir">
                                             <i class="fas fa-folder-open"></i>
                                         </button>
                                     </div>

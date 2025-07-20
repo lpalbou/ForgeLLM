@@ -219,7 +219,8 @@ def setup_api(app: Flask) -> Blueprint:
             base_models = []
             
             # Check HuggingFace cache for available models
-            cache_path = Path.home() / '.cache' / 'huggingface' / 'hub'
+            hf_cache_base = os.environ.get('HF_HOME', os.path.expanduser('~/.cache/huggingface'))
+            cache_path = Path(hf_cache_base) / 'hub'
             if cache_path.exists():
                 # Look for models in the cache
                 model_dirs = list(cache_path.glob('models--*'))
@@ -715,7 +716,8 @@ def setup_api(app: Flask) -> Blueprint:
                 })
             
             # 3. MLX is running - find the active training file
-            possible_dirs = [Path("models/cpt")]
+            models_dir = os.environ.get('MODELS_DIR', 'models')
+            possible_dirs = [Path(models_dir) / "cpt"]
             all_log_files = []
             
             for models_dir in possible_dirs:
@@ -953,7 +955,8 @@ def setup_api(app: Flask) -> Blueprint:
                 # Extract the published model name
                 published_name = path.replace('published/', '')
                 # Construct the full cache path
-                cache_path = Path.home() / '.cache' / 'huggingface' / 'hub' / f'models--published--{published_name}'
+                hf_cache_base = os.environ.get('HF_HOME', os.path.expanduser('~/.cache/huggingface'))
+                cache_path = Path(hf_cache_base) / 'hub' / f'models--published--{published_name}'
                 actual_path = str(cache_path)
                 logger.info(f"Converted published model path to: {actual_path}")
             else:
@@ -1008,10 +1011,11 @@ def setup_api(app: Flask) -> Blueprint:
                 # Need to restore the original format with dashes and colons
                 # This is a bit tricky since we converted multiple characters to underscores
                 # Let's check if this is a published model pattern and construct the cache path
-                cache_path = Path.home() / '.cache' / 'huggingface' / 'hub' / f'models--published--{published_name}'
+                hf_cache_base = os.environ.get('HF_HOME', os.path.expanduser('~/.cache/huggingface'))
+                cache_path = Path(hf_cache_base) / 'hub' / f'models--published--{published_name}'
                 
                 # Try to find the actual directory since the name might have been mangled
-                cache_dir = Path.home() / '.cache' / 'huggingface' / 'hub'
+                cache_dir = Path(hf_cache_base) / 'hub'
                 if cache_dir.exists():
                     # Look for directories that start with the expected prefix
                     pattern = f'models--published--*{published_name.split("/")[-1]}*'
@@ -1293,7 +1297,8 @@ def setup_api(app: Flask) -> Blueprint:
             import glob
             from pathlib import Path
             
-            possible_dirs = [Path("models/cpt")]
+            models_dir = os.environ.get('MODELS_DIR', 'models')
+            possible_dirs = [Path(models_dir) / "cpt"]
             batch_results = {}
             
             for session_id in session_ids:
@@ -1431,9 +1436,10 @@ def setup_api(app: Flask) -> Blueprint:
             import glob
             from pathlib import Path
             
-            # Look for training sessions
+            # Look for training sessions using the global output folder
+            models_dir = os.environ.get('MODELS_DIR', 'models')
             possible_dirs = [
-                Path("models/cpt")
+                Path(models_dir) / "cpt"
             ]
             
             all_sessions = []
@@ -1505,9 +1511,10 @@ def setup_api(app: Flask) -> Blueprint:
             from pathlib import Path
             
             # Look for the session in possible directories
+            models_dir = os.environ.get('MODELS_DIR', 'models')
             possible_dirs = [
-                Path("models/cpt"),
-                Path("models/ift")
+                Path(models_dir) / "cpt",
+                Path(models_dir) / "ift"
             ]
             
             session_found = False
@@ -1560,7 +1567,8 @@ def setup_api(app: Flask) -> Blueprint:
                 import glob
                 from pathlib import Path
                 
-                possible_dirs = [Path("models/cpt")]
+                models_dir = os.environ.get('MODELS_DIR', 'models')
+                possible_dirs = [Path(models_dir) / "cpt"]
                 log_file = None
                 
                 for models_dir in possible_dirs:
@@ -1708,7 +1716,8 @@ def setup_api(app: Flask) -> Blueprint:
             
             # Get base models - call the logic directly to avoid response parsing issues
             base_models = []
-            cache_path = Path.home() / '.cache' / 'huggingface' / 'hub'
+            hf_cache_base = os.environ.get('HF_HOME', os.path.expanduser('~/.cache/huggingface'))
+            cache_path = Path(hf_cache_base) / 'hub'
             if cache_path.exists():
                 model_dirs = list(cache_path.glob('models--*'))
                 for model_dir in model_dirs:
@@ -2009,7 +2018,8 @@ def setup_api(app: Flask) -> Blueprint:
             abs_path = os.path.abspath(path)
             
             # Allow browsing within project directory or common directories like /Users, /home, etc.
-            allowed_roots = [project_root, '/Users', '/home', '/data', '/opt', '/tmp']
+            # Also allow root and /Volumes for different drive access on macOS
+            allowed_roots = [project_root, '/Users', '/home', '/data', '/opt', '/tmp', '/', '/Volumes']
             if not any(abs_path.startswith(root) for root in allowed_roots):
                 return jsonify({
                     'success': False,
@@ -2221,6 +2231,51 @@ def setup_api(app: Flask) -> Blueprint:
             return jsonify({"success": True, "models": models})
         except Exception as e:
             logger.error(f"Error getting fused models: {e}")
+            return jsonify({"success": False, "error": str(e)}), 500
+    
+    @bp.route('/config/global_folders', methods=['GET'])
+    def get_global_folders():
+        """Get current global folder configuration."""
+        try:
+            # Get HuggingFace cache folder from environment or default
+            hf_cache = os.environ.get('HF_HOME', os.path.expanduser('~/.cache/huggingface'))
+            
+            # Get output folder from environment or default
+            output_folder = os.environ.get('MODELS_DIR', 'models')
+            
+            return jsonify({
+                "success": True,
+                "huggingface_cache": hf_cache,
+                "output_folder": output_folder
+            })
+        except Exception as e:
+            logger.error(f"Error getting global folders: {e}")
+            return jsonify({"success": False, "error": str(e)}), 500
+    
+    @bp.route('/config/global_folders', methods=['POST'])
+    def set_global_folders():
+        """Set global folder configuration."""
+        try:
+            data = request.get_json()
+            
+            # Update HuggingFace cache folder if provided
+            if 'huggingface_cache' in data:
+                hf_cache = data['huggingface_cache']
+                os.environ['HF_HOME'] = hf_cache
+                logger.info(f"Updated HF_HOME to: {hf_cache}")
+            
+            # Update output folder if provided
+            if 'output_folder' in data:
+                output_folder = data['output_folder']
+                os.environ['MODELS_DIR'] = output_folder
+                logger.info(f"Updated MODELS_DIR to: {output_folder}")
+            
+            return jsonify({
+                "success": True,
+                "message": "Global folders updated successfully"
+            })
+        except Exception as e:
+            logger.error(f"Error setting global folders: {e}")
             return jsonify({"success": False, "error": str(e)}), 500
     
     return bp 

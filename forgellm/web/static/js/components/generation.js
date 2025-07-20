@@ -174,6 +174,7 @@ class GenerationComponent {
 
 // Create a singleton instance
 const generationComponent = new GenerationComponent();
+window.generationComponent = generationComponent;
 
 // Add this function to handle the initialization of the Testing tab
 function initTestingTab() {

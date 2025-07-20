@@ -24,6 +24,10 @@ class TrainingInterface {
         this.detectedBaseModel = null; // Store auto-detected base model for fusion
         this.isMonitoringPollingActive = false; // Flag to prevent duplicate polling
         
+        // Global folder configuration
+        this.globalHuggingFaceFolder = localStorage.getItem('global_huggingface_folder') || '~/.cache/huggingface';
+        this.globalOutputFolder = localStorage.getItem('global_output_folder') || 'models';
+        
         this.init();
         
         // Add global modal cleanup on page unload
@@ -38,7 +42,10 @@ class TrainingInterface {
         });
     }
     
-    init() {
+    async init() {
+        // Initialize global folder configuration
+        await this.initGlobalFolderConfig();
+        
         // Initialize Socket.IO connection
         this.initSocket();
         
@@ -58,6 +65,10 @@ class TrainingInterface {
         // Make debug function globally accessible
         window.debugModalState = () => this.debugModalState();
         window.cleanupAllModals = () => this.cleanupAllModals();
+        
+        // Add manual refresh functions for debugging
+        window.testOutputFolderRefresh = () => this.refreshAllOutputDependentComponents();
+        window.testModelRefresh = () => this.refreshAllModelDropdowns();
         
         // Initialize learning rate chart
         this.updateLearningRateChart();
@@ -88,6 +99,230 @@ class TrainingInterface {
         } else {
             console.error('❌ Fullscreen button not found during init');
         }
+    }
+    
+    async initGlobalFolderConfig() {
+        // Load folder configuration from backend
+        await this.loadGlobalFoldersFromBackend();
+        
+        // Initialize folder displays
+        this.updateGlobalFolderDisplays();
+        
+        // Add event listeners for folder buttons
+        document.getElementById('huggingface-folder-btn').addEventListener('click', () => {
+            this.openGlobalFolderBrowser('huggingface');
+        });
+        
+        document.getElementById('output-folder-btn').addEventListener('click', () => {
+            this.openGlobalFolderBrowser('output');
+        });
+    }
+    
+    async loadGlobalFoldersFromBackend() {
+        try {
+            const response = await fetch('/api/config/global_folders');
+            const data = await response.json();
+            
+            if (data.success) {
+                // Update global folders if backend values differ from local storage
+                if (data.huggingface_cache && data.huggingface_cache !== this.globalHuggingFaceFolder) {
+                    this.globalHuggingFaceFolder = data.huggingface_cache;
+                    localStorage.setItem('global_huggingface_folder', data.huggingface_cache);
+                }
+                
+                if (data.output_folder && data.output_folder !== this.globalOutputFolder) {
+                    this.globalOutputFolder = data.output_folder;
+                    localStorage.setItem('global_output_folder', data.output_folder);
+                }
+            }
+        } catch (error) {
+            console.warn('Could not load global folders from backend, using defaults:', error);
+        }
+    }
+    
+    async syncGlobalFoldersToBackend() {
+        try {
+            const response = await fetch('/api/config/global_folders', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    huggingface_cache: this.globalHuggingFaceFolder,
+                    output_folder: this.globalOutputFolder
+                })
+            });
+            
+            const data = await response.json();
+            if (!data.success) {
+                console.warn('Failed to sync global folders to backend:', data.error);
+            }
+        } catch (error) {
+            console.warn('Could not sync global folders to backend:', error);
+        }
+    }
+    
+    updateGlobalFolderDisplays() {
+        // Update HuggingFace folder display
+        const hfDisplay = document.getElementById('huggingface-folder-display');
+        const hfPath = this.globalHuggingFaceFolder;
+        const hfShortPath = hfPath.length > 25 ? '...' + hfPath.slice(-22) : hfPath;
+        hfDisplay.textContent = hfShortPath;
+        hfDisplay.title = hfPath;
+        
+        // Update Output folder display
+        const outputDisplay = document.getElementById('output-folder-display');
+        const outputPath = this.globalOutputFolder;
+        const outputShortPath = outputPath.length > 25 ? '...' + outputPath.slice(-22) : outputPath;
+        outputDisplay.textContent = outputShortPath;
+        outputDisplay.title = outputPath;
+    }
+    
+    openGlobalFolderBrowser(type) {
+        // Store the type for later use
+        this.globalBrowserType = type;
+        this.selectedPath = null;
+        
+        // Set modal title
+        const title = type === 'huggingface' ? 'Select HuggingFace Cache Directory' : 'Select Output Directory';
+        document.getElementById('file-browser-title').innerHTML = `<i class="fas fa-folder-open me-2 text-primary"></i>${title}`;
+        
+        // Get current path
+        const currentPath = type === 'huggingface' ? this.globalHuggingFaceFolder : this.globalOutputFolder;
+        
+        // Load directory contents
+        this.loadDirectoryContents(currentPath);
+        
+        // Show modal
+        const modal = new bootstrap.Modal(document.getElementById('file-browser-modal'));
+        modal.show();
+        
+        // Add event listeners for modal buttons
+        this.initGlobalFolderBrowserEventListeners();
+    }
+    
+    initGlobalFolderBrowserEventListeners() {
+        // Store reference to the up button click handler to avoid duplicates
+        if (this.globalUpButtonHandler) {
+            document.getElementById('browser-up-btn').removeEventListener('click', this.globalUpButtonHandler);
+        }
+        
+        // Create and store the up button handler
+        this.globalUpButtonHandler = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log('🔼 Up button clicked (global folder browser)');
+            
+            const upBtn = document.getElementById('browser-up-btn');
+            if (upBtn.disabled) {
+                console.log('🔼 Up button is disabled, ignoring click');
+                return;
+            }
+            
+            const currentPath = document.getElementById('browser-current-path').value;
+            console.log('Current path:', currentPath);
+            
+            // Use the parent path from the last API response or calculate it
+            const parentPath = currentPath.split('/').slice(0, -1).join('/') || '/';
+            console.log('Navigating to parent:', parentPath);
+            
+            this.loadDirectoryContents(parentPath);
+        };
+        
+        // Add new event listener for up button
+        document.getElementById('browser-up-btn').addEventListener('click', this.globalUpButtonHandler);
+        
+        // Add event listener for path input Enter key navigation
+        const pathInput = document.getElementById('browser-current-path');
+        if (pathInput) {
+            // Remove existing listener to prevent duplicates
+            if (this.globalPathInputHandler) {
+                pathInput.removeEventListener('keypress', this.globalPathInputHandler);
+            }
+            
+            // Create and store the handler
+            this.globalPathInputHandler = (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    const newPath = e.target.value.trim();
+                    if (newPath) {
+                        console.log('🚀 Navigating to typed path:', newPath);
+                        this.loadDirectoryContents(newPath);
+                    }
+                }
+            };
+            
+            pathInput.addEventListener('keypress', this.globalPathInputHandler);
+        }
+        
+        // Remove existing listeners for other buttons to prevent duplicates
+        const selectBtn = document.getElementById('browser-select-btn');
+        const finderBtn = document.getElementById('browser-open-finder-btn');
+        
+        // Clone to remove all event listeners for other buttons
+        const newSelectBtn = selectBtn.cloneNode(true);
+        const newFinderBtn = finderBtn.cloneNode(true);
+        selectBtn.parentNode.replaceChild(newSelectBtn, selectBtn);
+        finderBtn.parentNode.replaceChild(newFinderBtn, finderBtn);
+        
+        document.getElementById('browser-select-btn').addEventListener('click', async () => {
+            if (this.selectedPath) {
+                // Update global folder configuration
+                if (this.globalBrowserType === 'huggingface') {
+                    this.globalHuggingFaceFolder = this.selectedPath;
+                    localStorage.setItem('global_huggingface_folder', this.selectedPath);
+                } else {
+                    this.globalOutputFolder = this.selectedPath;
+                    localStorage.setItem('global_output_folder', this.selectedPath);
+                }
+                
+                // Sync changes to backend
+                await this.syncGlobalFoldersToBackend();
+                
+                // Update displays
+                this.updateGlobalFolderDisplays();
+                
+                // Refresh relevant data based on folder type
+                console.log(`🔄 Global folder changed: ${this.globalBrowserType} -> ${this.selectedPath}`);
+                
+                if (this.globalBrowserType === 'huggingface') {
+                    // Refresh ALL model lists that depend on HuggingFace cache
+                    console.log('🔄 Refreshing all model dropdowns after HuggingFace cache change...');
+                    try {
+                        await this.refreshAllModelDropdowns();
+                        console.log('✅ HuggingFace cache refresh completed successfully');
+                    } catch (error) {
+                        console.error('❌ Error during HuggingFace cache refresh:', error);
+                        this.showAlert('Error refreshing model dropdowns: ' + error.message, 'danger');
+                    }
+                } else {
+                    // Refresh ALL components that depend on output folder
+                    console.log('🔄 Refreshing all output-dependent components after output folder change...');
+                    try {
+                        await this.refreshAllOutputDependentComponents();
+                        console.log('✅ Output folder refresh completed successfully');
+                    } catch (error) {
+                        console.error('❌ Error during output folder refresh:', error);
+                        this.showAlert('Error refreshing output components: ' + error.message, 'danger');
+                    }
+                }
+                
+                // Close modal properly
+                this.closeFileBrowserModal();
+            }
+        });
+        
+        // Setup Finder button functionality
+        this.setupFinderButton();
+        
+        // Add explicit handlers for all dismiss buttons to ensure proper modal closing
+        const modal = document.getElementById('file-browser-modal');
+        const dismissButtons = modal.querySelectorAll('button[data-bs-dismiss="modal"]');
+        dismissButtons.forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                this.closeFileBrowserModal();
+            });
+        });
     }
     
     initSocket() {
@@ -347,10 +582,6 @@ class TrainingInterface {
             this.openFileBrowser('input');
         });
         
-        document.getElementById('browse-output-dir').addEventListener('click', () => {
-            this.openFileBrowser('output');
-        });
-        
         // Tab switching - ONLY attach to monitoring tab to prevent duplicates
         const monitoringTab = document.querySelector('#monitoring-tab');
         if (monitoringTab && !monitoringTab.hasAttribute('data-listener-attached')) {
@@ -532,6 +763,39 @@ class TrainingInterface {
         this.updateTrainingEstimates();
         this.updateLearningRateChart();
         await this.loadFuseModels();
+        
+        // Initialize all components that might not be initialized yet
+        this.initializeComponents();
+    }
+    
+    initializeComponents() {
+        console.log('🔧 Initializing all components...');
+        
+        // Initialize quantization component
+        if (typeof window.quantizationComponent !== 'undefined' && window.quantizationComponent) {
+            if (!window.quantizationComponent.initialized) {
+                console.log('   🔧 Initializing quantization component...');
+                window.quantizationComponent.init();
+            }
+        }
+        
+        // Initialize generation component
+        if (typeof window.generationComponent !== 'undefined' && window.generationComponent) {
+            if (!window.generationComponent.initialized) {
+                console.log('   🔧 Initializing generation component...');
+                window.generationComponent.init();
+            }
+        }
+        
+        // Initialize models component
+        if (typeof window.modelsComponent !== 'undefined' && window.modelsComponent) {
+            if (!window.modelsComponent.initialized) {
+                console.log('   🔧 Initializing models component...');
+                window.modelsComponent.init();
+            }
+        }
+        
+        console.log('✅ Component initialization complete');
     }
     
     startPeriodicUpdates() {
@@ -678,6 +942,148 @@ class TrainingInterface {
             console.error('Error loading models:', error);
             this.showAlert('Failed to load models', 'danger');
         }
+    }
+    
+    async refreshAllModelDropdowns() {
+        console.log('🔄 Starting comprehensive model dropdown refresh...');
+        
+        try {
+            // 1. Update main training and testing dropdowns
+            console.log('   🔄 Refreshing main training/testing dropdowns...');
+            await this.loadModels();
+            
+            // 2. Update quantization dropdown
+            const quantizationComponent = window.quantizationComponent;
+            if (quantizationComponent && typeof quantizationComponent.loadAvailableModels === 'function') {
+                console.log('   🔄 Refreshing quantization models...');
+                await quantizationComponent.loadAvailableModels();
+            } else {
+                console.log('   ⚠️ Quantization component not available or missing loadAvailableModels method');
+            }
+            
+            // 3. Update generation component models (for testing tab)
+            const generationComponent = window.generationComponent;
+            if (generationComponent && typeof generationComponent.loadModels === 'function') {
+                console.log('   🔄 Refreshing generation models...');
+                await generationComponent.loadModels();
+            } else {
+                console.log('   ⚠️ Generation component not available or missing loadModels method');
+            }
+            
+            // 4. Update models component models
+            const modelsComponent = window.modelsComponent;
+            if (modelsComponent && typeof modelsComponent.loadModelsList === 'function') {
+                console.log('   🔄 Refreshing models component...');
+                await modelsComponent.loadModelsList();
+            } else {
+                console.log('   ⚠️ Models component not available or missing loadModelsList method');
+            }
+            
+            // 5. Update fuse models (base models for fusion)
+            console.log('   🔄 Refreshing fuse models...');
+            try {
+                await this.loadFuseModels();
+            } catch (error) {
+                console.log('   ⚠️ Error refreshing fuse models:', error.message);
+            }
+            
+            console.log('✅ All model dropdowns refreshed successfully');
+            this.showAlert('HuggingFace cache updated - all model dropdowns refreshed', 'success');
+            
+        } catch (error) {
+            console.error('❌ Error refreshing model dropdowns:', error);
+            this.showAlert('Error refreshing model dropdowns: ' + error.message, 'danger');
+        }
+    }
+    
+    async refreshAllOutputDependentComponents() {
+        console.log('🔄 Starting comprehensive output folder dependent components refresh...');
+        console.log('   📁 New output folder:', this.globalOutputFolder);
+        
+        try {
+            // 1. Refresh training sessions and checkpoints (Training & Monitoring tabs)
+            console.log('   🔄 Refreshing training sessions and checkpoints...');
+            await this.loadCheckpoints();
+            
+            // 2. Refresh adapter checkpoints (Testing tab)
+            console.log('   🔄 Refreshing adapter checkpoints for Testing tab...');
+            try {
+                await this.loadAdapterCheckpoints();
+                console.log('   ✅ Testing tab adapter checkpoints refreshed successfully');
+            } catch (error) {
+                console.log('   ⚠️ Error refreshing adapter checkpoints:', error.message);
+            }
+            
+            // 3. Refresh Compare tab sessions
+            console.log('   🔄 Refreshing compare tab sessions...');
+            if (typeof window.loadSessions === 'function') {
+                try {
+                    await window.loadSessions();
+                } catch (error) {
+                    console.log('   ⚠️ Error refreshing compare sessions:', error.message);
+                }
+            } else {
+                console.log('   ⚠️ Compare loadSessions function not available');
+            }
+            
+            // 4. Refresh Fuse tab adapter checkpoints
+            console.log('   🔄 Refreshing fuse adapter checkpoints...');
+            try {
+                const checkpointsResponse = await fetch('/api/checkpoints');
+                const checkpointsData = await checkpointsResponse.json();
+                
+                // Update fuse adapter dropdown
+                const fuseAdapterSelect = document.getElementById('fuse-adapter-select');
+                if (fuseAdapterSelect && checkpointsData.success) {
+                    this.updateFuseAdapterDropdown(checkpointsData.checkpoints || []);
+                    console.log(`   ✅ Fuse tab updated with ${checkpointsData.checkpoints.length} checkpoints`);
+                } else {
+                    console.log('   ⚠️ Fuse adapter dropdown not found or API failed');
+                }
+            } catch (error) {
+                console.log('   ⚠️ Error refreshing fuse adapters:', error.message);
+            }
+            
+            // 5. Refresh Quantization tab quantized models list (stored in output folder)
+            console.log('   🔄 Refreshing quantized models list...');
+            const quantizationComponent = window.quantizationComponent;
+            if (quantizationComponent && typeof quantizationComponent.loadQuantizedModels === 'function') {
+                try {
+                    await quantizationComponent.loadQuantizedModels();
+                } catch (error) {
+                    console.log('   ⚠️ Error refreshing quantized models:', error.message);
+                }
+            } else {
+                console.log('   ⚠️ Quantization component not available');
+            }
+            
+            console.log('✅ All output-dependent components refreshed successfully');
+            this.showAlert('Output folder updated - all training sessions and checkpoints refreshed', 'success');
+            
+        } catch (error) {
+            console.error('❌ Error refreshing output-dependent components:', error);
+            this.showAlert('Error refreshing some components: ' + error.message, 'danger');
+        }
+    }
+    
+    updateFuseAdapterDropdown(checkpoints) {
+        const fuseAdapterSelect = document.getElementById('fuse-adapter-select');
+        if (!fuseAdapterSelect) return;
+        
+        // Clear existing options except first one
+        const firstOption = fuseAdapterSelect.firstElementChild;
+        fuseAdapterSelect.innerHTML = '';
+        if (firstOption) {
+            fuseAdapterSelect.appendChild(firstOption);
+        }
+        
+        // Add checkpoints
+        checkpoints.forEach(checkpoint => {
+            const option = document.createElement('option');
+            option.value = checkpoint.path;
+            option.textContent = `${checkpoint.model || 'Unknown'} - iter ${checkpoint.iteration || 0}`;
+            fuseAdapterSelect.appendChild(option);
+        });
     }
     
     updateModelDropdown(selectId, models) {
@@ -980,6 +1386,13 @@ class TrainingInterface {
             if (data.success && data.checkpoints) {
                 const select = document.getElementById('adapter-path');
                 
+                // Clear existing options except the first one (placeholder)
+                const firstOption = select.firstElementChild;
+                select.innerHTML = '';
+                if (firstOption) {
+                    select.appendChild(firstOption);
+                }
+                
                 data.checkpoints.forEach(checkpoint => {
                     const option = document.createElement('option');
                     option.value = checkpoint.path;
@@ -1047,7 +1460,7 @@ class TrainingInterface {
         // Get form values
         const config = {
             model_name: document.getElementById('model-select').value, // Changed from 'model' to 'model_name'
-            output_dir: document.getElementById('output-dir').value,
+            output_dir: this.globalOutputFolder,
             input_dir: document.getElementById('input-dir').value,
             batch_size: parseInt(document.getElementById('batch-size').value),
             learning_rate: parseFloat(document.getElementById('learning-rate').value),
@@ -4181,17 +4594,16 @@ ${content.trim()}
     }
 
     openFileBrowser(type) {
-        // Store the type (input or output) for later use
+        // Store the type for later use (now only supports 'input')
         this.browserType = type;
         this.selectedPath = null;
         
         // Set modal title
-        const title = type === 'input' ? 'Select Training Dataset Directory' : 'Select Output Directory';
-        document.getElementById('file-browser-title').textContent = title;
+        const title = 'Select Training Dataset Directory';
+        document.getElementById('file-browser-title').innerHTML = `<i class="fas fa-folder-open me-2 text-primary"></i>${title}`;
         
         // Get current path from the input field
-        const inputId = type === 'input' ? 'input-dir' : 'output-dir';
-        let currentPath = document.getElementById(inputId).value || '.';
+        let currentPath = document.getElementById('input-dir').value || '.';
         
         // Smart path handling for better user experience
         if (!currentPath.startsWith('/')) {
@@ -4400,15 +4812,28 @@ ${content.trim()}
             this.loadDirectoryContents(parentPath);
         });
         
+        // Add event listener for path input Enter key navigation
+        const pathInput = document.getElementById('browser-current-path');
+        if (pathInput) {
+            pathInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    const newPath = e.target.value.trim();
+                    if (newPath) {
+                        console.log('🚀 Navigating to typed path:', newPath);
+                        this.loadDirectoryContents(newPath);
+                    }
+                }
+            });
+        }
+        
         document.getElementById('browser-select-btn').addEventListener('click', () => {
             if (this.selectedPath) {
-                const inputId = this.browserType === 'input' ? 'input-dir' : 'output-dir';
-                document.getElementById(inputId).value = this.selectedPath;
+                // Only handles input directory now
+                document.getElementById('input-dir').value = this.selectedPath;
                 
-                // Update training estimates if input directory changed
-                if (this.browserType === 'input') {
-                    this.updateTrainingEstimates();
-                }
+                // Update training estimates when input directory changed
+                this.updateTrainingEstimates();
                 
                 // Close modal properly
                 this.closeFileBrowserModal();
@@ -4457,7 +4882,27 @@ ${content.trim()}
             selectBtn.disabled = false;
             
             // Enable/disable up button
-            upBtn.disabled = !data.parent_path;
+            const hasParentPath = !!data.parent_path;
+            upBtn.disabled = !hasParentPath;
+            
+            // Ensure the button is visually clickable when enabled
+            if (hasParentPath) {
+                upBtn.style.pointerEvents = 'auto';
+                upBtn.style.opacity = '1';
+                upBtn.classList.remove('disabled');
+            } else {
+                upBtn.style.pointerEvents = 'none';
+                upBtn.style.opacity = '0.6';
+                upBtn.classList.add('disabled');
+            }
+            
+            console.log('🔼 Up button state:', {
+                hasParentPath,
+                disabled: upBtn.disabled,
+                parentPath: data.parent_path,
+                currentPath: data.current_path,
+                clickable: hasParentPath
+            });
             
             // Clear content and create list group
             contentEl.innerHTML = '';
@@ -4604,13 +5049,11 @@ ${content.trim()}
         // Add double-click handler for selection
         div.addEventListener('dblclick', () => {
             this.selectedPath = item.path;
-            const inputId = this.browserType === 'input' ? 'input-dir' : 'output-dir';
-            document.getElementById(inputId).value = item.path;
+            // Only handles input directory now
+            document.getElementById('input-dir').value = item.path;
             
-            // Update training estimates if input directory changed
-            if (this.browserType === 'input') {
-                this.updateTrainingEstimates();
-            }
+            // Update training estimates when input directory changed
+            this.updateTrainingEstimates();
             
             // Close modal properly
             this.closeFileBrowserModal();

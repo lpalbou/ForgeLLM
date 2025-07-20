@@ -28,6 +28,31 @@
                 <i class="fas fa-brain me-2"></i>MLX Training Interface
             </a>
             <div class="navbar-nav ms-auto">
+                <!-- Global Folder Configuration -->
+                <div class="navbar-text me-3">
+                    <div class="d-flex align-items-center gap-2 flex-wrap">
+                        <!-- HuggingFace Cache Folder -->
+                        <div class="d-flex align-items-center">
+                            <small class="text-light me-1 d-none d-md-inline">🤗 Cache:</small>
+                            <small class="text-light me-1 d-md-none">🤗:</small>
+                            <button id="huggingface-folder-btn" class="btn btn-outline-light btn-sm" type="button" 
+                                    title="Configure HuggingFace cache directory">
+                                <i class="fas fa-folder me-1"></i>
+                                <span id="huggingface-folder-display" class="d-none d-lg-inline">~/.cache/huggingface</span>
+                            </button>
+                        </div>
+                        <!-- Output Folder -->
+                        <div class="d-flex align-items-center">
+                            <small class="text-light me-1 d-none d-md-inline">📁 Output:</small>
+                            <small class="text-light me-1 d-md-none">📁:</small>
+                            <button id="output-folder-btn" class="btn btn-outline-light btn-sm" type="button" 
+                                    title="Configure output directory for models and training">
+                                <i class="fas fa-folder me-1"></i>
+                                <span id="output-folder-display" class="d-none d-lg-inline">models</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
                 <button id="theme-toggle" class="btn btn-outline-light btn-sm me-3" type="button" title="Toggle dark mode">
                     <i class="fas fa-moon" id="theme-icon"></i>
                 </button>

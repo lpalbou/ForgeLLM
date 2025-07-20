@@ -4148,3 +4148,6 @@ window.populateLossBadges = async function populateLossBadges(sessions) {
     await populateLossBadgesBatch(sessions);
 }
 
+// Expose loadSessions globally for output folder refresh functionality
+window.loadSessions = loadSessions;
+

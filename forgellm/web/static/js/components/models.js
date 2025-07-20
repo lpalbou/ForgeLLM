@@ -277,4 +277,5 @@ class ModelsComponent {
 }
 
 // Create a singleton instance
-const modelsComponent = new ModelsComponent(); 
+const modelsComponent = new ModelsComponent();
+window.modelsComponent = modelsComponent; 

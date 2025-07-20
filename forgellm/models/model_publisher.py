@@ -742,7 +742,7 @@ No checkpoint analysis available - this may indicate insufficient validation dat
             from .. import __version__
             return __version__
         except ImportError:
-            return "0.4.2"  # Fallback version
+            return "0.4.7"  # Fallback version
     
     def _extract_model_architecture(self, base_model: str) -> str:
         """Extract model architecture from model name"""

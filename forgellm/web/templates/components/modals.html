@@ -90,8 +90,9 @@
                     </button>
                     <div class="flex-grow-1">
                         <input type="text" class="form-control form-control-sm font-monospace" 
-                               id="browser-current-path" readonly 
-                               style="background-color: var(--bs-gray-100); border: 1px solid var(--bs-gray-300);">
+                               id="browser-current-path" placeholder="Enter path and press Enter to navigate..." 
+                               style="border: 1px solid var(--bs-gray-300);"
+                               data-bs-toggle="tooltip" title="Type a path and press Enter to navigate directly">
                     </div>
                     <button type="button" class="btn btn-sm btn-outline-primary" id="browser-open-finder-btn"
                             data-bs-toggle="tooltip" 

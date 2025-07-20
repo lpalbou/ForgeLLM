@@ -7,7 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### ✨ Enhanced Features
+## [0.4.7] - 2025-07-20
+
+### 🗂️ Global Folder Configuration
+
+- **Navbar Folder Settings**: Added global HuggingFace cache and output folder configuration in navbar
+  - **Visual Folder Display**: Shows current folder paths with truncation for long paths
+  - **One-Click Access**: Dedicated buttons for each folder type with file browser integration
+  - **Persistent Storage**: Folder settings persist across sessions and sync with backend
+  - **Comprehensive Refresh**: All tabs automatically update when folders change
+
+- **Cross-Tab Consistency**: Unified folder usage across entire application
+  - **Model Dropdowns**: All model lists (Train, Test, Quantize, Fuse) use global HuggingFace cache
+  - **Training Data**: All training sessions, checkpoints, and adapters use global output folder
+  - **Real-Time Updates**: Changing folders immediately refreshes all relevant components
+
+- **Enhanced File Browser**: Improved navigation with manual path input and better error handling
+
+### 🔧 Technical Improvements
+
+- **Backend API Fixes**: Updated all hardcoded paths to use environment variables
+- **Dropdown Refresh**: Fixed adapter dropdowns to properly clear when folders change
+- **Component Integration**: Centralized refresh system across all tabs and components
 
 ## [0.4.6] - 2025-07-19
 
@@ -834,3 +855,7 @@ gemma-3-27b-it-bf16                [T: 1.375] [V: 1.398]
 - Basic web interface for model training and testing
 - MLX-LM integration for Apple Silicon optimization
 - Continued pre-training (CPT) and instruction fine-tuning (IFT) support 
+
+## [Latest] - 2025-01-30
+
+ 

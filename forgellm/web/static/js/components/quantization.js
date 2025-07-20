@@ -932,4 +932,5 @@ class QuantizationComponent {
 }
 
 // Create global instance
-const quantizationComponent = new QuantizationComponent(); 
+const quantizationComponent = new QuantizationComponent();
+window.quantizationComponent = quantizationComponent; 
